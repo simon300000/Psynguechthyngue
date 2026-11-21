@@ -11,6 +11,8 @@ let package = Package(
     ],
     products: [
         .library(name: "PsyCore", targets: ["PsyCore"]),
+        // Rewrite (Docs/REWRITE/DESIGN.md): new contracts; PsyCore is removed by WP-E.
+        .library(name: "PsySync", targets: ["PsySync"]),
     ],
     targets: [
         .target(
@@ -22,6 +24,15 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
             ]
+        ),
+        .target(
+            name: "PsySync",
+            path: "Sources/PsySync"
+        ),
+        .testTarget(
+            name: "PsySyncTests",
+            dependencies: ["PsySync"],
+            path: "Tests/PsySyncTests"
         ),
         .testTarget(
             name: "PsyCoreTests",
