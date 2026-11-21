@@ -6,6 +6,15 @@ import os
 /// One NSFileProvider domain per *managed* folder (DESIGN.md §6.1); external
 /// folders are already visible in Files and get none. Domain identifier =
 /// folder ID, display name = folder label.
+/// User-visible state of a folder's Files location (Mac spike: domains start
+/// user-disabled on Designed-for-iPad and must be enabled in System Settings).
+enum FilesDomainStatus: Equatable, Sendable {
+    case enabled
+    /// Present but turned off by the user (Files on iOS / System Settings on macOS).
+    case disabledByUser
+    case notInstalled
+}
+
 enum DomainManager {
     private static let log = Logger(subsystem: FilesLog.subsystem, category: "domains")
 
@@ -39,8 +48,12 @@ enum DomainManager {
         }
         let present = Dictionary(uniqueKeysWithValues: existing.map { ($0.identifier.rawValue, $0) })
         for (id, folder) in wanted {
-            if let domain = present[id], domain.displayName == folder.label { continue }
+            if let domain = present[id], domain.displayName == folder.label, !needsTrashFix(domain) { continue }
             let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(id), displayName: folder.label)
+            // We do not sync a trash container; without this the system (default
+            // YES) asks for NSFileProviderTrashContainerItemIdentifier and Finder
+            // keeps reporting errors (Mac spike).
+            if #available(iOS 18.0, *) { domain.supportsSyncingTrash = false }
             do {
                 try await NSFileProviderManager.add(domain)
                 log.info("added domain \(id, privacy: .public)")
@@ -48,6 +61,26 @@ enum DomainManager {
                 log.error("add domain \(id, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
+    }
+
+    private static func needsTrashFix(_ domain: NSFileProviderDomain) -> Bool {
+        if #available(iOS 18.0, *) { return domain.supportsSyncingTrash }
+        return false
+    }
+
+    /// Per-folder Files location state for the UI (e.g. "Enable in Settings" hint on Mac).
+    static func statuses(for folders: [FolderID]) async -> [FolderID: FilesDomainStatus] {
+        let domains = (try? await NSFileProviderManager.domains()) ?? []
+        let byID = Dictionary(uniqueKeysWithValues: domains.map { ($0.identifier.rawValue, $0) })
+        var result: [FolderID: FilesDomainStatus] = [:]
+        for folder in folders {
+            guard let domain = byID[folder.rawValue] else {
+                result[folder] = .notInstalled
+                continue
+            }
+            result[folder] = domain.userEnabled ? .enabled : .disabledByUser
+        }
+        return result
     }
 
     /// Tells the system the working set of `folder` changed.

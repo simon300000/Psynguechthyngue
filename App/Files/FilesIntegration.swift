@@ -70,6 +70,19 @@ final class FilesIntegration {
         log.info("files integration stopped")
     }
 
+    /// For the UI (WP-D): whether each managed folder's Files location is enabled.
+    /// On Mac (Designed for iPad) new domains start disabled by the user; show
+    /// a hint to enable "Psynguechthyngue" under System Settings → Login Items &
+    /// Extensions → File Providers (Docs/REWRITE/MAC_SPIKE.md).
+    private(set) var domainStatuses: [FolderID: FilesDomainStatus] = [:]
+
+    func refreshDomainStatuses() async -> [FolderID: FilesDomainStatus] {
+        let folders = (try? await engine.folders()) ?? []
+        let managed = folders.filter { if case .managed = $0.location { return true } else { return false } }
+        domainStatuses = await DomainManager.statuses(for: managed.map(\.id))
+        return domainStatuses
+    }
+
     func foldersChanged() async {
         guard let store, let projector else { return }
         do {
@@ -80,6 +93,7 @@ final class FilesIntegration {
                 try? FileManager.default.createDirectory(at: layout.managedFolder(folder.id), withIntermediateDirectories: true)
             }
             await projector.setFolders(managed.map(\.id))
+            domainStatuses = await DomainManager.statuses(for: managed.map(\.id))
         } catch {
             log.error("folders() failed: \(String(describing: error), privacy: .public)")
         }

@@ -46,6 +46,13 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
     ) -> Progress {
         do {
             let context = try context()
+            if identifier == .trashContainer {
+                // No synced trash (supportsSyncingTrash = false on iOS 18+/macOS);
+                // on older systems answer with an empty container instead of
+                // noSuchItem, which Finder reports as a persistent error.
+                completionHandler(TrashContainerItem(), nil)
+                return Progress()
+            }
             completionHandler(context.item(for: try context.record(identifier)), nil)
         } catch {
             completionHandler(nil, ErrorMapping.map(error))
@@ -58,7 +65,7 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
     {
         let context = try context()
         if containerItemIdentifier == .workingSet { return WorkingSetEnumerator(context: context) }
-        if containerItemIdentifier == .trashContainer { throw NSFileProviderError(.noSuchItem) }
+        if containerItemIdentifier == .trashContainer { return EmptyEnumerator(context: context) }
         let record = try context.record(containerItemIdentifier)
         return record.isDirectory
             ? DirectoryEnumerator(context: context, parent: record.itemID)
