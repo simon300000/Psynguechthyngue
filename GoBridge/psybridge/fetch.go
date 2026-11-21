@@ -81,7 +81,9 @@ type FetchResult struct {
 	ServedBy string
 }
 
-// FetchProgress is polled/called from the fetch goroutine.
+// FetchProgress is called from bridge goroutines: Progress from the fetch
+// loop, IsCancelled from a watcher that polls every 100 ms. The two may run
+// concurrently, so implementations must be thread-safe.
 type FetchProgress interface {
 	// Progress reports bytes completed / total.
 	Progress(completed int64, total int64)
@@ -154,41 +156,35 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 	if err != nil {
 		return nil, newError(CodeDatabase, "%v", err)
 	}
+	rt.db = sdb
 	queries, ok := sdb.(dbQueries)
 	if !ok {
-		sdb.Close()
 		return nil, newError(CodeDatabase, "upstream DB lacks expected query methods")
 	}
 
 	// Check the index before touching the network.
 	global, found, err := queries.GetGlobalFile(req.FolderID, req.Path)
 	if err != nil {
-		sdb.Close()
 		return nil, newError(CodeDatabase, "global file: %v", err)
 	}
 	if !found || global.Deleted || global.IsInvalid() || global.Type != protocol.FileInfoTypeFile {
-		sdb.Close()
 		return nil, newError(CodeFileNotFound, "%s is not a file in the global index", req.Path)
 	}
 	version := versionToken(global.Version)
 	if req.ExpectedVersion != "" && req.ExpectedVersion != version {
-		sdb.Close()
 		return nil, newError(CodeVersionMismatch, "index has a different version")
 	}
 	if global.Size > maxBytes {
-		sdb.Close()
 		return nil, newError(CodeTooLarge, "%d bytes exceeds the %d byte budget", global.Size, maxBytes)
 	}
 	holders, _ := queries.GetGlobalAvailability(req.FolderID, req.Path)
 	candidates := candidateDevices(folderCfg, myID, holders)
 	if len(candidates) == 0 {
-		sdb.Close()
 		return nil, newError(CodeNoPeer, "no other device shares folder %q", req.FolderID)
 	}
 
 	app, err := syncthing.New(cfg, sdb, evLogger, cert, syncthing.Options{NoUpgrade: true, DBMaintenanceInterval: 0})
 	if err != nil {
-		sdb.Close()
 		return nil, newError(CodeDatabase, "create app: %v", err)
 	}
 	rt.app = app

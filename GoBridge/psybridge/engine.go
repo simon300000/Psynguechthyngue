@@ -267,9 +267,9 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 	if err != nil {
 		return nil, newError(CodeDatabase, "%v", err)
 	}
+	rt.db = sdb
 	queries, ok := sdb.(dbQueries)
 	if !ok {
-		sdb.Close()
 		return nil, newError(CodeDatabase, "upstream DB lacks expected query methods")
 	}
 	app, err := syncthing.New(cfg, sdb, evLogger, cert, syncthing.Options{
@@ -277,7 +277,6 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 		DBMaintenanceInterval: dbMaintenanceInterval,
 	})
 	if err != nil {
-		sdb.Close()
 		return nil, newError(CodeDatabase, "create app: %v", err)
 	}
 	rt.app = app

@@ -42,6 +42,7 @@ type IndexStream struct {
 
 	mu     sync.Mutex
 	db     dbQueries
+	open   func()
 	next   func() (indexMeta, bool)
 	stop   func()
 	errFn  func() error
@@ -97,18 +98,25 @@ func (e *Engine) OpenIndexStream(folderID string) (*IndexStream, error) {
 	if _, ok := e.wrapper.Folder(folderID); !ok {
 		return nil, newError(CodeInvalidArgument, "unknown folder %q", folderID)
 	}
-	seq, errFn := e.rt.app.Internals.AllGlobalFiles(folderID)
-	next, stop := iter.Pull(func(yield func(indexMeta) bool) {
-		for md := range seq {
-			if !yield(indexMeta{
-				Name: md.Name, Sequence: md.Sequence, ModNanos: md.ModNanos, Size: md.Size,
-				LocalFlags: md.LocalFlags, Type: md.Type, Deleted: md.Deleted,
-			}) {
-				return
+	internals := e.rt.app.Internals
+	s := &IndexStream{folderID: folderID, db: e.sdb}
+	// Upstream runs the SQL query as soon as AllGlobalFiles is called and
+	// only closes the rows once the iterator is ranged, so the query is
+	// deferred to the first Next: an opened-but-unread stream holds nothing.
+	s.open = func() {
+		seq, errFn := internals.AllGlobalFiles(folderID)
+		s.errFn = errFn
+		s.next, s.stop = iter.Pull(func(yield func(indexMeta) bool) {
+			for md := range seq {
+				if !yield(indexMeta{
+					Name: md.Name, Sequence: md.Sequence, ModNanos: md.ModNanos, Size: md.Size,
+					LocalFlags: md.LocalFlags, Type: md.Type, Deleted: md.Deleted,
+				}) {
+					return
+				}
 			}
-		}
-	})
-	s := &IndexStream{folderID: folderID, db: e.sdb, next: next, stop: stop, errFn: errFn}
+		})
+	}
 	if e.streams == nil {
 		e.streams = make(map[*IndexStream]struct{})
 	}
@@ -126,6 +134,9 @@ func (s *IndexStream) Next(maxEntries int64) ([]byte, error) {
 	defer s.mu.Unlock()
 	if s.closed {
 		return nil, newError(CodeNotRunning, "index stream closed")
+	}
+	if s.next == nil {
+		s.open()
 	}
 	page := make([]IndexEntryJSON, 0, min(maxEntries, 512))
 	for int64(len(page)) < maxEntries && !s.done {

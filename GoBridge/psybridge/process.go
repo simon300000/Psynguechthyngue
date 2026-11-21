@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -94,6 +95,7 @@ func configureLocations(homeDir string) error {
 // upstream cmd/syncthing).
 type upstreamRuntime struct {
 	app         *syncthing.App
+	db          io.Closer
 	earlyCancel context.CancelFunc
 	earlyDone   <-chan error
 }
@@ -115,6 +117,11 @@ func (r *upstreamRuntime) stop(timeout time.Duration) bool {
 		defer close(done)
 		if r.app != nil {
 			r.app.Stop(svcutil.ExitSuccess) // waits for services and DB close
+		}
+		if r.db != nil {
+			// The App closes the DB itself once started; this covers error
+			// paths before that point (Close is idempotent upstream).
+			_ = r.db.Close()
 		}
 		if r.earlyCancel != nil {
 			r.earlyCancel()
