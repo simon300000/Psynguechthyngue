@@ -4,16 +4,17 @@ import os
 
 /// App-side Files services bound to the engine lifecycle (DESIGN.md §6.2–6.6):
 /// `FilesProjector` (global index → files.sqlite → signalEnumerator),
-/// `ContentRequestServer` (extension requests + local-mutation journal) and
-/// `DomainManager` (one domain per managed folder).
+/// `ContentRequestServer` (delegatedToApp requests + local-mutation journal)
+/// and `DomainManager` (one domain per managed folder).
 ///
-/// Wiring for WP-D's EngineHost:
-/// - after `engine.start(...)` succeeds → `await files.engineDidStart()`
-/// - before `engine.stop(...)` (beginBackgroundTask) → `await files.engineWillStop()`
-///   which closes files.sqlite (invariant I2: nothing held in the App Group
-///   when suspended).
-/// - on folder add/remove/update → `await files.foldersChanged()` (also
-///   triggered automatically by `.configurationChanged`).
+/// Wiring (see Docs/REWRITE/notes/wp-c-integration.md):
+/// - Create once with the *same* engine the host drives and call `attach()`;
+///   it follows `.engineStateChanged` (running → start services, stopping /
+///   stopped / failed → stop them and close files.sqlite, invariant I2).
+/// - Optionally call `engineWillStop()` from the host right before
+///   `engine.stop(...)` so files.sqlite is closed before the lock is released.
+/// - Folder changes are picked up from `.configurationChanged`;
+///   `foldersChanged()` forces a reconcile.
 @MainActor
 final class FilesIntegration {
     private let engine: any SyncEngine
@@ -30,6 +31,30 @@ final class FilesIntegration {
     }
 
     var isRunning: Bool { store != nil }
+    private var lifecycleTask: Task<Void, Never>?
+
+    /// Follows the engine's lifecycle events. Idempotent.
+    func attach() {
+        guard lifecycleTask == nil else { return }
+        let events = engine.events()
+        lifecycleTask = Task { [weak self, engine] in
+            if case .running = await engine.state { await self?.engineDidStart() }
+            for await event in events {
+                guard case .engineStateChanged(let state) = event else { continue }
+                switch state {
+                case .running: await self?.engineDidStart()
+                case .stopping, .stopped, .failed: await self?.engineWillStop()
+                case .starting: break
+                }
+            }
+        }
+    }
+
+    func detach() async {
+        lifecycleTask?.cancel()
+        lifecycleTask = nil
+        await engineWillStop()
+    }
 
     func engineDidStart() async {
         guard store == nil else { return }

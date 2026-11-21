@@ -49,22 +49,33 @@ final class ExtensionContext: @unchecked Sendable {
 
 /// Bridge + identity for the restricted fetch (DESIGN.md §6.4).
 ///
-/// Integration point for WP-A (`PsyBridgeAdapter`, a `RestrictedFetchBridge`)
-/// and WP-B (`KeychainIdentityStore`, shared access group). Until both are
-/// linked into this target (compile flag `PSY_RESTRICTED_FETCH`), the
-/// restricted path reports "open the App" (`.unavailable`). DEBUG builds can
-/// exercise the whole extension-side path with `DevRestrictedFetchBridge`.
+/// Production: WP-A's `PsyBridgeAdapter` (Platform/PsyBridgeAdapter.swift +
+/// Artifacts/PsyBridge.xcframework linked into this target) and WP-B's
+/// `KeychainIdentityStore` on the shared access group (`PsyKeychainAccessGroup`).
+/// DEBUG only: if `<AppGroup>/DevFetchSource/` exists, `DevRestrictedFetchBridge`
+/// stands in for the network (simulator harness). Without the xcframework the
+/// restricted path reports "open the App" (`.unavailable`).
 enum RestrictedFetchServices {
     static func make(layout: AppGroupLayout) -> (bridge: (any RestrictedFetchBridge)?, identity: DeviceIdentityProvider) {
-        #if PSY_RESTRICTED_FETCH
-        let identityStore = KeychainIdentityStore()
-        return (PsyBridgeAdapter(), { try identityStore.load() })
-        #else
         #if DEBUG
         if let dev = DevRestrictedFetchBridge(layout: layout) {
             return (dev, { DevRestrictedFetchBridge.identity })
         }
         #endif
+        #if canImport(PsyBridge)
+        let group = Bundle.main.object(forInfoDictionaryKey: "PsyKeychainAccessGroup") as? String
+        let identityStore = KeychainIdentityStore(accessGroup: group)
+        let bridgeLog = Logger(subsystem: FilesLog.subsystem, category: "bridge")
+        #if DEBUG
+        let level = "info"
+        #else
+        let level = "warn"
+        #endif
+        let adapter = PsyBridgeAdapter(logLevel: level, log: { lvl, message in
+            bridgeLog.log("[\(lvl, privacy: .public)] \(message, privacy: .public)")
+        })
+        return (adapter, { try identityStore.load() })
+        #else
         return (nil, { nil })
         #endif
     }
