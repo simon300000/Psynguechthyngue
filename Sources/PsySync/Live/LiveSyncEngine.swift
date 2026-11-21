@@ -46,8 +46,6 @@ public actor LiveSyncEngine: SyncEngine {
     private var myID: DeviceID?
     private var appState = LiveEngineAppState()
     private var externalScopes: [FolderID: ExternalLocationScope] = [:]
-    /// Set after `stop_timeout`: this process must not start the engine again.
-    private var poisoned = false
     private var transition: Task<Void, Error>?
     private var bridgeStarted = false
 
@@ -105,9 +103,6 @@ public actor LiveSyncEngine: SyncEngine {
     }
 
     private func doStart(_ context: EngineRunContext) async throws {
-        if poisoned {
-            throw EngineError.bridge(code: BridgeContract.Code.stopTimeout.rawValue, detail: "engine did not stop; restart the app")
-        }
         let profile = context == .foreground ? MemoryProfile.foreground : MemoryProfile.background
         if case .running = engineState {
             let bridge = bridge
@@ -203,7 +198,7 @@ public actor LiveSyncEngine: SyncEngine {
 
     private func doStop(_ deadline: Duration) async throws {
         guard lease != nil || bridgeStarted else {
-            if case .failed = engineState, !poisoned { setState(.stopped) }
+            if case .failed = engineState { setState(.stopped) }
             return
         }
         setState(.stopping)
@@ -216,7 +211,8 @@ public actor LiveSyncEngine: SyncEngine {
     }
 
     /// Stops pump, bridge, scopes and releases the lock. Returns a stop error
-    /// (and poisons the engine) if the bridge did not stop in time.
+    /// if the bridge did not stop in time (state `.failed(stop_timeout)`; a
+    /// later `start` is still allowed).
     @discardableResult
     private func teardown(stopDeadline: Duration) async -> EngineError? {
         pump?.cancel()
@@ -237,15 +233,17 @@ public actor LiveSyncEngine: SyncEngine {
                 if case .bridge(let code, _) = mapped, code == BridgeContract.Code.notRunning.rawValue {
                     // already gone
                 } else {
+                    // stop_timeout: the bridge keeps shutting down in the
+                    // background and its next Start waits for that (WP-A
+                    // 6261e01), so the process is not poisoned: a later
+                    // `start` is allowed and simply takes longer.
                     failure = mapped
-                    poisoned = true
                 }
             }
             bridgeStarted = false
         }
         // Even after a stop timeout the lock is released: holding it while
-        // suspended gets the process killed (0xdead10cc); `poisoned` prevents
-        // this process from ever starting the engine again.
+        // suspended gets the process killed (0xdead10cc).
         lease?.release()
         lease = nil
         for scope in externalScopes.values { scope.stop() }
