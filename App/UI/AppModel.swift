@@ -68,6 +68,8 @@ final class AppModel {
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var bannerTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    /// `debugAutoAccept()` bookkeeping (Debug acceptance hook).
+    @ObservationIgnored var debugAccepted: Set<String> = []
 
     init(engine: any SyncEngine, host: LiveEngineHost, settings: AppSettings, notifier: AppNotifier, isFixture: Bool,
          isOnMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac) {
@@ -105,10 +107,13 @@ final class AppModel {
             connections[c.deviceID] = c
         case let .pendingDevicesChanged(list):
             pendingDevices = list
+            debugAutoAccept()
         case let .pendingFoldersChanged(list):
             pendingFolders = list
+            debugAutoAccept()
         case let .folderStatusChanged(status):
             statuses[status.folderID] = status
+            if status.state == .syncing { debugContinueIfRequested() }
         case .configurationChanged:
             scheduleRefresh()
             Task { await refreshFilesLocation() }
@@ -143,6 +148,8 @@ final class AppModel {
             folders = try await engine.folders()
             pendingDevices = try await engine.pendingDevices()
             pendingFolders = try await engine.pendingFolders()
+            debugAutoAccept()
+            debugFileOpsIfRequested()
             let snap = try await engine.snapshot()
             statuses = Dictionary(uniqueKeysWithValues: snap.folders.map { ($0.folderID, $0) })
             localID = snap.localDeviceID ?? localID
@@ -400,6 +407,68 @@ final class AppModel {
         lines.append("Lifecycle:")
         for e in LifecycleLog.shared.entries.suffix(30) { lines.append("  \(e.stage) \(e.detail)") }
         return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: Real-device acceptance hooks (Debug only)
+
+extension AppModel {
+    /// `-PsyDebugAutoAccept <prefix>`: accept pending devices and folders whose
+    /// name/label starts with `<prefix>` (e.g. `psy-test-`), as tapping Accept
+    /// would (managed location, all content). Lets real-device acceptance run
+    /// without UI automation. Compiled out of Release.
+    func debugAutoAccept() {
+        #if DEBUG
+        guard !isFixture, let prefix = UserDefaults.standard.string(forKey: "PsyDebugAutoAccept"), !prefix.isEmpty else { return }
+        for device in pendingDevices where device.name.hasPrefix(prefix) && debugAccepted.insert(device.id.rawValue).inserted {
+            LifecycleLog.shared.record("debug-auto-accept", "device \(device.id.short) \(device.name)")
+            Task { await acceptPending(device) }
+        }
+        for folder in pendingFolders where folder.label.hasPrefix(prefix) && debugAccepted.insert(folder.id).inserted {
+            LifecycleLog.shared.record("debug-auto-accept", "folder \(folder.folderID.rawValue)")
+            Task { _ = await accept(folder, label: folder.label, location: .managed, mode: .everything) }
+        }
+        #endif
+    }
+
+    /// `-PsyDebugWriteFile <folderID>/<name>` / `-PsyDebugDeleteFile <folderID>/<name>`:
+    /// once per launch, write (create or overwrite, timestamped content) or
+    /// delete a file in a managed folder, so local-change upload can be checked
+    /// on a real device without UI automation. Compiled out of Release.
+    func debugFileOpsIfRequested() {
+        #if DEBUG
+        guard !isFixture, let layout = try? AppGroupResolver.layout() else { return }
+        for (key, write) in [("PsyDebugWriteFile", true), ("PsyDebugDeleteFile", false)] {
+            guard let spec = UserDefaults.standard.string(forKey: key), let slash = spec.firstIndex(of: "/") else { continue }
+            let folderID = FolderID(rawValue: String(spec[..<slash]))
+            let name = String(spec[spec.index(after: slash)...])
+            guard !name.isEmpty, !name.contains(".."), folders.contains(where: { $0.id == folderID && $0.location == .managed }),
+                  debugAccepted.insert("\(key):\(spec)").inserted else { continue }
+            let url = layout.managedFolder(folderID).appending(path: name)
+            do {
+                if write {
+                    try Data("written on iPhone at \(Date())\n".utf8).write(to: url, options: .atomic)
+                } else {
+                    try FileManager.default.removeItem(at: url)
+                }
+                LifecycleLog.shared.record("debug-file-op", "\(write ? "write" : "delete") \(spec)")
+            } catch {
+                LifecycleLog.shared.record("debug-file-op-failed", "\(spec): \(error)")
+            }
+        }
+        #endif
+    }
+
+    /// `-PsyDebugContinueWhenSyncing YES`: request "Keep syncing in background"
+    /// (as the Home button does) the first time a folder starts syncing while
+    /// the app is active. Compiled out of Release.
+    func debugContinueIfRequested() {
+        #if DEBUG
+        guard !isFixture, isActive, UserDefaults.standard.bool(forKey: "PsyDebugContinueWhenSyncing"),
+              debugAccepted.insert("continue-in-background").inserted else { return }
+        LifecycleLog.shared.record("debug-continue-request", "")
+        Task { await continueInBackground() }
+        #endif
     }
 }
 

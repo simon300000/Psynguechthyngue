@@ -120,5 +120,29 @@ enum FootprintProbe {
         guard let s = sample() else { return }
         Logger(subsystem: "app.psynguechthyngue.files", category: "footprint")
             .log("phase=\(phase, privacy: .public) footprint=\(s.footprintMiB, format: .fixed(precision: 1))MiB peak=\(s.peakMiB, format: .fixed(precision: 1))MiB available=\(s.availableMiB, format: .fixed(precision: 1))MiB limit≈\(s.footprintMiB + s.availableMiB, format: .fixed(precision: 0))MiB")
+        #if DEBUG
+        appendToDebugFile(phase: phase, s)
+        #endif
     }
+
+    #if DEBUG
+    /// Real-device acceptance: the unified log is not always retrievable over a
+    /// Wi-Fi tunnel, but `<AppGroup>/Library/Caches/` can be copied off with
+    /// `devicectl device copy from --domain-type appGroupDataContainer`.
+    private static func appendToDebugFile(phase: String, _ s: Sample) {
+        guard let root = try? AppGroupResolver.layout().root else { return }
+        let url = root.appending(path: "Library/Caches/footprint.log")
+        let line = String(format: "%@ pid=%d phase=%@ footprint=%.1fMiB peak=%.1fMiB available=%.1fMiB limit≈%.0fMiB\n",
+                          ISO8601DateFormatter().string(from: Date()), getpid(), phase,
+                          s.footprintMiB, s.peakMiB, s.availableMiB, s.footprintMiB + s.availableMiB)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+        } else {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data(line.utf8).write(to: url)
+        }
+    }
+    #endif
 }
