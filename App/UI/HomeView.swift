@@ -64,9 +64,15 @@ struct HomeView: View {
         if !model.allIssues.isEmpty { problems }
     }
 
+    /// iPhone / iPad / Mac (Designed for iPad) glyph for the "This device" card.
+    private static var thisDeviceSymbol: String {
+        if ProcessInfo.processInfo.isiOSAppOnMac { return "laptopcomputer" }
+        return UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone"
+    }
+
     private var identityCard: some View {
         VStack(spacing: 10) {
-            CardHeader(title: "This device", systemImage: "iphone")
+            CardHeader(title: "This device", systemImage: Self.thisDeviceSymbol)
             LocalIDCard()
                 .padding(18)
                 .glassCard()
