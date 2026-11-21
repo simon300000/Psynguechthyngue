@@ -125,8 +125,25 @@ struct FolderConfigDTO: Codable, Hashable {
 struct OptionsDTO: Codable, Hashable {
     var maxSendKbps: Int
     var maxRecvKbps: Int
-    /// Read-only here: written via `ListenOptionsDTO` (nil = omitted on PATCH).
+    /// Read-only here: written via `ListenOptionsDTO` / `EngineOptionsPatchDTO`
+    /// (nil = omitted on PATCH).
     var listenAddresses: [String]? = nil
+    var globalAnnounceEnabled: Bool? = nil
+    var relaysEnabled: Bool? = nil
+}
+
+struct EngineOptionsPatchDTO: Codable, Hashable {
+    var globalAnnounceEnabled: Bool
+    var relaysEnabled: Bool
+    var listenAddresses: [String]
+}
+
+struct DeviceNamePatchDTO: Codable, Hashable {
+    var name: String
+}
+
+struct SystemVersionDTO: Decodable {
+    var version: String
 }
 
 struct ListenOptionsDTO: Codable, Hashable {
