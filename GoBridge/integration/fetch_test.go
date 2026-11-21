@@ -4,6 +4,7 @@ package integration
 
 import (
 	"crypto/sha256"
+	"fmt"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -125,6 +126,26 @@ func TestFetchFile(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("restricted core is dial-only", func(t *testing.T) {
+		// Progress fires after the core connected, i.e. while it runs.
+		o := b.fetch(t, helperArgs{Path: "dir/big.bin", Dest: dest("sockets"), SocketCheck: true})
+		if o.Error != "" {
+			t.Fatal(o.Error)
+		}
+		if !o.SocketChecked {
+			t.Skip("lsof unavailable")
+		}
+		for _, l := range o.Sockets {
+			// QUIC/UDP dialing may hold an unconnected client socket; nothing
+			// may listen on TCP or bind the discovery/sync ports.
+			if strings.Contains(l, "(LISTEN)") || strings.Contains(l, ":21027") ||
+				strings.Contains(l, fmt.Sprintf(":%d ", b.port)) || strings.HasSuffix(l, fmt.Sprintf(":%d", b.port)) {
+				t.Errorf("restricted core holds a listening socket: %s", l)
+			}
+		}
+		t.Logf("sockets while fetching: %q", o.Sockets)
+	})
 
 	t.Run("expected version", func(t *testing.T) {
 		first := b.fetch(t, helperArgs{Path: "small.bin", Dest: dest("v1")})

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -197,12 +198,36 @@ func TestRestrictConfig(t *testing.T) {
 	if c.GUI.Enabled || c.Options.NATEnabled {
 		t.Fatal("GUI/NAT must be off in the restricted core")
 	}
+	if len(c.Options.RawListenAddresses) != 0 || c.Options.LocalAnnEnabled || !c.Options.RelaysEnabled || !c.Options.GlobalAnnEnabled {
+		t.Fatalf("restricted core must be dial-only with global lookups and relay dialing: %+v", c.Options)
+	}
+	for _, srv := range c.Options.RawGlobalAnnServers {
+		if !strings.Contains(srv, "noannounce") || strings.Contains(srv, "nolookup") {
+			t.Fatalf("global discovery server %q is not lookup-only", srv)
+		}
+	}
 	if _, ok := restrictConfig(&c, me, "missing"); ok {
 		t.Fatal("unknown folder accepted")
 	}
 	got := candidateDevices(target, me, []protocol.DeviceID{stranger, peer})
 	if len(got) != 1 || got[0] != peer {
 		t.Fatalf("candidates = %v", got)
+	}
+}
+
+func TestLookupOnlyServers(t *testing.T) {
+	got := lookupOnlyServers([]string{
+		"https://discovery-lookup.syncthing.net/v2/?noannounce",
+		"https://discovery-announce-v4.syncthing.net/v2/?nolookup",
+		"https://disco.example.org:8443/v2/?id=ABC",
+		"https://discovery-lookup.syncthing.net/v2/?noannounce",
+	})
+	want := []string{
+		"https://discovery-lookup.syncthing.net/v2/?noannounce",
+		"https://disco.example.org:8443/v2/?id=ABC&noannounce",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %q", got)
 	}
 }
 

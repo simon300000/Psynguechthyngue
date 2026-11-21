@@ -5,6 +5,7 @@ package integration
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -58,6 +60,9 @@ type helperArgs struct {
 	Grace       int64 `json:"grace,omitempty"`
 	// Trace: SetFetchLogSink(stderr, "trace") — per-phase memory lines.
 	Trace bool `json:"trace,omitempty"`
+	// SocketCheck: at the first progress callback (core running), record
+	// this process's listening TCP sockets and bound UDP sockets via lsof.
+	SocketCheck bool `json:"socketCheck,omitempty"`
 }
 
 type stderrSink struct{}
@@ -65,10 +70,13 @@ type stderrSink struct{}
 func (stderrSink) Log(level, msg string) { fmt.Fprintf(os.Stderr, "[restricted %s] %s\n", level, msg) }
 
 type fetchOutcome struct {
-	Result    *psybridge.FetchResult `json:"result,omitempty"`
-	Error     string                 `json:"error,omitempty"`
-	MaxRSS    int64                  `json:"maxRSS"`
-	ElapsedMS int64                  `json:"elapsedMS"`
+	// Sockets: lsof lines (TCP LISTEN + UDP) seen while the core ran.
+	Sockets       []string               `json:"sockets,omitempty"`
+	SocketChecked bool                   `json:"socketChecked,omitempty"`
+	Result        *psybridge.FetchResult `json:"result,omitempty"`
+	Error         string                 `json:"error,omitempty"`
+	MaxRSS        int64                  `json:"maxRSS"`
+	ElapsedMS     int64                  `json:"elapsedMS"`
 }
 
 func readHelperArgs() helperArgs {
@@ -105,9 +113,38 @@ func helperEngine() {
 type helperProgress struct {
 	cancelAfter int64
 	done        atomic.Int64
+	onFirst     func()
+	first       sync.Once
 }
 
-func (p *helperProgress) Progress(completed, total int64) { p.done.Store(completed) }
+func (p *helperProgress) Progress(completed, total int64) {
+	p.done.Store(completed)
+	if p.onFirst != nil {
+		p.first.Do(p.onFirst)
+	}
+}
+
+// ownSockets lists this process's listening TCP and bound UDP sockets.
+func ownSockets() ([]string, bool) {
+	pid := strconv.Itoa(os.Getpid())
+	var lines []string
+	for _, args := range [][]string{
+		{"-nP", "-a", "-p", pid, "-iTCP", "-sTCP:LISTEN"},
+		{"-nP", "-a", "-p", pid, "-iUDP"},
+	} {
+		out, err := exec.Command("lsof", args...).Output()
+		var exit *exec.ExitError
+		if err != nil && !(errors.As(err, &exit) && len(out) == 0) {
+			return nil, false // lsof missing or failed (exit 1 + no output = no matches)
+		}
+		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if l != "" && !strings.HasPrefix(l, "COMMAND") {
+				lines = append(lines, l)
+			}
+		}
+	}
+	return lines, true
+}
 func (p *helperProgress) IsCancelled() bool {
 	return p.cancelAfter > 0 && p.done.Load() >= p.cancelAfter
 }
@@ -117,13 +154,19 @@ func helperFetch() {
 	if a.Trace {
 		psybridge.SetFetchLogSink(stderrSink{}, "trace")
 	}
+	progress := &helperProgress{cancelAfter: a.CancelAfter}
+	var sockets []string
+	checked := false
+	if a.SocketCheck {
+		progress.onFirst = func() { sockets, checked = ownSockets() }
+	}
 	start := time.Now()
 	res, err := psybridge.FetchFile(&psybridge.FetchRequest{
 		HomeDir: a.Home, CertPEM: a.CertPEM, KeyPEM: a.KeyPEM,
 		FolderID: a.Folder, Path: a.Path, ExpectedVersion: a.Expected,
 		DestinationPath: a.Dest, DeadlineMillis: a.Deadline, ConnectGraceMillis: a.Grace,
-	}, &helperProgress{cancelAfter: a.CancelAfter})
-	out := fetchOutcome{Result: res, ElapsedMS: time.Since(start).Milliseconds()}
+	}, progress)
+	out := fetchOutcome{Result: res, ElapsedMS: time.Since(start).Milliseconds(), Sockets: sockets, SocketChecked: checked}
 	if err != nil {
 		out.Error = err.Error()
 	}
