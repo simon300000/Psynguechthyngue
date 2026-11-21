@@ -142,7 +142,7 @@ struct HomeView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                         .accessibilityIdentifier("home.continuing")
                 } else if model.canContinueInBackground && !model.syncingFolders.isEmpty {
-                    Button { model.continueInBackground() } label: {
+                    Button { Task { await model.continueInBackground() } } label: {
                         Label("Keep Syncing in Background", systemImage: "arrow.down.app")
                             .frame(maxWidth: .infinity)
                     }
@@ -292,6 +292,9 @@ struct StatusCard: View {
                 Text(s.title).font(.title3.weight(.semibold)).accessibilityIdentifier("home.status.title")
                 if let hold = model.policyHold {
                     Text(hold.message).font(.subheadline).foregroundStyle(.secondary)
+                } else if model.host.decision.reducedResourceUsage {
+                    Text("Syncing more slowly while the system saves resources")
+                        .font(.subheadline).foregroundStyle(.secondary)
                 } else if !model.devices.isEmpty {
                     Text("\(model.connectedCount) of \(model.devices.count) devices connected")
                         .font(.subheadline).foregroundStyle(.secondary)

@@ -437,6 +437,20 @@ final class EngineSettingsUITests: PsyUITestCase {
     }
 }
 
+final class MenuCommandUITests: PsyUITestCase {
+    /// The "Sync" menu commands double as iPad keyboard shortcuts (and Mac menu items).
+    func testKeyboardShortcutsOpenAddDeviceAndNewFolder() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "hardware keyboard shortcuts are an iPad feature")
+        launch()
+        XCTAssertTrue(el("home.status").waitForExistence(timeout: 5))
+        app.typeKey("d", modifierFlags: [.command, .shift])
+        XCTAssertTrue(el("adddevice.id").waitForExistence(timeout: 5), "⇧⌘D opens Add Device")
+        app.buttons["Cancel"].firstMatch.tap()
+        app.typeKey("n", modifierFlags: [.command, .shift])
+        XCTAssertTrue(el("newfolder.name").waitForExistence(timeout: 5), "⇧⌘N opens New Folder")
+    }
+}
+
 final class ZhHansUITests: PsyUITestCase {
     override var language: String { "zh-Hans" }
 

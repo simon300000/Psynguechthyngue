@@ -46,6 +46,10 @@ final class AppModel {
     private(set) var engineStarts = 0
     private(set) var engineStops = 0
     var isActive = false
+    /// Menu / keyboard command waiting to be handled by the UI.
+    var pendingCommand: AppCommand?
+    /// Transfers in progress (Mac closure confirmation, accessory).
+    var hasActiveTransfers: Bool { !syncingFolders.isEmpty || !transfers.isEmpty }
     /// Engine-owned settings (Settings ▸ Advanced); nil while the engine is not running.
     private(set) var engineOptions: EngineOptions?
     private(set) var syncthingVersion = ""
@@ -215,9 +219,9 @@ final class AppModel {
     var canContinueInBackground: Bool { scheduler?.canContinueInBackground ?? false }
     var isContinuingInBackground: Bool { host.continuedProcessing }
 
-    func continueInBackground() {
+    func continueInBackground() async {
         guard let scheduler else { return }
-        let ok = scheduler.continueInBackground(
+        let ok = await scheduler.continueInBackground(
             title: String(localized: "Syncing files"),
             subtitle: String(localized: "Psynguechthyngue keeps syncing until your transfers finish.")
         )

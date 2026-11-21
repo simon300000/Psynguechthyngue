@@ -56,6 +56,9 @@ struct DevicesView: View {
                 }
             }
             .sheet(isPresented: $adding) { AddDeviceView() }
+            .onChange(of: model.pendingCommand, initial: true) { _, command in
+                if command == .addDevice { model.pendingCommand = nil; adding = true }
+            }
         }
     }
 }

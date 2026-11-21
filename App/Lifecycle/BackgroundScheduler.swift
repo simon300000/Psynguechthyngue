@@ -71,7 +71,7 @@ final class BackgroundScheduler {
     /// with the system's progress UI. Must be called while in the foreground.
     /// Returns false when the system refused (e.g. too busy, or unsupported).
     @discardableResult
-    func continueInBackground(title: String, subtitle: String) -> Bool {
+    func continueInBackground(title: String, subtitle: String) async -> Bool {
         guard !continuedRunning else { return true }
         if simulateContinuedProcessing {
             log.record("continued-submit", "simulated")
@@ -83,14 +83,7 @@ final class BackgroundScheduler {
         let id = "\(prefix).sync-\(UUID().uuidString.prefix(8))"
         let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: subtitle)
         request.strategy = .fail
-        do {
-            try BGTaskScheduler.shared.submit(request)
-            log.record("continued-submit", id)
-            return true
-        } catch {
-            log.record("continued-submit-failed", "\(id): \(error)")
-            return false
-        }
+        return await submitRequest(request, kind: "continued")
     }
 
     private nonisolated static func continuedLaunchHandler(_ scheduler: BackgroundScheduler) -> @Sendable (BGTask) -> Void {
@@ -212,12 +205,44 @@ final class BackgroundScheduler {
     }
 
     private func submit(_ request: BGTaskRequest) {
+        nonisolated(unsafe) let request = request
+        Task { @MainActor in await self.submitRequest(request, kind: "scheduled") }
+    }
+
+    /// iOS 27 deprecates the synchronous `submit(_:)` because it cannot report
+    /// every error; the async `submitTaskRequest(_:)` does. Errors are logged in
+    /// full (domain, code name, message, userInfo).
+    @discardableResult
+    private func submitRequest(_ request: BGTaskRequest, kind: String) async -> Bool {
+        nonisolated(unsafe) let request = request
         do {
-            try BGTaskScheduler.shared.submit(request)
-            log.record("bgtask-scheduled", request.identifier)
+            if #available(iOS 27.0, *) {
+                try await BGTaskScheduler.shared.submitTaskRequest(request)
+            } else {
+                try BGTaskScheduler.shared.submit(request)
+            }
+            log.record("bgtask-\(kind)", request.identifier)
+            return true
         } catch {
-            log.record("bgtask-schedule-failed", "\(request.identifier): \(error)")
+            log.record("bgtask-\(kind)-failed", "\(request.identifier): \(Self.describe(error))")
+            return false
         }
+    }
+
+    nonisolated static func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        var code = "\(ns.code)"
+        if ns.domain == BGTaskScheduler.errorDomain, let c = BGTaskScheduler.Error.Code(rawValue: ns.code) {
+            switch c {
+            case .unavailable: code = "unavailable"
+            case .tooManyPendingTaskRequests: code = "tooManyPendingTaskRequests"
+            case .notPermitted: code = "notPermitted"
+            case .immediateRunIneligible: code = "immediateRunIneligible"
+            @unknown default: code = "\(ns.code)"
+            }
+        }
+        let info = ns.userInfo.filter { $0.key != NSLocalizedDescriptionKey }
+        return "\(ns.domain)#\(code) \(ns.localizedDescription)" + (info.isEmpty ? "" : " userInfo=\(info)")
     }
 
     private func run(_ task: BGTask, kind: BackgroundTaskKind) {

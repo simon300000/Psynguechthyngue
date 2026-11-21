@@ -48,6 +48,19 @@ struct RootView: View {
             }
         }
         .fullScreenCover(isPresented: onboardingBinding) { OnboardingView() }
+        .onChange(of: model.pendingCommand) { _, command in
+            switch command {
+            case .syncNow:
+                model.pendingCommand = nil
+                Task { await model.syncNow() }
+            case .addDevice: selection = .devices    // DevicesView presents the sheet
+            case .newFolder: selection = .folders    // FoldersView presents the sheet
+            case nil: break
+            }
+        }
+        .onChange(of: model.hasActiveTransfers, initial: true) { _, active in
+            ClosureConfirmation.update(transfersActive: active, isOnMac: model.isOnMac)
+        }
     }
 
     private var onboardingBinding: Binding<Bool> {
