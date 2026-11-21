@@ -40,19 +40,19 @@
 		<array>
 			<dict>
 				<key>NSExtensionFileProviderActionIdentifier</key>
-				<string>moe.simon3k.Psynguechthyngue.keep-downloaded</string>
+				<string>app.psynguechthyngue.action.keep-downloaded</string>
 				<key>NSExtensionFileProviderActionName</key>
 				<string>FILE_PROVIDER_KEEP_DOWNLOADED</string>
 				<key>NSExtensionFileProviderActionActivationRule</key>
-				<string>TRUEPREDICATE</string>
+				<string>SUBQUERY ( fileproviderItems, $fileproviderItem, $fileproviderItem.userInfo.pinned == NO ).@count &gt; 0</string>
 			</dict>
 			<dict>
 				<key>NSExtensionFileProviderActionIdentifier</key>
-				<string>moe.simon3k.Psynguechthyngue.remove-download</string>
+				<string>app.psynguechthyngue.action.remove-download</string>
 				<key>NSExtensionFileProviderActionName</key>
 				<string>FILE_PROVIDER_REMOVE_DOWNLOAD</string>
 				<key>NSExtensionFileProviderActionActivationRule</key>
-				<string>TRUEPREDICATE</string>
+				<string>SUBQUERY ( fileproviderItems, $fileproviderItem, $fileproviderItem.userInfo.pinned == YES ).@count &gt; 0</string>
 			</dict>
 		</array>
 	</dict>

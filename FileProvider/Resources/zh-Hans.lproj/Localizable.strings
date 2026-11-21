@@ -1,2 +1,5 @@
 "FILE_PROVIDER_KEEP_DOWNLOADED" = "保留下载";
 "FILE_PROVIDER_REMOVE_DOWNLOAD" = "移除下载";
+"FILES_ERROR_OPEN_APP" = "没有可连接的设备，请打开 Psynguechthyngue 下载此文件。";
+"FILES_ERROR_TOO_LARGE" = "文件太大，无法在此下载，请打开 Psynguechthyngue 下载。";
+"FILES_ERROR_STALE" = "此文件已在其他设备上更改，请打开 Psynguechthyngue 同步。";
