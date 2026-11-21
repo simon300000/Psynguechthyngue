@@ -50,12 +50,10 @@ final class BackgroundScheduler {
             let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: Self.launchHandler(self, kind: .processing))
             log.record("bgtask-register", "\(id) ok=\(ok)")
         }
-        if let prefix = Self.continuedPrefix {
-            let pattern = prefix + ".*"
-            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: pattern, using: .main,
-                                                     launchHandler: Self.continuedLaunchHandler(self))
-            log.record("bgtask-register", "\(pattern) ok=\(ok)")
-        }
+        // BGContinuedProcessingTask: Info.plist permits "<prefix>.*", but the
+        // wildcard itself cannot be registered (device: "Registration rejected;
+        // … is not advertised"). Each concrete identifier is registered right
+        // before it is submitted, in `continueInBackground`.
     }
 
     // MARK: Continued processing
@@ -81,6 +79,10 @@ final class BackgroundScheduler {
         }
         guard let prefix = Self.continuedPrefix else { return false }
         let id = "\(prefix).sync-\(UUID().uuidString.prefix(8))"
+        let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main,
+                                                         launchHandler: Self.continuedLaunchHandler(self))
+        log.record("bgtask-register", "\(id) ok=\(registered)")
+        guard registered else { return false }
         let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: subtitle)
         request.strategy = .fail
         return await submitRequest(request, kind: "continued")
