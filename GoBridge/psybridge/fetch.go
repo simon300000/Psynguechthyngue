@@ -60,6 +60,10 @@ type FetchRequest struct {
 	DeadlineMillis int64 // total wall clock including connect
 	MemoryLimitMiB int64
 	MaxFileBytes   int64
+	// ConnectGraceMillis: how long to wait for the first connection to a
+	// device sharing the folder (RestrictedFetchBudget.connectGrace).
+	// Zero = DefaultFetchConnectGraceMillis.
+	ConnectGraceMillis int64
 }
 
 // Default budgets for the restricted fetch.
@@ -79,6 +83,12 @@ type FetchResult struct {
 	BlocksHash  string
 	// DeviceIDs that served blocks, comma separated (diagnostics only).
 	ServedBy string
+	// Diagnostics: process peak RSS (getrusage ru_maxrss) and peak
+	// phys_footprint (what iOS jetsam limits) when the fetch finished, and
+	// milliseconds until the first peer connection.
+	PeakRSSBytes       int64
+	PeakFootprintBytes int64
+	ConnectMillis      int64
 }
 
 // FetchProgress is called from bridge goroutines: Progress from the fetch
@@ -127,7 +137,12 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 	if err := configureLocations(req.HomeDir); err != nil {
 		return nil, err
 	}
-	installLogSink(nil, "")
+	sink, level := fetchLogSink()
+	installLogSink(sink, level)
+	// "trace": phase memory lines, upstream logs at warn (keeps upstream's
+	// info-level startup hashing benchmark off, so numbers stay representative).
+	trace := newPhaseTracer(sink, level == "trace" || level == "debug")
+	trace.phase("start")
 
 	// In-memory config derivative; never written back (Wrap with no path).
 	raw, err := os.ReadFile(locations.Get(locations.ConfigFile))
@@ -142,6 +157,7 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 	if !ok {
 		return nil, newError(CodeFileNotFound, "folder %q is not configured", req.FolderID)
 	}
+	applyPeerCache(&base, folderCfg, readPeerCache(req.HomeDir), time.Now())
 
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
@@ -161,6 +177,7 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 	if !ok {
 		return nil, newError(CodeDatabase, "upstream DB lacks expected query methods")
 	}
+	trace.phase("db-open")
 
 	// Check the index before touching the network.
 	global, found, err := queries.GetGlobalFile(req.FolderID, req.Path)
@@ -191,15 +208,16 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 	if err := app.Start(); err != nil {
 		return nil, wrapUpstream(CodeDatabase, "start", err)
 	}
+	trace.phase("app-started")
 
-	graceEnd := time.Now().Add(DefaultFetchConnectGraceMillis * time.Millisecond)
+	graceEnd := time.Now().Add(millis(req.ConnectGraceMillis, DefaultFetchConnectGraceMillis*time.Millisecond))
 	if graceEnd.After(deadline) {
 		graceEnd = deadline
 	}
 	f := &fetcher{
 		ctx: ctx, cancelled: cancelled, internals: app.Internals, folder: req.FolderID,
 		file: global, candidates: candidates, graceEnd: graceEnd, progress: progress,
-		served: map[protocol.DeviceID]bool{},
+		served: map[protocol.DeviceID]bool{}, trace: trace,
 	}
 	if err := f.run(req.DestinationPath); err != nil {
 		os.Remove(req.DestinationPath)
@@ -213,11 +231,14 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 		}
 	}
 	return &FetchResult{
-		Size:        global.Size,
-		ModifiedUTC: global.ModTime().UTC().Format(time.RFC3339Nano),
-		Version:     version,
-		BlocksHash:  blocksHashToken(global),
-		ServedBy:    strings.Join(servedBy, ","),
+		Size:               global.Size,
+		ModifiedUTC:        global.ModTime().UTC().Format(time.RFC3339Nano),
+		Version:            version,
+		BlocksHash:         blocksHashToken(global),
+		ServedBy:           strings.Join(servedBy, ","),
+		PeakRSSBytes:       trace.phase("done"),
+		PeakFootprintBytes: peakFootprint(),
+		ConnectMillis:      f.connectedAt.Sub(start).Milliseconds(),
 	}, nil
 }
 
@@ -334,6 +355,8 @@ type fetcher struct {
 	served     map[protocol.DeviceID]bool
 
 	everConnected bool
+	connectedAt   time.Time
+	trace         *phaseTracer
 }
 
 func (f *fetcher) ctxErr() error {
@@ -363,7 +386,11 @@ func (f *fetcher) connected() []protocol.DeviceID {
 func (f *fetcher) waitConnected() ([]protocol.DeviceID, error) {
 	for {
 		if devs := f.connected(); len(devs) > 0 {
-			f.everConnected = true
+			if !f.everConnected {
+				f.everConnected = true
+				f.connectedAt = time.Now()
+				f.trace.phase("connected")
+			}
 			return devs, nil
 		}
 		if err := f.ctxErr(); err != nil {
@@ -416,6 +443,7 @@ func (f *fetcher) run(dest string) error {
 		completed += int64(len(data))
 		report(completed)
 	}
+	f.trace.phase("transferred")
 	if err := out.Sync(); err != nil {
 		return newError(CodeIO, "fsync: %v", err)
 	}
@@ -482,4 +510,52 @@ func (f *fetcher) fetchBlock(index int, block protocol.BlockInfo) ([]byte, error
 		return nil, newError(CodeHashMismatch, "block %d: %v", index, lastErr)
 	}
 	return nil, newError(CodeNoPeer, "block %d unavailable: %v", index, lastErr)
+}
+
+// applyPeerCache puts the App engine's cached addresses (peer-addresses.json)
+// in front of each candidate device's configured addresses, so the first
+// dial round targets them directly.
+func applyPeerCache(c *config.Configuration, folder config.FolderConfiguration, cache peerCacheFile, now time.Time) {
+	shared := map[protocol.DeviceID]bool{}
+	for _, d := range folder.Devices {
+		shared[d.DeviceID] = true
+	}
+	for i := range c.Devices {
+		d := &c.Devices[i]
+		if !shared[d.DeviceID] || d.Paused {
+			continue
+		}
+		if cached := cache.cachedAddresses(d.DeviceID, now); len(cached) > 0 {
+			d.Addresses = withCachedAddresses(d.Addresses, cached)
+		}
+	}
+}
+
+var (
+	fetchSinkMu    sync.Mutex
+	fetchSink      LogSink
+	fetchSinkLevel string
+)
+
+// SetFetchLogSink routes restricted-core logs (FetchFile and
+// RecordFetchedFile) to sink; nil drops them. level:
+//   - "warn" (default): upstream warnings and errors only.
+//   - "trace": as "warn", plus one line per fetch phase with peak RSS and Go
+//     runtime memory. Use this to measure the extension.
+//   - "info" / "debug": verbose. Upstream then also runs a short hashing
+//     benchmark at start, which costs CPU and memory; not for production.
+func SetFetchLogSink(sink LogSink, level string) {
+	fetchSinkMu.Lock()
+	defer fetchSinkMu.Unlock()
+	fetchSink, fetchSinkLevel = sink, level
+}
+
+func fetchLogSink() (LogSink, string) {
+	fetchSinkMu.Lock()
+	defer fetchSinkMu.Unlock()
+	level := fetchSinkLevel
+	if level == "" {
+		level = "warn"
+	}
+	return fetchSink, level
 }

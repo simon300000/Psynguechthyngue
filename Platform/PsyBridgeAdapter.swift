@@ -277,6 +277,14 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
 
     // MARK: Restricted fetch (File Provider extension)
 
+    /// Routes restricted-core logs (fetch / recordFetchedFile) to `handler`.
+    /// level: "warn" (default; production), "trace" (adds one line per fetch
+    /// phase with phys_footprint, peak RSS and Go memory — use to measure the
+    /// extension), "info"/"debug" (verbose; not for production). nil = drop.
+    public static func setRestrictedLog(level: String = "warn", _ handler: PsyBridgeLogHandler?) {
+        PsybridgeSetFetchLogSink(handler.map(LogSinkBox.init), level)
+    }
+
     public func fetch(
         homeDirectory: URL,
         identity: DeviceIdentity,
@@ -299,6 +307,7 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
         request.deadlineMillis = budget.deadline.milliseconds
         request.memoryLimitMiB = budget.memory.limitMiB
         request.maxFileBytes = budget.maxFileBytes
+        request.connectGraceMillis = budget.connectGrace.milliseconds
 
         let box = FetchProgressBox(progress: progress, isCancelled: isCancelled)
         var error: NSError?

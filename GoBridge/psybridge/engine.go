@@ -3,6 +3,7 @@
 package psybridge
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base32"
 	"errors"
@@ -287,6 +288,10 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 	if err := waitHealthy(baseURL, deadline, app); err != nil {
 		return nil, err
 	}
+
+	peerCtx, peerCancel := context.WithCancel(context.Background())
+	rt.extraCancel = peerCancel
+	startPeerCacheWriter(peerCtx, e.cfg.HomeDir, baseURL, apiKey, myID, evLogger)
 
 	e.rt = rt
 	e.sdb = queries

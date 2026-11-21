@@ -97,8 +97,11 @@ func (h *sinkHandler) WithGroup(name string) slog.Handler {
 // returns the shared state so callers can register secrets to redact.
 func installLogSink(sink LogSink, levelName string) *sinkShared {
 	level := slog.LevelInfo
-	if levelName == "debug" {
+	switch levelName {
+	case "debug":
 		level = slog.LevelDebug
+	case "warn", "trace":
+		level = slog.LevelWarn
 	}
 	shared := &sinkShared{sink: sink, level: level}
 	slog.SetDefault(slog.New(&sinkHandler{shared: shared}))

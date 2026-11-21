@@ -58,7 +58,7 @@ func RecordFetchedFile(req *RecordRequest) error {
 	if err := configureLocations(req.HomeDir); err != nil {
 		return err
 	}
-	installLogSink(nil, "")
+	installLogSink(fetchLogSink())
 
 	raw, err := os.ReadFile(locations.Get(locations.ConfigFile))
 	if err != nil {
