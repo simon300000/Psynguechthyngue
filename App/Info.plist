@@ -56,9 +56,9 @@
     <key>PsyKeychainAccessGroup</key>
     <string>$(KEYCHAIN_ACCESS_GROUP)</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Connect to Syncthing devices that you explicitly add on your local network.</string>
+    <string>Find and connect to your devices on the local network.</string>
     <key>NSCameraUsageDescription</key>
-    <string>Scan a Syncthing device ID QR code when you choose to pair a device.</string>
+    <string>Scan the QR code of another device to add it.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_syncthing._tcp</string>
