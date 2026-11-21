@@ -13,10 +13,17 @@ import Testing
             (i.thermalSerious, .thermal),
         ]
         if let hit = rows.first(where: { $0.0 }) { return PolicyDecision(hold: hit.1) }
+        var send = 0, recv = 0
         if i.network == .cellular {
-            return PolicyDecision(sendLimitKiBps: p.cellularSendLimitKiBps, receiveLimitKiBps: p.cellularReceiveLimitKiBps)
+            send = p.cellularSendLimitKiBps; recv = p.cellularReceiveLimitKiBps
         }
-        return .run
+        guard i.systemPrefersReducedResourceUsage else {
+            return PolicyDecision(sendLimitKiBps: send, receiveLimitKiBps: recv)
+        }
+        // Reduced load: 0 (unlimited) → cap; a stricter user limit wins.
+        return PolicyDecision(sendLimitKiBps: send == 0 ? 1024 : min(send, 1024),
+                              receiveLimitKiBps: recv == 0 ? 4096 : min(recv, 4096),
+                              reducedResourceUsage: true)
     }
 
     static var allInputs: [PolicyInputs] {
@@ -28,9 +35,11 @@ import Testing
                         for charging in [false, true] {
                             for battery in [nil, 0.01, 0.19, 0.5, 1.0] as [Double?] {
                                 for thermal in [false, true] {
-                                    out.append(PolicyInputs(network: network, isExpensive: expensive, isConstrained: constrained,
-                                                            isLowPowerMode: lowPower, isCharging: charging, batteryLevel: battery,
-                                                            thermalSerious: thermal))
+                                    for reduced in [false, true] {
+                                        out.append(PolicyInputs(network: network, isExpensive: expensive, isConstrained: constrained,
+                                                                isLowPowerMode: lowPower, isCharging: charging, batteryLevel: battery,
+                                                                thermalSerious: thermal, systemPrefersReducedResourceUsage: reduced))
+                                    }
                                 }
                             }
                         }
@@ -46,8 +55,8 @@ import Testing
         for cellular in [false, true] {
             for ldm in [false, true] {
                 for lpm in [false, true] {
-                    for send in [0, 128] {
-                        for recv in [0, 512] {
+                    for send in [0, 128, 2048] {
+                        for recv in [0, 512, 8192] {
                             var p = PolicyPreferences()
                             p.syncOnCellular = cellular
                             p.respectLowDataMode = ldm
@@ -72,7 +81,21 @@ import Testing
                 #expect(d == Self.oracle(i, p), "inputs=\(i) prefs=\(p)")
                 // Invariants
                 if d.hold != nil { #expect(d.sendLimitKiBps == 0 && d.receiveLimitKiBps == 0) }
-                if i.network == .wifiOrWired && d.hold == nil { #expect(d == .run) }
+                if i.network == .wifiOrWired && d.hold == nil && !i.systemPrefersReducedResourceUsage { #expect(d == .run) }
+                // Reduced resource usage never causes a hold and never loosens a limit.
+                var calm = i
+                calm.systemPrefersReducedResourceUsage = false
+                let base = policy.decide(inputs: calm, preferences: p)
+                #expect(d.hold == base.hold)
+                if i.systemPrefersReducedResourceUsage && d.hold == nil {
+                    #expect(d.reducedResourceUsage)
+                    #expect(d.sendLimitKiBps > 0 && d.sendLimitKiBps <= DefaultSyncPolicy.reducedSendLimitKiBps)
+                    #expect(d.receiveLimitKiBps > 0 && d.receiveLimitKiBps <= DefaultSyncPolicy.reducedReceiveLimitKiBps)
+                    if base.sendLimitKiBps > 0 { #expect(d.sendLimitKiBps <= base.sendLimitKiBps) }
+                    if base.receiveLimitKiBps > 0 { #expect(d.receiveLimitKiBps <= base.receiveLimitKiBps) }
+                } else {
+                    #expect(!d.reducedResourceUsage)
+                }
                 // Battery level / charging never change the decision.
                 var j = i
                 j.batteryLevel = 0.01
@@ -81,7 +104,7 @@ import Testing
                 count += 1
             }
         }
-        #expect(count == 3 * 2 * 2 * 2 * 2 * 5 * 2 * 32)
+        #expect(count == 3 * 2 * 2 * 2 * 2 * 5 * 2 * 2 * (2 * 2 * 2 * 3 * 3))
     }
 
     @Test func defaultsArePermissive() {

@@ -42,6 +42,13 @@ struct LiveEngineAppState: Codable, Hashable, Sendable {
     var decision: PolicyDecision = .run
     /// Sync listen port chosen instead of 22000 (ListenAddressPlanner); nil = default.
     var listenPort: Int?
+    /// Options overridden by reduced-load mode, restored when it ends.
+    var savedLoadOptions: SavedLoadOptions?
+
+    struct SavedLoadOptions: Codable, Hashable, Sendable {
+        var maxFolderConcurrency: Int
+        var limitBandwidthInLan: Bool
+    }
 
     static let fileName = "psy-app-state.json"
 

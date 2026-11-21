@@ -154,6 +154,8 @@ final class FakeSyncthing: @unchecked Sendable {
             if let v = obj["listenAddresses"] as? [String] { options.listenAddresses = v }
             if let v = obj["globalAnnounceEnabled"] as? Bool { options.globalAnnounceEnabled = v }
             if let v = obj["relaysEnabled"] as? Bool { options.relaysEnabled = v }
+            if let v = obj["maxFolderConcurrency"] as? Int { options.maxFolderConcurrency = v }
+            if let v = obj["limitBandwidthInLan"] as? Bool { options.limitBandwidthInLan = v }
             return .json("")
         case ("GET", "/rest/system/version"): return .json(#"{"version":"v2.1.6","longVersion":"syncthing v2.1.6"}"#)
         case ("GET", "/rest/config/folders"): return json(folders)
@@ -188,6 +190,9 @@ final class FakeSyncthing: @unchecked Sendable {
 
     func device(_ id: DeviceID) -> DeviceConfigDTO? { lock.withLock { devices.first { $0.deviceID == id.rawValue } } }
     var currentOptions: OptionsDTO { lock.withLock { options } }
+    func setLoadOptions(maxFolderConcurrency: Int, limitBandwidthInLan: Bool) {
+        lock.withLock { options.maxFolderConcurrency = maxFolderConcurrency; options.limitBandwidthInLan = limitBandwidthInLan }
+    }
 }
 
 @Suite struct LiveSyncEngineTests {

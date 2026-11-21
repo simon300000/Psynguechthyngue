@@ -9,12 +9,27 @@ import Foundation
 /// 5. thermal serious/critical → hold `.thermal`
 /// 6. cellular → run with the cellular rate limits
 /// 7. otherwise → run, unlimited
+/// 8. on top of 6/7: system prefers reduced resource usage (iOS 27) → reduced
+///    load: limits capped at `reducedSendLimitKiBps` / `reducedReceiveLimitKiBps`
+///    (a stricter user limit wins), one folder at a time, limits also on LAN.
+///    Never a hold: the system asks for less, not for nothing.
 ///
 /// Battery percentage and charging state are deliberately **not** inputs to
 /// the decision (fixes AUDIT P2). While held, limits are 0 (irrelevant: all
 /// devices are paused).
 public struct DefaultSyncPolicy: SyncPolicy {
+    /// Reduced-load caps (KiB/s). Upload is capped harder than download:
+    /// radio transmit power dominates on mobile.
+    public static let reducedSendLimitKiBps = 1024
+    public static let reducedReceiveLimitKiBps = 4096
+
     public init() {}
+
+    /// Combines a limit (0 = unlimited) with a cap: the stricter one wins.
+    static func capped(_ limit: Int, at cap: Int) -> Int {
+        let limit = max(0, limit)
+        return limit == 0 ? cap : min(limit, cap)
+    }
 
     public func decide(inputs: PolicyInputs, preferences: PolicyPreferences) -> PolicyDecision {
         if inputs.network == .none {
@@ -33,13 +48,19 @@ public struct DefaultSyncPolicy: SyncPolicy {
         if inputs.thermalSerious {
             return PolicyDecision(hold: .thermal)
         }
+        var decision = PolicyDecision.run
         if cellular {
-            return PolicyDecision(
+            decision = PolicyDecision(
                 hold: nil,
                 sendLimitKiBps: max(0, preferences.cellularSendLimitKiBps),
                 receiveLimitKiBps: max(0, preferences.cellularReceiveLimitKiBps)
             )
         }
-        return .run
+        if inputs.systemPrefersReducedResourceUsage {
+            decision.sendLimitKiBps = Self.capped(decision.sendLimitKiBps, at: Self.reducedSendLimitKiBps)
+            decision.receiveLimitKiBps = Self.capped(decision.receiveLimitKiBps, at: Self.reducedReceiveLimitKiBps)
+            decision.reducedResourceUsage = true
+        }
+        return decision
     }
 }
