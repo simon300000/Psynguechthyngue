@@ -35,7 +35,7 @@ ROOT = File.expand_path("..", __dir__)
 PROJECT_PATH = File.expand_path(
   ENV.fetch("PSY_XCODEPROJ_PATH", File.join(ROOT, "Psynguechthyngue.xcodeproj")), ROOT
 )
-DEPLOYMENT_TARGET = "17.0"
+DEPLOYMENT_TARGET = "26.0"
 XCFRAMEWORK = "Artifacts/PsyBridge.xcframework"
 
 FileUtils.rm_rf(PROJECT_PATH)

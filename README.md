@@ -15,7 +15,7 @@
 
 ## 环境
 
-- macOS + Xcode（当前在 Xcode 27.2 / iOS 27 Simulator 上验证），部署目标 iOS 17.0
+- macOS + Xcode（当前在 Xcode 27.2 / iOS 27 Simulator 上验证），部署目标 iOS/iPadOS 26.0
 - Go（版本由 `GoBridge/go.mod` 指定，当前为 1.26.2，会自动下载工具链）。所有 go 命令都要加 `-tags noassets`
 - Ruby gem `xcodeproj`（用于生成工程）
 - 签名：把 `Config/Local.xcconfig.example` 复制为 `Config/Local.xcconfig`（该文件被 git 忽略），填入 Team、Bundle ID 和 App Group

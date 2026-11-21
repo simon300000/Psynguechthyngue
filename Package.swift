@@ -10,7 +10,7 @@ let package = Package(
     name: "Psynguechthyngue",
     defaultLocalization: "en",
     platforms: [
-        .iOS(.v17),
+        .iOS(.v26),
         .macOS(.v14),
     ],
     products: [
