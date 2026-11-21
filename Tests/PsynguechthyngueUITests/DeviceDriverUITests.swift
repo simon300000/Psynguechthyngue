@@ -9,6 +9,7 @@ import XCTest
 /// executes it and writes `res-<seq>.json` (+ optional PNG / tree text), which
 /// the Mac copies back. No network is involved, so no Local Network prompt for
 /// the runner. See `Docs/REWRITE/notes/accept-ipad/README.md`.
+@MainActor
 final class DeviceDriverUITests: XCTestCase {
     private let appBundleID = "moe.simon3k.Psynguechthyngue"
 
