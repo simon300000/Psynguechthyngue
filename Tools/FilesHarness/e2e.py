@@ -113,6 +113,27 @@ def peer_status():
                                 if not n.startswith(".st")))
 
 
+def peer_live(sim_id):
+    """Temporary independent peer (no official instance involved) for the
+    real-bridge restricted fetch: local discovery on so the App engine finds
+    it via `dynamic` and records the address in Engine/peer-addresses.json."""
+    peer_id = peer("GET", "/rest/system/status")["myID"]
+    peer("PATCH", "/rest/config/options", body={
+        "listenAddresses": ["tcp://:22102"], "globalAnnounceEnabled": False, "localAnnounceEnabled": True,
+        "relaysEnabled": False, "natEnabled": False, "urAccepted": -1, "crashReportingEnabled": False,
+        "minHomeDiskFree": {"value": 1, "unit": "GB"}})
+    peer("PUT", "/rest/config/devices/" + sim_id, body={"deviceID": sim_id, "name": "psy-test-wpc-sim", "addresses": ["dynamic"]})
+    os.makedirs(PEER_DIR, exist_ok=True)
+    for i in range(1, 6):
+        with open(os.path.join(PEER_DIR, "offline-%d.txt" % i), "w") as f:
+            f.write("offline file %d via real restricted fetch\n" % i)
+    peer("PUT", "/rest/config/folders/" + FOLDER, body={
+        "id": FOLDER, "label": FOLDER, "path": PEER_DIR, "type": "sendreceive",
+        "devices": [{"deviceID": peer_id}, {"deviceID": sim_id}], "fsWatcherEnabled": True, "fsWatcherDelayS": 1,
+        "minDiskFree": {"value": 1, "unit": "GB"}})
+    print(peer_id)
+
+
 def official_ids():
     """Folder/device IDs on the official instance, excluding every psy-test-*
     object (ours and other work packages' concurrent E2E runs)."""
@@ -271,6 +292,8 @@ if __name__ == "__main__":
         setup(sys.argv[2])
     elif cmd == "setup-live":
         setup_live(sys.argv[2])
+    elif cmd == "peer-live":
+        peer_live(sys.argv[2])
     elif cmd == "peer-setup":
         peer_setup()
     elif cmd == "peer-status":

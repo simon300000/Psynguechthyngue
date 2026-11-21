@@ -59,7 +59,10 @@ public final class FilesStore: @unchecked Sendable {
     /// Paths (and their ancestors) seen during the active full-sync pass.
     private var activeSync: [FolderID: Set<String>] = [:]
 
-    public init(url: URL) throws {
+    /// - Parameter cacheKiB: SQLite page-cache cap for this connection
+    ///   (nil = SQLite default ≈ 2 MiB). The extension uses a small cap to
+    ///   keep its phys_footprint down.
+    public init(url: URL, cacheKiB: Int? = nil) throws {
         self.url = url
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         do {
@@ -68,6 +71,7 @@ public final class FilesStore: @unchecked Sendable {
             Self.removeDatabaseFiles(url)
             connection = try Self.openAndMigrate(url)
         }
+        if let cacheKiB { try connection.execute("PRAGMA cache_size=-\(max(cacheKiB, 64))") }
     }
 
     public func close() {
