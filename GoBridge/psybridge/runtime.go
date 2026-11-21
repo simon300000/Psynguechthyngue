@@ -2,7 +2,13 @@
 
 package psybridge
 
-import "runtime/debug"
+import (
+	"math"
+	"runtime"
+	"runtime/debug"
+	"sync"
+	"time"
+)
 
 // Runtime memory profiles (DESIGN.md §3.5). Values in MiB.
 const (
@@ -35,3 +41,67 @@ func ApplyMemoryProfile(limitMiB int64, gcPercent int64) int64 {
 
 // FreeOSMemory forces a GC and returns memory to the OS.
 func FreeOSMemory() { debug.FreeOSMemory() }
+
+// memoryWarningFactor/Duration: OnMemoryWarning lowers GOMEMLIMIT to 75% of
+// the active profile for a while, then restores it.
+const (
+	memoryWarningPercent  = 75
+	memoryWarningDuration = 2 * time.Minute
+)
+
+var (
+	pressureMu       sync.Mutex
+	pressureTimer    *time.Timer
+	pressureBaseline int64
+)
+
+// applyRuntimeProfile applies limit/GC/maxprocs with defaults filled in and
+// cancels any pending memory-warning restore.
+func applyRuntimeProfile(limitMiB, gcPercent, maxProcs int64, defLimit, defGC int64, defProcs int) {
+	if limitMiB <= 0 {
+		limitMiB = defLimit
+	}
+	if gcPercent <= 0 {
+		gcPercent = defGC
+	}
+	pressureMu.Lock()
+	if pressureTimer != nil {
+		pressureTimer.Stop()
+		pressureTimer = nil
+	}
+	pressureMu.Unlock()
+	ApplyMemoryProfile(limitMiB, gcPercent)
+	if maxProcs <= 0 {
+		maxProcs = int64(defProcs)
+	}
+	runtime.GOMAXPROCS(int(maxProcs))
+}
+
+// memoryWarning frees memory and temporarily lowers the soft limit. Repeated
+// warnings extend the window but never compound the reduction.
+func memoryWarning() {
+	debug.FreeOSMemory()
+	pressureMu.Lock()
+	defer pressureMu.Unlock()
+	if pressureTimer != nil {
+		pressureTimer.Stop()
+	} else {
+		pressureBaseline = debug.SetMemoryLimit(-1)
+	}
+	baseline := pressureBaseline
+	if baseline <= 0 || baseline == math.MaxInt64 {
+		pressureTimer = nil
+		return
+	}
+	lowered := baseline / 100 * memoryWarningPercent
+	debug.SetMemoryLimit(lowered)
+	pressureTimer = time.AfterFunc(memoryWarningDuration, func() {
+		pressureMu.Lock()
+		defer pressureMu.Unlock()
+		// Only restore if nobody re-applied a profile meanwhile.
+		if debug.SetMemoryLimit(-1) == lowered {
+			debug.SetMemoryLimit(baseline)
+		}
+		pressureTimer = nil
+	})
+}
