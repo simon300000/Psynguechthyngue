@@ -23,11 +23,16 @@ enum DomainManager {
     /// files.sqlite.
     static func reconcile(folders: [Folder], store: FilesStore) async {
         let managed = folders.filter { if case .managed = $0.location { return true } else { return false } }
+        var touched: [FolderID] = []
         for folder in managed {
+            let before = (try? store.currentAnchor()) ?? 0
             try? store.upsertFolder(
                 FilesFolderInfo(
                     folderID: folder.id, label: folder.label, isReadOnly: folder.type == .receiveOnly,
                     contentMode: folder.contentMode))
+            // Type / label / content mode changes re-announce items; without a
+            // signal the system only saw them after the next index change.
+            if ((try? store.currentAnchor()) ?? 0) != before { touched.append(folder.id) }
         }
         let wanted = Dictionary(uniqueKeysWithValues: managed.map { ($0.id.rawValue, $0) })
         let existing: [NSFileProviderDomain]
@@ -61,6 +66,7 @@ enum DomainManager {
                 log.error("add domain \(id, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
+        for id in touched { await signal(id) }
     }
 
     /// Per-folder Files location state for the UI (e.g. "Enable in Settings" hint on Mac).

@@ -380,9 +380,13 @@ public final class FilesStore: @unchecked Sendable {
                 try ctx.db.run(
                     "UPDATE items SET metadata_version=?, read_only=?, change_anchor=? WHERE item_id=?",
                     [.blob(metadata), .bool(info.isReadOnly), .int(ctx.nextAnchor()), .text(rootID.rawValue)])
+                // Re-announce every flipped item (new anchor; the exposed
+                // metadata version folds read_only in), otherwise the system
+                // keeps their cached capabilities: after Receive Only → Send &
+                // Receive, existing items stayed read-only in Files.
                 try ctx.db.run(
-                    "UPDATE items SET read_only=? WHERE folder_id=? AND read_only<>?",
-                    [.bool(info.isReadOnly), .text(info.folderID.rawValue), .bool(info.isReadOnly)])
+                    "UPDATE items SET read_only=?, change_anchor=? WHERE folder_id=? AND read_only<>?",
+                    [.bool(info.isReadOnly), .int(ctx.nextAnchor()), .text(info.folderID.rawValue), .bool(info.isReadOnly)])
             }
         }
     }
