@@ -659,6 +659,16 @@
         }
       }
     },
+    "Files": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件"
+          }
+        }
+      }
+    },
     "Files appear in the Files app and are downloaded when you open them.": {
       "localizations": {
         "zh-Hans": {
@@ -685,6 +695,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "文件直接在原位置同步。这类文件夹不支持按需下载。"
+          }
+        }
+      }
+    },
+    "Files location": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件位置"
           }
         }
       }
@@ -1099,12 +1119,32 @@
         }
       }
     },
+    "Off": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未启用"
+          }
+        }
+      }
+    },
     "Offline": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "离线"
+          }
+        }
+      }
+    },
+    "On": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已启用"
           }
         }
       }
@@ -1955,16 +1995,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "同步引擎报告了一个问题。"
-          }
-        }
-      }
-    },
-    "The sync engine reported a problem: %@": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎报告了一个问题：%@"
           }
         }
       }

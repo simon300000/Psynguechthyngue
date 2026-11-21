@@ -15,6 +15,9 @@ final class AppEnvironment {
     let settings: AppSettings
     let model: AppModel
     let isFixture: Bool
+    /// WP-C Files services (nil in fixtures or when the App Group is unavailable).
+    let files: FilesIntegration?
+    let bridge: PsyBridgeAdapter?
 
     private init() {
         let args = ProcessInfo.processInfo.arguments
@@ -39,8 +42,14 @@ final class AppEnvironment {
             if let ms = Self.argument("-PsyUITestStartDelayMS", in: args).flatMap(Int.init) { fake.startDelay = .milliseconds(ms) }
             if let ms = Self.argument("-PsyUITestStopDelayMS", in: args).flatMap(Int.init) { fake.stopDelay = .milliseconds(ms) }
             engine = fake
+            files = nil
+            bridge = nil
         } else {
-            engine = EngineFactory.makeLiveEngine()
+            let name = settings.deviceName.isEmpty ? UIDevice.current.name : settings.deviceName
+            let live = EngineFactory.makeLiveEngine(deviceName: name)
+            engine = live.engine
+            bridge = live.bridge
+            files = live.layout.map { FilesIntegration(engine: live.engine, layout: $0) }
         }
         // `-PsySimulateMac` (fixture only) exercises the isiOSAppOnMac branch on the simulator.
         let onMac = ProcessInfo.processInfo.isiOSAppOnMac || (fixture && args.contains("-PsySimulateMac"))
@@ -52,7 +61,20 @@ final class AppEnvironment {
         model = AppModel(engine: engine, host: host, settings: settings,
                          notifier: AppNotifier(enabled: !fixture), isFixture: fixture, isOnMac: onMac)
         let filesDisabled = fixture && args.contains("-PsyUITestFilesDisabled")
-        model.filesStatus = StaticFilesLocationStatus(filesDisabled ? .disabled : .unknown)
+        if let files {
+            model.filesStatus = FilesIntegrationLocationStatus(files: files)
+            host.onEngineStarted = { [weak model] in
+                await files.engineDidStart()
+                await model?.refreshFilesLocation()
+            }
+            host.onEngineWillStop = { await files.engineWillStop() }
+        } else {
+            model.filesStatus = StaticFilesLocationStatus(filesDisabled ? .disabled : .unknown)
+        }
+        if let bridge {
+            host.onMemoryWarning = { Task { await PsyBridgeThread.shared.run { bridge.onMemoryWarning() } } }
+            AppInfo.syncthingVersionProvider = { bridge.syncthingVersion() }
+        }
         settings.onChange = { [weak self] in
             guard let self else { return }
             self.host.preferences = self.settings.policyPreferences

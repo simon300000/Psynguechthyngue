@@ -2,12 +2,6 @@ import Foundation
 import Observation
 import PsySync
 
-/// Optional engine capability: respond to `didReceiveMemoryWarning`
-/// (`psybridge.Engine.OnMemoryWarning`). `LiveSyncEngine` may adopt it.
-protocol MemoryWarningResponding: AnyObject {
-    func handleMemoryWarning()
-}
-
 /// Owns the one `SyncEngine` of the App process and drives it from lifecycle
 /// signals and policy (DESIGN.md §4.1–4.4).
 ///
@@ -47,11 +41,17 @@ final class LiveEngineHost: EngineHosting {
     /// beginBackgroundTask token taken synchronously in the didEnterBackground
     /// callback, before any queued work (see `prepareForBackground`).
     @ObservationIgnored private var pendingBackgroundToken: Int?
-    @ObservationIgnored var onFailure: (@MainActor (String) -> Void)?
+    @ObservationIgnored var onFailure: (@MainActor (Error) -> Void)?
+    /// After every successful start (foreground or BG): Files projector + request server.
+    @ObservationIgnored var onEngineStarted: (@MainActor () async -> Void)?
+    /// Before every stop: close files.sqlite etc. so nothing is held when suspended (I2).
+    @ObservationIgnored var onEngineWillStop: (@MainActor () async -> Void)?
+    /// `didReceiveMemoryWarning` → `psybridge.Engine.OnMemoryWarning`.
+    @ObservationIgnored var onMemoryWarning: (@MainActor () -> Void)?
 
     init(
         engine: any SyncEngine,
-        policy: any SyncPolicy = AppSyncPolicy(),
+        policy: any SyncPolicy = DefaultSyncPolicy(),
         tasks: any BackgroundTaskRunning,
         isOnMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac
     ) {
@@ -117,7 +117,7 @@ final class LiveEngineHost: EngineHosting {
             break
         case .memoryWarning:
             log.record("memory-warning")
-            (engine as? MemoryWarningResponding)?.handleMemoryWarning()
+            onMemoryWarning?()
         case .willTerminate:
             if phase == .foregroundRunning || isBackgroundRunning { await drain(reason: "willTerminate", requireTask: true) }
         }
@@ -157,11 +157,13 @@ final class LiveEngineHost: EngineHosting {
             lastFailure = nil
             await applyPolicy(force: true)
             log.record("engine-running")
+            await onEngineStarted?()
         } catch {
             phase = .idle
-            fail("start: \(error)")
+            noteStopTimeout(error)
+            fail("start", error)
             // A timed-out start may still complete later: make sure it is stopped.
-            await stopQuietly()
+            if !restartRequired { await stopQuietly() }
         }
     }
 
@@ -191,11 +193,13 @@ final class LiveEngineHost: EngineHosting {
             }
             phase = .backgroundRunning(kind: kind)
             await applyPolicy(force: true)
+            await onEngineStarted?()
             if backgroundExpired { log.record("bg-expired-during-start") }
         } catch {
             phase = .idle
-            fail("bg-start: \(error)")
-            await stopQuietly()
+            noteStopTimeout(error)
+            fail("bg-start", error)
+            if !restartRequired { await stopQuietly() }
         }
     }
 
@@ -251,17 +255,16 @@ final class LiveEngineHost: EngineHosting {
                 token = beginTask(reason: reason)
             }
         }
+        await onEngineWillStop?()
         log.record("engine-stop", "deadline=\(deadline) remaining=\(Int(min(tasks.remaining, 9999)))s")
         do {
             try await engine.stop(deadline: deadline)
             engineMaybeLive = false
             log.record("lock-released", "engine stopped remaining=\(Int(min(tasks.remaining, 9999)))s")
         } catch {
-            if case let .bridge(code, _) = error as? EngineError, code == BridgeContract.Code.stopTimeout.rawValue {
-                restartRequired = true
-            }
+            noteStopTimeout(error)
             // engineMaybeLive stays true: the next background transition retries the stop.
-            fail("stop: \(error)")
+            fail("stop", error)
         }
         phase = .idle
         let elapsed = clock.now - t0
@@ -314,14 +317,23 @@ final class LiveEngineHost: EngineHosting {
             try await engine.apply(next)
             log.record("policy-applied", "hold=\(next.hold?.rawValue ?? "none")")
         } catch {
-            fail("policy: \(error)")
+            fail("policy", error)
         }
     }
 
-    private func fail(_ message: String) {
+    private func fail(_ operation: String, _ error: Error) {
+        let message = "\(operation): \(error)"
         log.record("failure", message)
         lastFailure = message
-        onFailure?(message)
+        onFailure?(error)
+    }
+
+    /// `stop_timeout` (from stop, or from a later start of a poisoned engine):
+    /// this process must not try again (DESIGN §4.3); the UI asks for a restart.
+    private func noteStopTimeout(_ error: Error) {
+        if case let .bridge(code, _) = error as? EngineError, code == BridgeContract.Code.stopTimeout.rawValue {
+            restartRequired = true
+        }
     }
 
     private func withTimeout(_ timeout: Duration, _ body: @escaping @Sendable () async throws -> Void) async throws {

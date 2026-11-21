@@ -51,6 +51,18 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.notifications")
                 } footer: { Text("Get notified about new device requests, folder invitations and sync problems.") }
 
+                Section {
+                    LabeledContent("Files location") {
+                        switch model.filesLocation {
+                        case .enabled: Text("On")
+                        case .disabled: Text("Off").foregroundStyle(.orange)
+                        case .unknown: Text("—")
+                        }
+                    }
+                    .accessibilityIdentifier("settings.fileslocation")
+                    if model.filesLocation == .disabled { FilesDisabledCard() }
+                } header: { Text("Files") }
+
                 Section("About") {
                     LabeledContent("Version") { Text("\(AppInfo.version) (\(AppInfo.build))") }
                     LabeledContent("Syncthing") { Text(AppInfo.syncthingVersion) }
@@ -74,6 +86,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .task { await model.refreshFilesLocation() }
             .confirmationDialog("Reset devices and folders?", isPresented: $confirmReset, titleVisibility: .visible) {
                 Button("Reset", role: .destructive) { Task { await model.resetConfiguration() } }
             } message: {

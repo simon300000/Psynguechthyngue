@@ -1,23 +1,55 @@
 import Foundation
+import OSLog
 import PsySync
 
-/// Seam for the production engine. WP-B's `LiveSyncEngine` (REST + event pump
-/// over the PsyBridge adapter from WP-A) plugs in here during integration; until
-/// then the app falls back to an engine that reports a clear failure instead of crashing.
+/// Production engine: WP-B's `LiveSyncEngine` (REST + event pump) over WP-A's
+/// `PsyBridgeAdapter` (gomobile `PsyBridge.xcframework`), with the App Group
+/// layout, the cross-process `FlockEngineLock` and the Keychain identity.
+struct LiveEngineComponents {
+    let engine: any SyncEngine
+    let bridge: PsyBridgeAdapter?
+    let layout: AppGroupLayout?
+}
+
 enum EngineFactory {
-    static func makeLiveEngine() -> any SyncEngine {
-        // TODO(integration): LiveSyncEngine(bridge: PsyBridgeAdapter(), layout: ..., identityStore: KeychainIdentityStore(...))
-        UnavailableSyncEngine()
+    static func makeLiveEngine(deviceName: String) -> LiveEngineComponents {
+        let layout: AppGroupLayout
+        do {
+            try PsyBridgeAdapter.checkAPIVersion()
+            layout = try AppGroupResolver.layout()
+        } catch {
+            LifecycleLog.shared.record("engine-unavailable", "\(error)")
+            return LiveEngineComponents(engine: UnavailableSyncEngine(detail: "\(error)"), bridge: nil, layout: nil)
+        }
+        let bridgeLog = Logger(subsystem: "app.psynguechthyngue", category: "bridge")
+        let bridge = PsyBridgeAdapter(
+            log: { level, message in bridgeLog.log(level: level == "error" ? .error : .info, "\(message, privacy: .public)") },
+            onExit: { code, detail in
+                LifecycleLog.shared.record("engine-exited", "code=\(code?.rawValue ?? "-") \(detail)")
+            }
+        )
+        let accessGroup = Bundle.main.object(forInfoDictionaryKey: "PsyKeychainAccessGroup") as? String
+        var config = LiveSyncEngineConfiguration(layout: layout, deviceName: deviceName)
+        config.fsWatcherEnabled = ProcessInfo.processInfo.isiOSAppOnMac
+        let engine = LiveSyncEngine(
+            bridge: bridge,
+            lock: FlockEngineLock(layout: layout),
+            identityStore: KeychainIdentityStore(accessGroup: accessGroup.flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 }),
+            configuration: config
+        )
+        return LiveEngineComponents(engine: engine, bridge: bridge, layout: layout)
     }
 }
 
-/// Placeholder until `LiveSyncEngine` is integrated: every call fails with
-/// `not_implemented`, which the UI shows as an ordinary error banner.
+/// Used when the engine cannot be constructed (bridge API mismatch, App Group
+/// missing): every call fails, which the UI shows as an ordinary error.
 final class UnavailableSyncEngine: SyncEngine, @unchecked Sendable {
-    private let failure = EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "LiveSyncEngine not linked")
+    private let detail: String
+    private var failure: EngineError { .bridge(code: BridgeContract.Code.config.rawValue, detail: detail) }
+    init(detail: String) { self.detail = detail }
     func start(context: EngineRunContext) async throws { throw failure }
     func stop(deadline: Duration) async throws {}
-    var state: EngineState { get async { .failed(code: BridgeContract.Code.notImplemented.rawValue, detail: "LiveSyncEngine not linked") } }
+    var state: EngineState { get async { .failed(code: BridgeContract.Code.config.rawValue, detail: detail) } }
     func events() -> AsyncStream<EngineEvent> { AsyncStream { _ in } }
     func snapshot() async throws -> EngineStatus { throw failure }
     var localDeviceID: DeviceID? { get async { nil } }
