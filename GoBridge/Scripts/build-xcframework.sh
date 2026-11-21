@@ -5,7 +5,7 @@
 # with gomobile, stamping upstream build.Version from SyncthingPin.json.
 #
 # Usage: GoBridge/Scripts/build-xcframework.sh [output.xcframework]
-# Env:   IOS_DEPLOYMENT_TARGET (default 17.0)
+# Env:   IOS_DEPLOYMENT_TARGET (default 26.0)
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -17,7 +17,7 @@ if [ "$(basename -- "$output")" != "PsyBridge.xcframework" ]; then
 	echo "output must be named PsyBridge.xcframework (gomobile derives the module name from it)" >&2
 	exit 64
 fi
-deployment_target=${IOS_DEPLOYMENT_TARGET:-17.0}
+deployment_target=${IOS_DEPLOYMENT_TARGET:-26.0}
 
 pin="$bridge_dir/SyncthingPin.json"
 tag=$(/usr/bin/plutil -extract tag raw -o - "$pin")
