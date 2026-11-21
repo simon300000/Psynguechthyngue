@@ -3,14 +3,16 @@ TARGETED_DEVICE_FAMILY = 1,2
 SWIFT_VERSION = 6.0
 SWIFT_STRICT_CONCURRENCY = complete
 CLANG_ENABLE_MODULES = YES
-// The only repository shell phase is the audited Mobilebridge source builder.
-// It hashes dynamic Go source inputs and writes the generated artifact pair,
-// which cannot be represented by Xcode's static script sandbox allowlist.
+// The only repository shell phase (PsyBridgeBootstrap) hashes the GoBridge
+// inputs and may rebuild Artifacts/PsyBridge.xcframework with gomobile, which
+// cannot be represented by Xcode's static script sandbox allowlist.
 ENABLE_USER_SCRIPT_SANDBOXING = NO
 ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES
 LOCALIZATION_PREFERS_STRING_CATALOGS = YES
 OTHER_LDFLAGS = $(inherited) -lresolv
 KEYCHAIN_ACCESS_GROUP = $(AppIdentifierPrefix)$(APP_BUNDLE_IDENTIFIER)
+// Extra Swift conditions for the File Provider extension (e.g. PSY_RESTRICTED_FETCH).
+PSY_FILE_PROVIDER_CONDITIONS =
 
 // Actual Team, bundle and App Group values live only in the ignored file.
 #include? "Local.xcconfig"
