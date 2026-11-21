@@ -5,30 +5,25 @@ with, endorsed by, or sponsored by the Syncthing project. The name
 "Syncthing" is used only to identify the software and intended protocol
 compatibility. This project does not use the Syncthing logo.
 
-The embedded Go core is built from Syncthing source code fixed at commit:
-946e2b83a1f6c6ae119427c09e0a5802940b82ff
+The app embeds unmodified upstream Syncthing v2.1.6 (tag v2.1.6, commit
+4461a1ce354d3990660966ad70176e00246adb61), licensed under the Mozilla Public
+License 2.0. No patches are applied to Syncthing; it is consumed as the
+upstream Go module and linked through a thin bridge package of this project.
 
-Syncthing source:
-https://github.com/syncthing/syncthing/tree/946e2b83a1f6c6ae119427c09e0a5802940b82ff
+Syncthing source (the exact version used):
+https://github.com/syncthing/syncthing/tree/4461a1ce354d3990660966ad70176e00246adb61
 
 Syncthing license (Mozilla Public License 2.0):
-https://github.com/syncthing/syncthing/blob/946e2b83a1f6c6ae119427c09e0a5802940b82ff/LICENSE
+https://github.com/syncthing/syncthing/blob/4461a1ce354d3990660966ad70176e00246adb61/LICENSE
 
-The production dependency graph also contains the MPL-2.0 module
-github.com/hashicorp/golang-lru/v2 at v2.0.7. Exact production dependencies,
-license expressions, replacement modules, license/notice file hashes and
-versioned source locations are recorded in Docs/DEPENDENCY_LICENSE_MAP.json,
-Docs/SBOM.spdx.json and THIRD_PARTY_NOTICES.md.
+The Syncthing source code, together with this project's source code, can
+also be obtained from this project's repository:
+https://github.com/simon300000/Psynguechthyngue
 
-`make source-bundle` prepares deterministic recipient materials containing
-all mapped LICENSE/NOTICE/PATENTS files and the complete corresponding source
-trees for both MPL-covered modules.
-
-The durable, release-specific source location required for a distributed
-binary has not yet been published. Binary distribution is blocked until the
-published-source and release-owner review gates in Docs/LICENSE_AND_SOURCE.md
-are complete. `make release-licenses SOURCE_OFFER=...` verifies the published
-archive and notices against the release checkout.
+The production dependency graph also contains other MPL-2.0 modules (for
+example github.com/hashicorp/golang-lru/v2). The complete list of linked
+third-party Go modules, their versions, detected licenses and license texts
+is recorded in THIRD_PARTY_NOTICES.md and Docs/SBOM.spdx.json.
 
 The Psynguechthyngue AppIcon and project visual assets are original project
 artwork, not Syncthing artwork.

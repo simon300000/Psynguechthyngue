@@ -116,7 +116,7 @@ final class FakeSyncthing: @unchecked Sendable {
     private let lock = NSLock()
     var devices: [DeviceConfigDTO] = []
     var folders: [FolderConfigDTO] = []
-    var options = OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0)
+    var options = OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0, listenAddresses: ["default"])
     var ignores: [String: [String]] = [:]
 
     init() {
@@ -147,7 +147,12 @@ final class FakeSyncthing: @unchecked Sendable {
             return .json("")
         case ("GET", "/rest/config/options"): return json(options)
         case ("PATCH", "/rest/config/options"):
-            options = try! d.decode(OptionsDTO.self, from: r.body!); return .json("")
+            // Merge like upstream's PATCH: only the fields present change.
+            let obj = (try? JSONSerialization.jsonObject(with: r.body!)) as? [String: Any] ?? [:]
+            if let v = obj["maxSendKbps"] as? Int { options.maxSendKbps = v }
+            if let v = obj["maxRecvKbps"] as? Int { options.maxRecvKbps = v }
+            if let v = obj["listenAddresses"] as? [String] { options.listenAddresses = v }
+            return .json("")
         case ("GET", "/rest/config/folders"): return json(folders)
         case ("POST", "/rest/config/folders"):
             folders.append(try! d.decode(FolderConfigDTO.self, from: r.body!)); return .json("")
@@ -191,17 +196,23 @@ final class FakeSyncthing: @unchecked Sendable {
         let root: URL
     }
 
-    func makeHarness() throws -> Harness {
-        let (url, authority) = StubURLProtocol.uniqueAuthority()
+    func makeHarness(root existing: URL? = nil, baseURL: URL? = nil,
+                     configure: (inout LiveSyncEngineConfiguration) -> Void = { _ in }) throws -> Harness {
+        var (url, authority) = StubURLProtocol.uniqueAuthority()
+        if let baseURL { url = baseURL }
         let fake = FakeSyncthing()
         StubURLProtocol.register(authority: authority) { fake.handle($0) }
         let bridge = FakeBridge(endpoint: RESTEndpoint(baseURL: url, apiKey: "k", deviceID: fake.myID))
         let lock = FakeEngineLock()
-        let root = FileManager.default.temporaryDirectory.appending(path: "psy-live-\(UUID().uuidString)")
+        let root = existing ?? FileManager.default.temporaryDirectory.appending(path: "psy-live-\(UUID().uuidString)")
         var cfg = LiveSyncEngineConfiguration(layout: AppGroupLayout(root: root), deviceName: "test")
         cfg.sessionConfiguration = { StubURLProtocol.configuration() }
         cfg.folderRefreshDebounce = .milliseconds(10)
         cfg.eventPollTimeoutSeconds = 1
+        // Deterministic: never probe this host's real ports in engine tests.
+        cfg.preferAlternateListenPort = false
+        cfg.portProbe = { _ in true }
+        configure(&cfg)
         let engine = LiveSyncEngine(bridge: bridge, lock: lock, identityStore: KeychainIdentityStore(backend: InMemoryKeychainBackend()), configuration: cfg)
         return Harness(engine: engine, bridge: bridge, lock: lock, fake: fake, authority: authority, root: root)
     }
@@ -299,7 +310,7 @@ final class FakeSyncthing: @unchecked Sendable {
         #expect(h.fake.device(a.id)?.paused == false)
         #expect(h.fake.device(b.id)?.paused == true)
         #expect(h.fake.device(c.id)?.paused == false)
-        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 64, maxRecvKbps: 256))
+        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 64, maxRecvKbps: 256, listenAddresses: ["default"]))
 
         // Hold persists across restart: decision stored, re-applied at start.
         try await h.engine.apply(PolicyDecision(hold: .thermal))
@@ -308,7 +319,7 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.start(context: .foreground)
         #expect(h.fake.device(a.id)?.paused == false)
         #expect(h.fake.device(b.id)?.paused == true)
-        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0))
+        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0, listenAddresses: ["default"]))
         try await h.engine.stop(deadline: .seconds(1))
     }
 

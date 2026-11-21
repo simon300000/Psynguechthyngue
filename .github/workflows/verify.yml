@@ -14,26 +14,28 @@ concurrency:
 
 jobs:
   verify:
-    name: Swift, Go, peer interoperability, licenses, and simulator verification
+    name: Swift, GoBridge, licenses, iOS builds and UI tests
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Configure Go from GoCore when present
-        if: ${{ hashFiles('GoCore/go.mod') != '' }}
+      - name: Set up Go (GoBridge/go.mod)
         uses: actions/setup-go@v5
         with:
-          go-version-file: GoCore/go.mod
-          cache: false
+          go-version-file: GoBridge/go.mod
+          cache-dependency-path: GoBridge/go.sum
+
+      - name: Install xcodeproj gem
+        run: gem install --user-install xcodeproj && echo "$(ruby -e 'print Gem.user_dir')/bin" >> "$GITHUB_PATH"
 
       - name: Record Apple toolchain
         run: |
           xcodebuild -version
-          xcodebuild -showsdks
           swift --version
+          go version
 
       - name: Verify repository
-        run: bash Scripts/verify.sh
+        run: make verify

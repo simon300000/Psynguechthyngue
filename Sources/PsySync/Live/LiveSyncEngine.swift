@@ -13,6 +13,11 @@ public struct LiveSyncEngineConfiguration: Sendable {
     public var sessionConfiguration: @Sendable () -> URLSessionConfiguration = { .ephemeral }
     public var folderRefreshDebounce: Duration = .milliseconds(250)
     public var eventPollTimeoutSeconds: Int = 50
+    /// Move the sync listener off 22000 even when it looks free (Mac: the
+    /// official Syncthing may start later and would share it via SO_REUSEPORT).
+    public var preferAlternateListenPort: Bool = ProcessInfo.processInfo.isiOSAppOnMac
+    /// Port availability probe (tests inject a fake).
+    public var portProbe: @Sendable (Int) -> Bool = ListenAddressPlanner.isPortFree
 
     public init(layout: AppGroupLayout, deviceName: String) {
         self.layout = layout
@@ -127,7 +132,13 @@ public actor LiveSyncEngine: SyncEngine {
             openExternalScopes()
 
             let bridge = bridge, store = identityStore, name = config.deviceName, timeout = config.startTimeout
-            let endpoint = try await executor.run { () throws -> RESTEndpoint in
+            let storedPort = appState.listenPort, preferAlternate = config.preferAlternateListenPort, probe = config.portProbe
+            let (endpoint, listenPort) = try await executor.run { () throws -> (RESTEndpoint, Int?) in
+                // Probe before our own engine binds 22000.
+                let port = ListenAddressPlanner.alternatePort(
+                    stored: storedPort,
+                    defaultFree: storedPort != nil || probe(ListenAddressPlanner.defaultPort),
+                    preferAlternate: preferAlternate, isFree: probe)
                 bridge.applyMemoryProfile(profile)
                 let identity: DeviceIdentity
                 if let existing = try store.load() {
@@ -136,15 +147,19 @@ public actor LiveSyncEngine: SyncEngine {
                     identity = try bridge.generateIdentity()
                     try store.save(identity)
                 }
-                return try bridge.start(homeDirectory: home, identity: identity, deviceName: name, timeout: timeout)
+                return (try bridge.start(homeDirectory: home, identity: identity, deviceName: name, timeout: timeout), port)
             }
             bridgeStarted = true
+            guard Self.isLoopback(endpoint.baseURL) else {
+                throw EngineError.bridge(code: BridgeContract.Code.listen.rawValue, detail: "REST endpoint is not on loopback")
+            }
             let client = SyncthingRESTClient(endpoint: endpoint, configuration: config.sessionConfiguration())
             try await waitForREST(client)
             self.client = client
             myID = endpoint.deviceID
             setState(.running(since: Date()))
             startPump(client)
+            if let listenPort { try? await applyListenPort(listenPort, client) }
             try? await reconcilePolicy()
             scheduleRefresh(nil)
         } catch {
@@ -157,6 +172,24 @@ public actor LiveSyncEngine: SyncEngine {
             }
             throw mapped
         }
+    }
+
+    /// Persists the alternate sync port in config.xml (`listenAddresses`,
+    /// applied live by upstream) and in the app state.
+    private func applyListenPort(_ port: Int, _ client: SyncthingRESTClient) async throws {
+        let current = try await client.options().listenAddresses ?? ["default"]
+        if let rewritten = ListenAddressPlanner.rewrite(current, port: port) {
+            try await client.send("PATCH", "rest/config/options", json: ListenOptionsDTO(listenAddresses: rewritten))
+        }
+        if appState.listenPort != port {
+            appState.listenPort = port
+            try saveAppState()
+        }
+    }
+
+    static func isLoopback(_ url: URL) -> Bool {
+        guard let host = url.host(percentEncoded: false)?.trimmingCharacters(in: CharacterSet(charactersIn: "[]")) else { return false }
+        return host == "127.0.0.1" || host == "::1" || host == "localhost"
     }
 
     private func waitForREST(_ client: SyncthingRESTClient) async throws {

@@ -1,17 +1,18 @@
-.PHONY: bootstrap bootstrap-policy-test verify sanity format-check swift-test scale-test go-verify peer-interop peer-scale-test peer-scale-100k-test ios-build ui-test physical-files-ui-test licenses license-test sbom notices source-bundle release-licenses verify-app-store-export
+.PHONY: bootstrap project verify sanity format-check swift-test go-test ios-build ui-test licenses sbom notices verify-app-store-export e2e-local
 
-SOURCE_VERSION ?= unpublished
-SOURCE_BUNDLE ?= .build/release/Psynguechthyngue-$(SOURCE_VERSION)-release-sources.tar.gz
-SOURCE_OFFER ?=
 APP_STORE_ARCHIVE ?=
 APP_STORE_IPA ?=
 
+# Artifacts/PsyBridge.xcframework (rebuilt only when GoBridge inputs change).
 bootstrap:
 	bash Scripts/bootstrap.sh
 
-bootstrap-policy-test:
-	bash Scripts/test-bootstrap-no-reuse.sh
+# Regenerate Psynguechthyngue.xcodeproj (deterministic).
+project:
+	ruby Scripts/generate-xcodeproj.rb
 
+# Full gate: sanity, swift test, GoBridge tests (noassets), licenses,
+# iOS Simulator + device builds, Simulator UI tests.
 verify:
 	bash Scripts/verify.sh
 
@@ -24,20 +25,8 @@ format-check:
 swift-test:
 	bash Scripts/verify.sh swift
 
-scale-test:
-	bash Scripts/test-scale.sh
-
-go-verify:
+go-test:
 	bash Scripts/verify.sh go
-
-peer-interop:
-	bash Scripts/verify.sh interop
-
-peer-scale-test:
-	PEER_INTEROP_SMALL_FILE_COUNT=10000 bash Scripts/verify.sh interop
-
-peer-scale-100k-test:
-	PEER_INTEROP_SMALL_FILE_COUNT=100000 bash Scripts/verify.sh interop
 
 ios-build:
 	bash Scripts/verify.sh ios
@@ -45,14 +34,8 @@ ios-build:
 ui-test:
 	bash Scripts/verify.sh ui
 
-physical-files-ui-test:
-	bash Scripts/test-physical-files-ui.sh
-
 licenses:
 	bash Scripts/check-licenses.sh
-
-license-test:
-	bash Scripts/test-license-tools.sh
 
 sbom:
 	bash Scripts/generate-sbom.sh
@@ -60,17 +43,11 @@ sbom:
 notices:
 	bash Scripts/generate-third-party-notices.sh
 
-source-bundle:
-	bash Scripts/prepare-release-source.sh "$(SOURCE_VERSION)" "$(SOURCE_BUNDLE)"
-
-release-licenses:
-	bash Scripts/verify-release-licenses.sh "$(SOURCE_OFFER)"
-
 verify-app-store-export:
 	@test -n "$(APP_STORE_ARCHIVE)" || { echo "APP_STORE_ARCHIVE is required" >&2; exit 64; }
 	@test -n "$(APP_STORE_IPA)" || { echo "APP_STORE_IPA is required" >&2; exit 64; }
 	bash Scripts/verify-app-store-export.sh --archive "$(APP_STORE_ARCHIVE)" --ipa "$(APP_STORE_IPA)"
 
-.PHONY: e2e-local
+# E2E against the official Syncthing on this Mac (DESIGN §10.3, local only).
 e2e-local:
 	bash Scripts/e2e-local-syncthing.sh

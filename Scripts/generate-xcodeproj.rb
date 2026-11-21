@@ -74,8 +74,14 @@ phase.always_out_of_date = "1"
 phase.show_env_vars_in_log = "0"
 bootstrap.build_configurations.each { |c| c.build_settings["ENABLE_USER_SCRIPT_SANDBOXING"] = "NO" }
 
-artifacts_group = main.new_group("Artifacts", "Artifacts")
-xcframework_ref = artifacts_group.new_file("PsyBridge.xcframework")
+# PsyBridge is linked through search paths, not an XCFramework file reference:
+# Xcode validates referenced XCFrameworks while *planning* the build, before
+# PsyBridgeBootstrap could create the (git-ignored) artifact on a fresh checkout.
+PSYBRIDGE_LINK_SETTINGS = {
+  "FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" => "$(inherited) $(SRCROOT)/#{XCFRAMEWORK}/ios-arm64",
+  "FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" => "$(inherited) $(SRCROOT)/#{XCFRAMEWORK}/ios-arm64_x86_64-simulator",
+  "OTHER_LDFLAGS" => "$(inherited) -framework PsyBridge",
+}.freeze
 
 # --- Sources ---
 app_group = main.new_group("App", "App")
@@ -123,7 +129,7 @@ project.root_object.package_references << package
   build_file = project.new(Xcodeproj::Project::Object::PBXBuildFile)
   build_file.product_ref = dependency
   target.frameworks_build_phase.files << build_file
-  target.frameworks_build_phase.add_file_reference(xcframework_ref)  # static: link only, never embed
+  # PsyBridge (static, link only, never embedded): PSYBRIDGE_LINK_SETTINGS.
   target.add_dependency(bootstrap)
 end
 
@@ -163,7 +169,7 @@ def configure(target, base_config, settings)
   end
 end
 
-configure(app, base_config,
+configure(app, base_config, PSYBRIDGE_LINK_SETTINGS.merge(
   "PRODUCT_BUNDLE_IDENTIFIER" => "$(APP_BUNDLE_IDENTIFIER)",
   "PRODUCT_NAME" => "Psynguechthyngue",
   "INFOPLIST_FILE" => "App/Info.plist",
@@ -172,9 +178,9 @@ configure(app, base_config,
   "LD_RUNPATH_SEARCH_PATHS" => "$(inherited) @executable_path/Frameworks",
   "SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD" => "YES",
   "SWIFT_EMIT_LOC_STRINGS" => "YES",
-)
+))
 
-configure(provider, base_config,
+configure(provider, base_config, PSYBRIDGE_LINK_SETTINGS.merge(
   "PRODUCT_BUNDLE_IDENTIFIER" => "$(FILE_PROVIDER_BUNDLE_IDENTIFIER)",
   "PRODUCT_NAME" => "PsyFileProvider",
   "INFOPLIST_FILE" => "FileProvider/Info.plist",
@@ -186,7 +192,7 @@ configure(provider, base_config,
   # fallback to PsyBridgeAdapter's restricted fetch (DESIGN §6.4). Set it in
   # PSY_FILE_PROVIDER_CONDITIONS (Config/Base.xcconfig) once WP-C wires it.
   "SWIFT_ACTIVE_COMPILATION_CONDITIONS" => "$(inherited) $(PSY_FILE_PROVIDER_CONDITIONS)",
-)
+))
 provider.build_configurations.each do |c|
   next unless c.name == "Debug"
   c.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = "DEBUG $(PSY_FILE_PROVIDER_CONDITIONS)"

@@ -21,29 +21,27 @@
 
 /* Begin PBXBuildFile section */
 		0A8CD607037D439D46A9D878 /* NOTICE in Resources */ = {isa = PBXBuildFile; fileRef = 0A6060E13EF2B35A31101D25 /* NOTICE */; };
-		0B8B6E89290AE2DA10BACDBB /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2306F7EE165FB5D04BB0FD3C /* AppIntents.swift */; };
+		0B8B6E89290AE2DA10BACDBB /* EngineFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2306F7EE165FB5D04BB0FD3C /* EngineFactory.swift */; };
 		1A6D5744C9B700F565FD9C6F /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BE1D7ACE865CAC96507E4CF9 /* Localizable.strings */; };
 		24B4B82AC32454322BBEDB71 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7C9050891558A7E4F47E74F9 /* Foundation.framework */; };
-		264E3026A8F0A75DCDF3A4A6 /* PsyBridge.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C10B4F20F4DD1DFE17C67593 /* PsyBridge.xcframework */; };
-		2BCDE30B74244D29B94F8E02 /* EngineFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54CCF2DD9B8788A17634B6C7 /* EngineFactory.swift */; };
 		2E87B1682EFABD21326C3B13 /* PolicyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA9779A4899FD57FB94DB82 /* PolicyMonitor.swift */; };
+		33868A8787D01EFE3DB434C7 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B001AE4E47D7C0A602DFA881 /* AppEnvironment.swift */; };
 		43AC846295DC3F6C275006BB /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963E0BDAA325177BF3686EB2 /* QRCodeView.swift */; };
-		44AEB211FAB3994689206409 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6543469F7D7EAFC5C22BF6 /* AppEnvironment.swift */; };
+		44AEB211FAB3994689206409 /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6543469F7D7EAFC5C22BF6 /* AppIntents.swift */; };
 		461E5B9B4A6A9A7EC9BB1CC5 /* PsynguechthyngueUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D64D3A4AC268F927641A5D /* PsynguechthyngueUITests.swift */; };
-		46356742E31A156A8D7E79B1 /* PsySync in Frameworks */ = {isa = PBXBuildFile; productRef = C0501B9C4FBCD00B1CD693A7 /* PsySync */; };
 		51806F8E6838B2496A4207DE /* ErrorMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CD9E947223BFD063230F20 /* ErrorMapping.swift */; };
 		52FA958EEF6BED6C10B68B62 /* FileProviderItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB4B52D88BB492AF6830B611 /* FileProviderItem.swift */; };
 		5327AB89E0E67EAE6CF2D396 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = 0AF2757831353D5B019EC0BC /* THIRD_PARTY_NOTICES.md */; };
 		59580E1413B99FF3D06E78A2 /* Enumerators.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7050135F6E50120AB32A6A8E /* Enumerators.swift */; };
 		5D6D12D0117CEED0CCA2C25C /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0E805F448C8C80E83963F13 /* InfoPlist.xcstrings */; };
+		5E3A04F1A73527A43B5E52E8 /* PsyFileProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BE8AFAF005C29FAE9A0CA9F6 /* PsyFileProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6E7438DDC69BB7B967347193 /* AddDeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77AAA85C8B3FA7FA40BA11B4 /* AddDeviceView.swift */; };
-		73F8E4DC24674CA9B3FD954E /* PsyFileProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BE8AFAF005C29FAE9A0CA9F6 /* PsyFileProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7B422D64EDF7F64D86592D65 /* PsySync in Frameworks */ = {isa = PBXBuildFile; productRef = A1C420036570F6F2DEC0D1EF /* PsySync */; };
 		81EC4A7D0401BB5A13836A0E /* FileProviderExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5811E604F94D48852FCB03A /* FileProviderExtension.swift */; };
 		8412B60D59BE7192313228C3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A32E74C4483B8C5C6CDBD756 /* Assets.xcassets */; };
 		8AC41373150AE69948C9E3E8 /* LiveEngineHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E6BC4FC21C8B38AD089447 /* LiveEngineHost.swift */; };
-		8C7A70F5338F07BE04BBDFDE /* PsyBridge.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C10B4F20F4DD1DFE17C67593 /* PsyBridge.xcframework */; };
-		8D0E2696A72B66F2DA37B7C2 /* DomainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 216C13023B7CB4CFD9FA8AAC /* DomainManager.swift */; };
+		8D0E2696A72B66F2DA37B7C2 /* FilesIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 216C13023B7CB4CFD9FA8AAC /* FilesIntegration.swift */; };
+		900695054FEFB7C6167AA0F0 /* DomainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BCDE30B74244D29B94F8E02 /* DomainManager.swift */; };
 		9CA56E890A40F77BBB85EFE2 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7C9050891558A7E4F47E74F9 /* Foundation.framework */; };
 		9DB04CA80631A0DA203DF2E2 /* FoldersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DBB18234C660E25B4EDF385 /* FoldersView.swift */; };
 		9F748179286FAC5B4BE3E892 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3F25959BF2AD197627DFAF89 /* PrivacyInfo.xcprivacy */; };
@@ -55,9 +53,10 @@
 		ACE8FC43D93C192D7650F9E8 /* DeviceIDParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15687E3D388A0E8C1A5FA578 /* DeviceIDParser.swift */; };
 		AFF558467F241F16C6C38AC4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103208541C618ACDAF7ED995 /* SettingsView.swift */; };
 		B85B3E4E0513C36904259AE7 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC37FFDF06105827179407E /* AppSettings.swift */; };
-		B927E3649FF04B9AD4EAA588 /* FilesIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05CD9302309F91325EC902A /* FilesIntegration.swift */; };
+		B927E3649FF04B9AD4EAA588 /* FilesLocationStatusProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05CD9302309F91325EC902A /* FilesLocationStatusProvider.swift */; };
 		BD4B9642813BD8057BC6A326 /* LifecycleLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E8EC53DFE881AC57D9A2BD6 /* LifecycleLog.swift */; };
 		BD8A4528E85A3C249A2D722E /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B581C0352D8C67A37A44E84 /* Formatting.swift */; };
+		C0501B9C4FBCD00B1CD693A7 /* PsySync in Frameworks */ = {isa = PBXBuildFile; productRef = 1788BD4498195003814849F7 /* PsySync */; };
 		C075E49F9C20ADD45840C3AF /* AppSyncPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A016771E629B320DAF2C4D72 /* AppSyncPolicy.swift */; };
 		C37078694E4FAAE68D94FC7E /* PsyBridgeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1355535E56DB41BC8B360B /* PsyBridgeAdapter.swift */; };
 		C9993A1C070D0E60BD6D4F91 /* FolderDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D38611EA007CC0FDFEAA2C /* FolderDetailView.swift */; };
@@ -77,21 +76,21 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		56900FA9FCCFB0F59C8AC90B /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 60F5E9E1F6C38B7247BB833E /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 6DA707A008D023FDEB1B389E;
-			remoteInfo = PsyFileProvider;
-		};
-		8357D35DCA33B711187FC3DE /* PBXContainerItemProxy */ = {
+		264E3026A8F0A75DCDF3A4A6 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 60F5E9E1F6C38B7247BB833E /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 735565B5FEAD1F0742B9EBB4;
 			remoteInfo = PsyBridgeBootstrap;
 		};
-		C0632A17E2A4880026EE69EC /* PBXContainerItemProxy */ = {
+		46356742E31A156A8D7E79B1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 60F5E9E1F6C38B7247BB833E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 735565B5FEAD1F0742B9EBB4;
+			remoteInfo = PsyBridgeBootstrap;
+		};
+		56900FA9FCCFB0F59C8AC90B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 60F5E9E1F6C38B7247BB833E /* Project object */;
 			proxyType = 1;
@@ -102,19 +101,19 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = 60F5E9E1F6C38B7247BB833E /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 735565B5FEAD1F0742B9EBB4;
-			remoteInfo = PsyBridgeBootstrap;
+			remoteGlobalIDString = 6DA707A008D023FDEB1B389E;
+			remoteInfo = PsyFileProvider;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		B7ABDD320E5C68D810C3084D /* Embed Foundation Extensions */ = {
+		C0632A17E2A4880026EE69EC /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				73F8E4DC24674CA9B3FD954E /* PsyFileProvider.appex in Embed Foundation Extensions */,
+				5E3A04F1A73527A43B5E52E8 /* PsyFileProvider.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -130,20 +129,20 @@
 		15687E3D388A0E8C1A5FA578 /* DeviceIDParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceIDParser.swift; sourceTree = "<group>"; };
 		16EB010EB1DC670B6D7065FC /* zh-Hans */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		1E8EC53DFE881AC57D9A2BD6 /* LifecycleLog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LifecycleLog.swift; sourceTree = "<group>"; };
-		216C13023B7CB4CFD9FA8AAC /* DomainManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DomainManager.swift; sourceTree = "<group>"; };
-		2306F7EE165FB5D04BB0FD3C /* AppIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
+		216C13023B7CB4CFD9FA8AAC /* FilesIntegration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesIntegration.swift; sourceTree = "<group>"; };
+		2306F7EE165FB5D04BB0FD3C /* EngineFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineFactory.swift; sourceTree = "<group>"; };
 		23AD85D466379B272350080B /* UITests.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = UITests.xcconfig; sourceTree = "<group>"; };
 		281CCA7C8B4BD1DAE2EE2106 /* ExternalDirectoryPicker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExternalDirectoryPicker.swift; sourceTree = "<group>"; };
 		29E6BC4FC21C8B38AD089447 /* LiveEngineHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveEngineHost.swift; sourceTree = "<group>"; };
+		2BCDE30B74244D29B94F8E02 /* DomainManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DomainManager.swift; sourceTree = "<group>"; };
 		3C1355535E56DB41BC8B360B /* PsyBridgeAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PsyBridgeAdapter.swift; sourceTree = "<group>"; };
 		3E8F56557752D8F76DB78FC2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		3EC37FFDF06105827179407E /* AppSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		3F25959BF2AD197627DFAF89 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		472FAB1E7C5529E6A4BB0CE3 /* FilesLocationStatus.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesLocationStatus.swift; sourceTree = "<group>"; };
 		4D306FC8B69FFF0A4B9E1F9E /* AppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
-		54CCF2DD9B8788A17634B6C7 /* EngineFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineFactory.swift; sourceTree = "<group>"; };
 		5C96E78F86F7B42FCDAB4E19 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		5F6543469F7D7EAFC5C22BF6 /* AppEnvironment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		5F6543469F7D7EAFC5C22BF6 /* AppIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
 		625DC2AB48380B055D319FC6 /* PsyFileProvider.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PsyFileProvider.entitlements; sourceTree = "<group>"; };
 		69F360EA082539E3FDBA90CB /* PsynguechthyngueApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PsynguechthyngueApp.swift; sourceTree = "<group>"; };
 		7050135F6E50120AB32A6A8E /* Enumerators.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Enumerators.swift; sourceTree = "<group>"; };
@@ -158,14 +157,14 @@
 		963E0BDAA325177BF3686EB2 /* QRCodeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QRCodeView.swift; sourceTree = "<group>"; };
 		9714466095F6B79F7E8A84C8 /* Psynguechthyngue.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = Psynguechthyngue.entitlements; sourceTree = "<group>"; };
 		A016771E629B320DAF2C4D72 /* AppSyncPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppSyncPolicy.swift; sourceTree = "<group>"; };
-		A05CD9302309F91325EC902A /* FilesIntegration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesIntegration.swift; sourceTree = "<group>"; };
+		A05CD9302309F91325EC902A /* FilesLocationStatusProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesLocationStatusProvider.swift; sourceTree = "<group>"; };
 		A0E805F448C8C80E83963F13 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		A32E74C4483B8C5C6CDBD756 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB4B52D88BB492AF6830B611 /* FileProviderItem.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileProviderItem.swift; sourceTree = "<group>"; };
 		AEA9779A4899FD57FB94DB82 /* PolicyMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PolicyMonitor.swift; sourceTree = "<group>"; };
+		B001AE4E47D7C0A602DFA881 /* AppEnvironment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		BC728C26109D05BFC8928ABD /* DevicesView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		BE8AFAF005C29FAE9A0CA9F6 /* PsyFileProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PsyFileProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		C10B4F20F4DD1DFE17C67593 /* PsyBridge.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; path = PsyBridge.xcframework; sourceTree = "<group>"; };
 		C3AF8D60A4EC2EBBB8BB8CD6 /* BackgroundScheduler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackgroundScheduler.swift; sourceTree = "<group>"; };
 		C509182650A2B2B86F212460 /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		C5811E604F94D48852FCB03A /* FileProviderExtension.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileProviderExtension.swift; sourceTree = "<group>"; };
@@ -190,7 +189,6 @@
 			files = (
 				9CA56E890A40F77BBB85EFE2 /* Foundation.framework in Frameworks */,
 				7B422D64EDF7F64D86592D65 /* PsySync in Frameworks */,
-				264E3026A8F0A75DCDF3A4A6 /* PsyBridge.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,8 +197,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A5E8228F6BF337CC7719B370 /* Foundation.framework in Frameworks */,
-				46356742E31A156A8D7E79B1 /* PsySync in Frameworks */,
-				8C7A70F5338F07BE04BBDFDE /* PsyBridge.xcframework in Frameworks */,
+				C0501B9C4FBCD00B1CD693A7 /* PsySync in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -223,21 +220,13 @@
 			name = iOS;
 			sourceTree = "<group>";
 		};
-		270FAD83BDFDD85F62ACDDC6 /* FileProvider */ = {
+		270FAD83BDFDD85F62ACDDC6 /* PsynguechthyngueUITests */ = {
 			isa = PBXGroup;
 			children = (
-				8CCA39AC095BD015563EF750 /* DevRestrictedFetchBridge.swift */,
-				7050135F6E50120AB32A6A8E /* Enumerators.swift */,
-				F9CD9E947223BFD063230F20 /* ErrorMapping.swift */,
-				7681AC6E1AF10FDC33D89CEB /* ExtensionContext.swift */,
-				C5811E604F94D48852FCB03A /* FileProviderExtension.swift */,
-				AB4B52D88BB492AF6830B611 /* FileProviderItem.swift */,
-				5C96E78F86F7B42FCDAB4E19 /* Info.plist */,
-				625DC2AB48380B055D319FC6 /* PsyFileProvider.entitlements */,
-				455F2A17D84942CA987D9596 /* Resources */,
+				F8D64D3A4AC268F927641A5D /* PsynguechthyngueUITests.swift */,
 			);
-			name = FileProvider;
-			path = FileProvider;
+			name = PsynguechthyngueUITests;
+			path = Tests/PsynguechthyngueUITests;
 			sourceTree = "<group>";
 		};
 		2D3BA1F9BD390FF875018BDA /* Products */ = {
@@ -250,15 +239,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		33868A8787D01EFE3DB434C7 /* PsynguechthyngueUITests */ = {
-			isa = PBXGroup;
-			children = (
-				F8D64D3A4AC268F927641A5D /* PsynguechthyngueUITests.swift */,
-			);
-			name = PsynguechthyngueUITests;
-			path = Tests/PsynguechthyngueUITests;
-			sourceTree = "<group>";
-		};
 		455F2A17D84942CA987D9596 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -269,23 +249,24 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		55F804E51865F08AB0FEC94C /* App */ = {
+		54CCF2DD9B8788A17634B6C7 /* Files */ = {
 			isa = PBXGroup;
 			children = (
-				5F6543469F7D7EAFC5C22BF6 /* AppEnvironment.swift */,
-				2306F7EE165FB5D04BB0FD3C /* AppIntents.swift */,
-				54CCF2DD9B8788A17634B6C7 /* EngineFactory.swift */,
-				900695054FEFB7C6167AA0F0 /* Files */,
-				C344F4E156F54F5E832ACED5 /* Lifecycle */,
-				B718FE8CE855FAF9E6E91E9F /* Notifications */,
-				69F360EA082539E3FDBA90CB /* PsynguechthyngueApp.swift */,
-				DF08949EBCD19812CFB0A721 /* UI */,
-				3E8F56557752D8F76DB78FC2 /* Info.plist */,
-				9714466095F6B79F7E8A84C8 /* Psynguechthyngue.entitlements */,
-				74622F4F217CC05A7EE07440 /* Resources */,
+				2BCDE30B74244D29B94F8E02 /* DomainManager.swift */,
+				216C13023B7CB4CFD9FA8AAC /* FilesIntegration.swift */,
+				A05CD9302309F91325EC902A /* FilesLocationStatusProvider.swift */,
 			);
-			name = App;
-			path = App;
+			name = Files;
+			path = Files;
+			sourceTree = "<group>";
+		};
+		55F804E51865F08AB0FEC94C /* Platform */ = {
+			isa = PBXGroup;
+			children = (
+				3C1355535E56DB41BC8B360B /* PsyBridgeAdapter.swift */,
+			);
+			name = Platform;
+			path = Platform;
 			sourceTree = "<group>";
 		};
 		74622F4F217CC05A7EE07440 /* Resources */ = {
@@ -300,32 +281,23 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		900695054FEFB7C6167AA0F0 /* Files */ = {
+		912FA7CD701B320B5C835D4A /* App */ = {
 			isa = PBXGroup;
 			children = (
-				216C13023B7CB4CFD9FA8AAC /* DomainManager.swift */,
-				A05CD9302309F91325EC902A /* FilesIntegration.swift */,
+				B001AE4E47D7C0A602DFA881 /* AppEnvironment.swift */,
+				5F6543469F7D7EAFC5C22BF6 /* AppIntents.swift */,
+				2306F7EE165FB5D04BB0FD3C /* EngineFactory.swift */,
+				54CCF2DD9B8788A17634B6C7 /* Files */,
+				C344F4E156F54F5E832ACED5 /* Lifecycle */,
+				B718FE8CE855FAF9E6E91E9F /* Notifications */,
+				69F360EA082539E3FDBA90CB /* PsynguechthyngueApp.swift */,
+				DF08949EBCD19812CFB0A721 /* UI */,
+				3E8F56557752D8F76DB78FC2 /* Info.plist */,
+				9714466095F6B79F7E8A84C8 /* Psynguechthyngue.entitlements */,
+				74622F4F217CC05A7EE07440 /* Resources */,
 			);
-			name = Files;
-			path = Files;
-			sourceTree = "<group>";
-		};
-		912FA7CD701B320B5C835D4A /* Artifacts */ = {
-			isa = PBXGroup;
-			children = (
-				C10B4F20F4DD1DFE17C67593 /* PsyBridge.xcframework */,
-			);
-			name = Artifacts;
-			path = Artifacts;
-			sourceTree = "<group>";
-		};
-		B001AE4E47D7C0A602DFA881 /* Platform */ = {
-			isa = PBXGroup;
-			children = (
-				3C1355535E56DB41BC8B360B /* PsyBridgeAdapter.swift */,
-			);
-			name = Platform;
-			path = Platform;
+			name = App;
+			path = App;
 			sourceTree = "<group>";
 		};
 		B0F515E6B8A4A546BE136196 /* Config */ = {
@@ -355,6 +327,23 @@
 			);
 			name = Notifications;
 			path = Notifications;
+			sourceTree = "<group>";
+		};
+		C10B4F20F4DD1DFE17C67593 /* FileProvider */ = {
+			isa = PBXGroup;
+			children = (
+				8CCA39AC095BD015563EF750 /* DevRestrictedFetchBridge.swift */,
+				7050135F6E50120AB32A6A8E /* Enumerators.swift */,
+				F9CD9E947223BFD063230F20 /* ErrorMapping.swift */,
+				7681AC6E1AF10FDC33D89CEB /* ExtensionContext.swift */,
+				C5811E604F94D48852FCB03A /* FileProviderExtension.swift */,
+				AB4B52D88BB492AF6830B611 /* FileProviderItem.swift */,
+				5C96E78F86F7B42FCDAB4E19 /* Info.plist */,
+				625DC2AB48380B055D319FC6 /* PsyFileProvider.entitlements */,
+				455F2A17D84942CA987D9596 /* Resources */,
+			);
+			name = FileProvider;
+			path = FileProvider;
 			sourceTree = "<group>";
 		};
 		C344F4E156F54F5E832ACED5 /* Lifecycle */ = {
@@ -411,11 +400,10 @@
 				2D3BA1F9BD390FF875018BDA /* Products */,
 				B1318B1606BB27D0A6CC8FD7 /* Frameworks */,
 				B0F515E6B8A4A546BE136196 /* Config */,
-				912FA7CD701B320B5C835D4A /* Artifacts */,
-				55F804E51865F08AB0FEC94C /* App */,
-				270FAD83BDFDD85F62ACDDC6 /* FileProvider */,
-				B001AE4E47D7C0A602DFA881 /* Platform */,
-				33868A8787D01EFE3DB434C7 /* PsynguechthyngueUITests */,
+				912FA7CD701B320B5C835D4A /* App */,
+				C10B4F20F4DD1DFE17C67593 /* FileProvider */,
+				55F804E51865F08AB0FEC94C /* Platform */,
+				270FAD83BDFDD85F62ACDDC6 /* PsynguechthyngueUITests */,
 				E897338C16C857B949A32DE5 /* Legal */,
 			);
 			sourceTree = "<group>";
@@ -434,11 +422,11 @@
 			buildRules = (
 			);
 			dependencies = (
-				EE57B1EC695FC8E7581FB8C3 /* PBXTargetDependency */,
+				8C7A70F5338F07BE04BBDFDE /* PBXTargetDependency */,
 			);
 			name = PsyFileProvider;
 			packageProductDependencies = (
-				C0501B9C4FBCD00B1CD693A7 /* PsySync */,
+				1788BD4498195003814849F7 /* PsySync */,
 			);
 			productName = PsyFileProvider;
 			productReference = BE8AFAF005C29FAE9A0CA9F6 /* PsyFileProvider.appex */;
@@ -451,13 +439,13 @@
 				21D4931AA5011B0579A1E2D4 /* Sources */,
 				567D8C9A864752C710AF0AC3 /* Frameworks */,
 				4CD38CFE37147849B1892C2E /* Resources */,
-				B7ABDD320E5C68D810C3084D /* Embed Foundation Extensions */,
+				C0632A17E2A4880026EE69EC /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				1788BD4498195003814849F7 /* PBXTargetDependency */,
-				053E30F03EA960815BF77AFC /* PBXTargetDependency */,
+				8357D35DCA33B711187FC3DE /* PBXTargetDependency */,
+				EE57B1EC695FC8E7581FB8C3 /* PBXTargetDependency */,
 			);
 			name = Psynguechthyngue;
 			packageProductDependencies = (
@@ -478,7 +466,7 @@
 			buildRules = (
 			);
 			dependencies = (
-				5E3A04F1A73527A43B5E52E8 /* PBXTargetDependency */,
+				053E30F03EA960815BF77AFC /* PBXTargetDependency */,
 			);
 			name = PsynguechthyngueUITests;
 			productName = PsynguechthyngueUITests;
@@ -581,11 +569,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				44AEB211FAB3994689206409 /* AppEnvironment.swift in Sources */,
-				0B8B6E89290AE2DA10BACDBB /* AppIntents.swift in Sources */,
-				2BCDE30B74244D29B94F8E02 /* EngineFactory.swift in Sources */,
-				8D0E2696A72B66F2DA37B7C2 /* DomainManager.swift in Sources */,
-				B927E3649FF04B9AD4EAA588 /* FilesIntegration.swift in Sources */,
+				33868A8787D01EFE3DB434C7 /* AppEnvironment.swift in Sources */,
+				44AEB211FAB3994689206409 /* AppIntents.swift in Sources */,
+				0B8B6E89290AE2DA10BACDBB /* EngineFactory.swift in Sources */,
+				900695054FEFB7C6167AA0F0 /* DomainManager.swift in Sources */,
+				8D0E2696A72B66F2DA37B7C2 /* FilesIntegration.swift in Sources */,
+				B927E3649FF04B9AD4EAA588 /* FilesLocationStatusProvider.swift in Sources */,
 				C075E49F9C20ADD45840C3AF /* AppSyncPolicy.swift in Sources */,
 				F28104A859D7B911DCB1A334 /* BackgroundScheduler.swift in Sources */,
 				CD76FA2052EF887DB92A56B4 /* BackgroundTaskRunner.swift in Sources */,
@@ -640,26 +629,26 @@
 /* Begin PBXTargetDependency section */
 		053E30F03EA960815BF77AFC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			name = PsyFileProvider;
-			target = 6DA707A008D023FDEB1B389E /* PsyFileProvider */;
+			name = Psynguechthyngue;
+			target = A89580FC49C9E113DDA65ADF /* Psynguechthyngue */;
 			targetProxy = 56900FA9FCCFB0F59C8AC90B /* PBXContainerItemProxy */;
 		};
-		1788BD4498195003814849F7 /* PBXTargetDependency */ = {
+		8357D35DCA33B711187FC3DE /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = PsyBridgeBootstrap;
 			target = 735565B5FEAD1F0742B9EBB4 /* PsyBridgeBootstrap */;
-			targetProxy = 8357D35DCA33B711187FC3DE /* PBXContainerItemProxy */;
+			targetProxy = 264E3026A8F0A75DCDF3A4A6 /* PBXContainerItemProxy */;
 		};
-		5E3A04F1A73527A43B5E52E8 /* PBXTargetDependency */ = {
+		8C7A70F5338F07BE04BBDFDE /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			name = Psynguechthyngue;
-			target = A89580FC49C9E113DDA65ADF /* Psynguechthyngue */;
-			targetProxy = C0632A17E2A4880026EE69EC /* PBXContainerItemProxy */;
+			name = PsyBridgeBootstrap;
+			target = 735565B5FEAD1F0742B9EBB4 /* PsyBridgeBootstrap */;
+			targetProxy = 46356742E31A156A8D7E79B1 /* PBXContainerItemProxy */;
 		};
 		EE57B1EC695FC8E7581FB8C3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			name = PsyBridgeBootstrap;
-			target = 735565B5FEAD1F0742B9EBB4 /* PsyBridgeBootstrap */;
+			name = PsyFileProvider;
+			target = 6DA707A008D023FDEB1B389E /* PsyFileProvider */;
 			targetProxy = C75906B9EEE8C3F982EB534C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -766,10 +755,23 @@
 				CODE_SIGN_ENTITLEMENTS = FileProvider/PsyFileProvider.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64_x86_64-simulator",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FileProvider/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../../Frameworks";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					PsyBridge,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FILE_PROVIDER_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = PsyFileProvider;
 				SDKROOT = iphoneos;
@@ -793,10 +795,23 @@
 				CODE_SIGN_ENTITLEMENTS = App/Psynguechthyngue.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64_x86_64-simulator",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					PsyBridge,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Psynguechthyngue;
 				SDKROOT = iphoneos;
@@ -827,10 +842,23 @@
 				CODE_SIGN_ENTITLEMENTS = FileProvider/PsyFileProvider.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64_x86_64-simulator",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FileProvider/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../../Frameworks";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					PsyBridge,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FILE_PROVIDER_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = PsyFileProvider;
 				SDKROOT = iphoneos;
@@ -947,10 +975,23 @@
 				CODE_SIGN_ENTITLEMENTS = App/Psynguechthyngue.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/Artifacts/PsyBridge.xcframework/ios-arm64_x86_64-simulator",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					PsyBridge,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Psynguechthyngue;
 				SDKROOT = iphoneos;
@@ -1021,12 +1062,12 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A1C420036570F6F2DEC0D1EF /* PsySync */ = {
+		1788BD4498195003814849F7 /* PsySync */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 170954279A4FAFEBF02E102E /* XCLocalSwiftPackageReference "." */;
 			productName = PsySync;
 		};
-		C0501B9C4FBCD00B1CD693A7 /* PsySync */ = {
+		A1C420036570F6F2DEC0D1EF /* PsySync */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 170954279A4FAFEBF02E102E /* XCLocalSwiftPackageReference "." */;
 			productName = PsySync;
