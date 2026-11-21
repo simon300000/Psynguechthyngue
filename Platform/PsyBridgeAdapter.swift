@@ -310,6 +310,30 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
             .map { DeviceID(rawValue: String($0)) }
         return RestrictedFetchResult(stagedFile: destination, size: result.size, version: result.version, servedBy: servedBy)
     }
+
+    /// `psybridge.RecordFetchedFile`: after `fetch` and after the staged file
+    /// was renamed to `<folder>/<path>` (engine lock still held), record it in
+    /// the local index with the global version so the App's next scan does
+    /// not mint a new version. Not part of `RestrictedFetchBridge` yet
+    /// (contract change proposed in Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md).
+    public func recordFetchedFile(
+        homeDirectory: URL,
+        identity: DeviceIdentity,
+        folder: FolderID,
+        path: RelativePath,
+        version: String
+    ) throws {
+        let request = PsybridgeRecordRequest()
+        request.homeDir = homeDirectory.path
+        request.certPEM = identity.certificatePEM
+        request.keyPEM = identity.privateKeyPEM
+        request.folderID = folder.rawValue
+        request.path = path.rawValue
+        request.expectedVersion = version
+        var error: NSError?
+        _ = PsybridgeRecordFetchedFile(request, &error)
+        if let error { throw PsyBridgeError(error) }
+    }
 }
 
 // MARK: - Index cursor

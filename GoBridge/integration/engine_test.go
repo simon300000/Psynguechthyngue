@@ -166,13 +166,6 @@ func TestEngineLifecycle(t *testing.T) {
 	assertNoOpenFilesUnder(t, root)
 }
 
-func errString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
 // assertLoopbackOnly checks the endpoint URL, that the kernel reports the
 // listening socket on 127.0.0.1 only, and that the port is unreachable via
 // every non-loopback interface address.

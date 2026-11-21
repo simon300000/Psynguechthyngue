@@ -422,8 +422,17 @@ func (f *fetcher) run(dest string) error {
 	if err := out.Close(); err != nil {
 		return newError(CodeIO, "close: %v", err)
 	}
-	mtime := f.file.ModTime()
-	_ = os.Chtimes(dest, mtime, mtime)
+	// Match the global FileInfo fields the scanner compares (size, blocks,
+	// nanosecond mtime, permissions) so the committed file is equivalent.
+	if !f.file.NoPermissions && f.file.Permissions&0o777 != 0 {
+		if err := os.Chmod(dest, os.FileMode(f.file.Permissions&0o777)); err != nil {
+			return newError(CodeIO, "chmod: %v", err)
+		}
+	}
+	mtime := f.file.ModTime() // ModifiedS + ModifiedNs
+	if err := os.Chtimes(dest, mtime, mtime); err != nil {
+		return newError(CodeIO, "set mtime: %v", err)
+	}
 	return nil
 }
 

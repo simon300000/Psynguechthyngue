@@ -29,6 +29,13 @@ generated GUI assets). The scripts set it.
 - `FetchFile` reads config.xml into memory (never writes it), pauses every
   folder, pauses devices that do not share the target folder, uses one
   connection per device, keeps discovery/relays as configured.
+- `FetchFile` gives the staged file the global nanosecond mtime and
+  permissions. `RecordFetchedFile` (call it after the file has been moved into
+  the folder, with the lock still held) writes the global FileInfo as the
+  local index entry, the same way the puller does. Without that entry, the
+  App's next scan mints a new version in about 60% of runs, because the
+  scanner compares against the *local* entry. See
+  `Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md`.
 - Upstream exposes no SQLite `cache_size` knob (DESIGN §3.5 asked): it runs
   with SQLite's default page cache (2 MiB per connection) in C memory,
   outside GOMEMLIMIT.

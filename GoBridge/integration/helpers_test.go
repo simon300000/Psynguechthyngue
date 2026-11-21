@@ -35,6 +35,11 @@ func TestMain(m *testing.M) {
 	case "fetch":
 		helperFetch()
 		os.Exit(0)
+	case "record":
+		a := readHelperArgs()
+		err := psybridge.RecordFetchedFile(&psybridge.RecordRequest{HomeDir: a.Home, CertPEM: a.CertPEM, KeyPEM: a.KeyPEM, FolderID: a.Folder, Path: a.Path, ExpectedVersion: a.Expected})
+		fmt.Println("RESULT", errString(err))
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
@@ -303,3 +308,40 @@ func code(errText string) string { return psybridge.ErrorCode(errText) }
 
 func formatMiB(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
 func formatInt(v int64) string   { return strconv.FormatInt(v, 10) }
+
+func restPost(t *testing.T, ep *psybridge.APIEndpoint, path string) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, ep.BaseURL+path, nil)
+	req.Header.Set("X-API-Key", ep.APIKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST %s: %d", path, resp.StatusCode)
+	}
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+// record runs RecordFetchedFile in a helper process and returns its error text.
+func (n *node) record(t *testing.T, path, version string) string {
+	t.Helper()
+	out, err := helperCmd(t, "record", helperArgs{Home: n.home, CertPEM: n.id.CertPEM, KeyPEM: n.id.KeyPEM, Folder: "f", Path: path, Expected: version}).Output()
+	if err != nil {
+		t.Fatalf("record helper: %v\n%s", err, out)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if rest, ok := strings.CutPrefix(line, "RESULT"); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	t.Fatalf("record helper printed no result:\n%s", out)
+	return ""
+}

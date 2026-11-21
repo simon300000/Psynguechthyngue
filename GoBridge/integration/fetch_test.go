@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +56,10 @@ func TestFetchFile(t *testing.T) {
 		}
 	}
 
+	// Non-default permissions so the fetch must copy them (scanner compares perms).
+	if err := os.Chmod(filepath.Join(a.dir, "cross.bin"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	a.startEngine(t)
 	b.startEngine(t)
 	eventually(t, 120*time.Second, "B to receive A's index", func() bool {
@@ -70,6 +75,20 @@ func TestFetchFile(t *testing.T) {
 		}
 		return true
 	})
+	// Global version of cross.bin as announced by A, before any commit.
+	var before struct {
+		Global map[string]any `json:"global"`
+	}
+	restGet(t, b.endpoint, "/rest/db/file?folder=f&file=cross.bin", &before)
+	t.Logf("announced by A: %v", before.Global)
+	var announcedVersion []string
+	for _, v := range before.Global["version"].([]any) {
+		announcedVersion = append(announcedVersion, v.(string))
+	}
+	announced := strings.Join(announcedVersion, ",")
+	if !strings.HasPrefix(announced, a.devID.Short().String()+":") {
+		t.Fatalf("cross.bin global version %q is not A's", announced)
+	}
 	if _, err := os.Stat(filepath.Join(b.dir, "small.bin")); err == nil {
 		t.Fatal("B downloaded content despite ignore-all")
 	}
@@ -155,6 +174,70 @@ func TestFetchFile(t *testing.T) {
 		}
 	})
 
+	// The restricted core works on an in-memory config: config.xml unchanged.
+	if after, _ := os.ReadFile(filepath.Join(b.home, "config.xml")); string(after) != string(bConfig) || len(after) == 0 {
+		t.Fatal("restricted fetch modified B's config.xml")
+	}
+
+	t.Run("commit then rescan keeps global version", func(t *testing.T) {
+		// WP-C commit path: staging → folder, un-ignore, App engine scans.
+		// A is offline here, so B can only adopt what it has on disk.
+		o := b.fetch(t, helperArgs{Path: "cross.bin", Dest: dest("commit")})
+		if o.Error != "" {
+			t.Fatal(o.Error)
+		}
+		a.stopEngine(t)
+		st, _ := os.Stat(dest("commit"))
+		t.Logf("staged mode %v mtime %v", st.Mode(), st.ModTime().UTC().Format(time.RFC3339Nano))
+		// Recording before the file is in place must be refused.
+		if msg := b.record(t, "cross.bin", o.Result.Version); code(msg) != psybridge.CodeIO {
+			t.Fatalf("record before commit: %q", msg)
+		}
+		if err := os.Rename(dest("commit"), filepath.Join(b.dir, "cross.bin")); err != nil {
+			t.Fatal(err)
+		}
+		if msg := b.record(t, "cross.bin", "bogus"); code(msg) != psybridge.CodeVersionMismatch {
+			t.Fatalf("record with wrong version: %q", msg)
+		}
+		if msg := b.record(t, "cross.bin", o.Result.Version); msg != "" {
+			t.Fatalf("RecordFetchedFile: %s", msg)
+		}
+		if msg := b.record(t, "cross.bin", o.Result.Version); msg != "" {
+			t.Fatalf("RecordFetchedFile not idempotent: %s", msg)
+		}
+		if err := os.WriteFile(filepath.Join(b.dir, ".stignore"), []byte("!/cross.bin\n*\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		b.startEngine(t)
+		defer b.stopEngine(t)
+		restPost(t, b.endpoint, "/rest/db/scan?folder=f")
+		var info struct {
+			Global struct {
+				Version  []string `json:"version"`
+				Modified string   `json:"modified"`
+				Perms    string   `json:"permissions"`
+			} `json:"global"`
+			Local struct {
+				Version  []string `json:"version"`
+				Modified string   `json:"modified"`
+				Perms    string   `json:"permissions"`
+				Invalid  bool     `json:"invalid"`
+			} `json:"local"`
+		}
+		eventually(t, 30*time.Second, "B to index cross.bin", func() bool {
+			restGet(t, b.endpoint, "/rest/db/file?folder=f&file=cross.bin", &info)
+			return len(info.Local.Version) > 0 && !info.Local.Invalid
+		})
+		t.Logf("global %+v", info.Global)
+		t.Logf("local  %+v", info.Local)
+		if info.Local.Modified != info.Global.Modified || info.Local.Perms != info.Global.Perms {
+			t.Errorf("metadata differs: local %s/%s global %s/%s", info.Local.Modified, info.Local.Perms, info.Global.Modified, info.Global.Perms)
+		}
+		if got := strings.Join(info.Local.Version, ","); got != announced {
+			t.Errorf("rescan created a new version: local %s, announced by A %s", got, announced)
+		}
+	})
+
 	t.Run("peer offline", func(t *testing.T) {
 		a.stopEngine(t)
 		o := b.fetch(t, helperArgs{Path: "small.bin", Dest: dest("offline"), Deadline: 3_000})
@@ -166,10 +249,6 @@ func TestFetchFile(t *testing.T) {
 		}
 	})
 
-	// The restricted core works on an in-memory config: config.xml unchanged.
-	if after, _ := os.ReadFile(filepath.Join(b.home, "config.xml")); string(after) != string(bConfig) || len(after) == 0 {
-		t.Fatal("restricted fetch modified B's config.xml")
-	}
 }
 
 func recordRSS(t *testing.T, o fetchOutcome) {
