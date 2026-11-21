@@ -28,6 +28,8 @@ make project     # 重新生成 Psynguechthyngue.xcodeproj（确定性输出）
 make verify      # 完整门禁
 ```
 
+在全新检出上也可以直接用 `xcodebuild`（或在 Xcode 中构建）：`PsyBridgeBootstrap` target 会在编译前自动生成缺失或过期的 xcframework，`make bootstrap` 只是提前完成这一步。
+
 `make verify` 依次运行：
 
 | 步骤 | 单独运行 | 内容 |
