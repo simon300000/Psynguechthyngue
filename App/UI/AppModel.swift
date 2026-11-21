@@ -102,6 +102,7 @@ final class AppModel {
             statuses[status.folderID] = status
         case .configurationChanged:
             scheduleRefresh()
+            Task { await refreshFilesLocation() }
         case let .downloadProgress(folder, path, done, total):
             let t = ActiveTransfer(folderID: folder, path: path, bytesDone: done, bytesTotal: total)
             transfers[t.id] = t
@@ -343,8 +344,9 @@ final class AppModel {
 enum AppInfo {
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0" }
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1" }
-    /// Pinned upstream release (DESIGN.md §3.4). WP-B may expose the real value through the bridge.
-    static let syncthingVersion = "v2.1.6"
+    /// Pinned upstream release (DESIGN.md §3.4); the bridge reports the linked one.
+    @MainActor static var syncthingVersionProvider: (() -> String)?
+    @MainActor static var syncthingVersion: String { syncthingVersionProvider?() ?? "v2.1.6" }
 }
 
 extension String {

@@ -2,12 +2,6 @@ import Foundation
 import Observation
 import PsySync
 
-/// Optional engine capability: respond to `didReceiveMemoryWarning`
-/// (`psybridge.Engine.OnMemoryWarning`). `LiveSyncEngine` may adopt it.
-protocol MemoryWarningResponding: AnyObject {
-    func handleMemoryWarning()
-}
-
 /// Owns the one `SyncEngine` of the App process and drives it from lifecycle
 /// signals and policy (DESIGN.md §4.1–4.4).
 ///
@@ -48,10 +42,16 @@ final class LiveEngineHost: EngineHosting {
     /// callback, before any queued work (see `prepareForBackground`).
     @ObservationIgnored private var pendingBackgroundToken: Int?
     @ObservationIgnored var onFailure: (@MainActor (String) -> Void)?
+    /// After every successful start (foreground or BG): Files projector + request server.
+    @ObservationIgnored var onEngineStarted: (@MainActor () async -> Void)?
+    /// Before every stop: close files.sqlite etc. so nothing is held when suspended (I2).
+    @ObservationIgnored var onEngineWillStop: (@MainActor () async -> Void)?
+    /// `didReceiveMemoryWarning` → `psybridge.Engine.OnMemoryWarning`.
+    @ObservationIgnored var onMemoryWarning: (@MainActor () -> Void)?
 
     init(
         engine: any SyncEngine,
-        policy: any SyncPolicy = AppSyncPolicy(),
+        policy: any SyncPolicy = DefaultSyncPolicy(),
         tasks: any BackgroundTaskRunning,
         isOnMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac
     ) {
@@ -117,7 +117,7 @@ final class LiveEngineHost: EngineHosting {
             break
         case .memoryWarning:
             log.record("memory-warning")
-            (engine as? MemoryWarningResponding)?.handleMemoryWarning()
+            onMemoryWarning?()
         case .willTerminate:
             if phase == .foregroundRunning || isBackgroundRunning { await drain(reason: "willTerminate", requireTask: true) }
         }
@@ -157,6 +157,7 @@ final class LiveEngineHost: EngineHosting {
             lastFailure = nil
             await applyPolicy(force: true)
             log.record("engine-running")
+            await onEngineStarted?()
         } catch {
             phase = .idle
             fail("start: \(error)")
@@ -191,6 +192,7 @@ final class LiveEngineHost: EngineHosting {
             }
             phase = .backgroundRunning(kind: kind)
             await applyPolicy(force: true)
+            await onEngineStarted?()
             if backgroundExpired { log.record("bg-expired-during-start") }
         } catch {
             phase = .idle
@@ -251,6 +253,7 @@ final class LiveEngineHost: EngineHosting {
                 token = beginTask(reason: reason)
             }
         }
+        await onEngineWillStop?()
         log.record("engine-stop", "deadline=\(deadline) remaining=\(Int(min(tasks.remaining, 9999)))s")
         do {
             try await engine.stop(deadline: deadline)
