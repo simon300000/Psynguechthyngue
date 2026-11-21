@@ -91,6 +91,8 @@ struct ContentHarness {
         #expect(try String(contentsOf: h.layout.managedFolder(f1).appending(path: "b.bin"), encoding: .utf8) == "fetched")
         #expect(try h.store.record(folder: f1, path: RelativePath(rawValue: "b.bin"))?.isLocal == true)
         #expect(try h.store.pending(limit: 10).map(\.kind) == [.modified])
+        let attrs = try FileManager.default.attributesOfItem(atPath: h.layout.managedFolder(f1).appending(path: "b.bin").path)
+        #expect((attrs[.modificationDate] as? Date)?.timeIntervalSince1970 == 1_700_000_000)  // global mtime kept
         #expect(h.lock.currentHolder() == nil)  // lock released
         // Second open is a local clone.
         let again = try await h.provider(bridge: bridge).provideContents(for: h.id("b.bin"), requestedVersion: nil, progress: Progress())
@@ -174,8 +176,7 @@ struct ContentHarness {
         #expect(engine.recordedCalls == [
             "presence true new/n.txt,renamed.txt",
             "scan f1 gone.txt,new/n.txt,old.txt,renamed.txt",
-            "presence false gone.txt,old.txt",
-        ])
+        ])  // no re-ignore of deleted paths (deletion must propagate first)
         #expect(try h.store.pending(limit: 10).isEmpty)
         #expect(try h.store.record(folder: f1, path: RelativePath(rawValue: "new/n.txt"))?.pendingUpload == false)
         #expect(!projected.value.isEmpty)

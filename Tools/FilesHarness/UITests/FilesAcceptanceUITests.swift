@@ -25,18 +25,23 @@ final class FilesAcceptanceUITests: XCTestCase {
             "-PsyHarnessKeepAlive", "1",
         ] + extra
         harness.launch()
-        XCTAssertTrue(harness.staticTexts["running"].waitForExistence(timeout: 20), "harness engine running")
+        let status = harness.staticTexts["harness.status"].firstMatch
+        let running = expectation(for: NSPredicate(format: "label == 'running'"), evaluatedWith: status)
+        wait(for: [running], timeout: 40)
     }
 
     func openFolder() {
         files.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        if files.state == .notRunning { files.launch() } else { files.activate() }
+        files.terminate()
+        files.launch()
         let browse = files.tabBars.buttons["Browse"].firstMatch
         XCTAssertTrue(browse.waitForExistence(timeout: 10))
         browse.tap()
         browse.tap()
         let location = files.cells["DOC.sidebar.item.PsyFilesHarness"].firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 10))
+        let found = location.waitForExistence(timeout: 10)
+        if !found { dump("no-location") }
+        XCTAssertTrue(found)
         location.tap()
     }
 
@@ -61,7 +66,9 @@ final class FilesAcceptanceUITests: XCTestCase {
         XCTAssertTrue(element.waitForExistence(timeout: 15))
         element.press(forDuration: 1.2)
         let button = files.buttons[item].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 5), "menu item \(item)")
+        let found = button.waitForExistence(timeout: 5)
+        if !found { dump("menu-\(item)") }
+        XCTAssertTrue(found, "menu item \(item)")
         button.tap()
     }
 
@@ -114,7 +121,7 @@ final class FilesAcceptanceUITests: XCTestCase {
     func test06Delete() {
         launchHarness()
         openFolder()
-        contextMenu(cell("remote-only"), "Delete")
+        contextMenu(cell("remote-only"), "Delete Now")
         let confirm = files.alerts.buttons["Delete"].firstMatch
         if confirm.waitForExistence(timeout: 3) { confirm.tap() }
         let gone = NSPredicate(format: "exists == false")
@@ -135,5 +142,25 @@ final class FilesAcceptanceUITests: XCTestCase {
         harness.terminate()
         openFolder()
         open("fetched-offline", expect: "opened through restrictedFetch")
+    }
+
+    /// Nested, never-downloaded file with the App engine running → delegatedToApp.
+    func test09OpenDelegatedNested() {
+        launchHarness()
+        openFolder()
+        let docs = cell("docs", nil)
+        XCTAssertTrue(docs.waitForExistence(timeout: 15))
+        docs.tap()
+        open("report", expect: "nested report")
+    }
+
+    /// Second offline open (file created on the official instance) + App relaunch
+    /// so the journal is drained; the script then checks no new version appeared.
+    func test10OpenRestrictedThenAppDrains() {
+        harness.terminate()
+        openFolder()
+        open("offline-2", expect: "second offline file")
+        launchHarness()
+        sleep(8)
     }
 }

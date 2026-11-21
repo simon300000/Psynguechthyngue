@@ -236,12 +236,13 @@ public actor ContentRequestServer {
             try await engine.setLocalPresence(folder, paths: Self.unique(present), present: true)
         }
         try await engine.scan(folder, paths: Self.minimalScanSet(scan))
-        // Only re-ignore after the deletion has been scanned, otherwise it
-        // would not propagate (ignored files are not announced).
-        let stillGone = gone.filter { !present.contains($0) }
-        if onDemand && !stillGone.isEmpty {
-            try await engine.setLocalPresence(folder, paths: Self.unique(stillGone), present: false)
-        }
+        // Deleted / moved-away paths are deliberately NOT re-ignored here: if
+        // the `!/path` rule disappears before upstream has announced the
+        // deletion, the deletion is recorded as "ignored" and never propagates
+        // (observed against Syncthing 2.1.6). A leftover rule for a
+        // nonexistent path is harmless; the generated .stignore is rebuilt
+        // from files.sqlite (DESIGN.md §6.3) and drops it.
+        _ = gone
         try store.clearPendingUpload(folder, paths: Self.unique(present))
         log.info("journal folder=\(folder.rawValue, privacy: .public) scanned=\(scan.count)")
     }

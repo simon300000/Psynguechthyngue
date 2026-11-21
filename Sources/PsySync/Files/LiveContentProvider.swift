@@ -270,6 +270,12 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         if rename(result.stagedFile.path(percentEncoded: false), destination.path(percentEncoded: false)) != 0 {
             throw FilesContentError.requestFailed("rename errno \(errno)")
         }
+        // Keep the global mtime: otherwise the App's rescan sees a metadata
+        // change and announces a new version (observed with Syncthing 2.1.6).
+        if record.modified.timeIntervalSince1970 > 0 {
+            try? FileManager.default.setAttributes(
+                [.modificationDate: record.modified], ofItemAtPath: destination.path(percentEncoded: false))
+        }
         try store.markLocal(record.itemID, isLocal: true)
         // The App un-ignores (on-demand) and rescans on next start; blocks
         // equal the global version, so no new version is created.

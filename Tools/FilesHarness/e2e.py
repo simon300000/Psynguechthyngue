@@ -26,6 +26,8 @@ HOME = os.path.expanduser("~")
 W = os.path.join(HOME, "SyncthingTest", "wpc")
 OFFICIAL = "http://127.0.0.1:8384"
 PHONE = "http://127.0.0.1:8484"
+PEER = "http://127.0.0.1:8585"
+PEER_DIR = os.path.join(W, "peer-files")
 FOLDER = "psy-test-wpc-files"
 PHONE_NAME = "psy-test-wpc-phone"
 OFFICIAL_DIR = os.path.join(W, "official-files")
@@ -58,6 +60,57 @@ def off(method, path, query=None, body=None):
 
 def phone(method, path, query=None, body=None):
     return call(PHONE, phone_key(), method, path, query, body)
+
+
+def peer_key():
+    with open(os.path.join(W, "peer-home", ".harness-apikey")) as f:
+        return f.read().strip()
+
+
+def peer(method, path, query=None, body=None):
+    return call(PEER, peer_key(), method, path, query, body)
+
+
+def peer_setup():
+    """Private third device (own home under ~/SyncthingTest/wpc) sharing the folder
+    with the phone instance; used when the official instance cannot run."""
+    phone_id = phone("GET", "/rest/system/status")["myID"]
+    peer_id = peer("GET", "/rest/system/status")["myID"]
+    for call_, port in ((peer, 22102), (phone, 22101)):
+        call_("PATCH", "/rest/config/options", body={
+            "listenAddresses": ["tcp://127.0.0.1:%d" % port], "globalAnnounceEnabled": False,
+            "localAnnounceEnabled": False, "relaysEnabled": False, "natEnabled": False,
+            "minHomeDiskFree": {"value": 1, "unit": "GB"}})
+    peer("PUT", "/rest/config/devices/" + phone_id, body={"deviceID": phone_id, "name": PHONE_NAME, "addresses": ["tcp://127.0.0.1:22101"]})
+    phone("PUT", "/rest/config/devices/" + peer_id, body={"deviceID": peer_id, "name": "psy-test-wpc-peer", "addresses": ["tcp://127.0.0.1:22102"]})
+    os.makedirs(PEER_DIR, exist_ok=True)
+    seed = {"hello.txt": "hello from the official instance\n", "remote-only.txt": "opened through delegatedToApp\n",
+            "fetched-offline.txt": "opened through restrictedFetch\n", "docs/report.txt": "nested report\n"}
+    for rel, text in seed.items():
+        p = os.path.join(PEER_DIR, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as f:
+            f.write(text)
+    peer("PUT", "/rest/config/folders/" + FOLDER, body={
+        "id": FOLDER, "label": FOLDER, "path": PEER_DIR, "type": "sendreceive",
+        "devices": [{"deviceID": peer_id}, {"deviceID": phone_id}], "fsWatcherEnabled": True, "fsWatcherDelayS": 1,
+        "minDiskFree": {"value": 1, "unit": "GB"}})
+    f = phone("GET", "/rest/config/folders/" + FOLDER)
+    if not any(d["deviceID"] == peer_id for d in f["devices"]):
+        f["devices"].append({"deviceID": peer_id})
+        phone("PUT", "/rest/config/folders/" + FOLDER, body=f)
+    for _ in range(60):
+        if phone("GET", "/rest/system/connections")["connections"].get(peer_id, {}).get("connected"):
+            break
+        time.sleep(1)
+    print("peer connected:", phone("GET", "/rest/system/connections")["connections"].get(peer_id, {}).get("connected"))
+
+
+def peer_status():
+    s = peer("GET", "/rest/db/status", {"folder": FOLDER})
+    print("peer:", s.get("state"), "local", s.get("localFiles"), "global", s.get("globalFiles"), "need", s.get("needFiles"))
+    print("peer files:", sorted(os.path.relpath(os.path.join(d, n), PEER_DIR) for d, _, ns in os.walk(PEER_DIR) for n in ns
+                                if not n.startswith(".st")))
 
 
 def official_ids():
@@ -193,6 +246,10 @@ if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "setup":
         setup(sys.argv[2])
+    elif cmd == "peer-setup":
+        peer_setup()
+    elif cmd == "peer-status":
+        peer_status()
     elif cmd == "status":
         status()
     elif cmd == "official-file":
