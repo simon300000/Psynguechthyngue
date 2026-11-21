@@ -68,7 +68,7 @@ final class AppModel {
         self.settings = settings
         self.notifier = notifier
         self.isFixture = isFixture
-        host.onFailure = { [weak self] message in self?.show(error: String(localized: "The sync engine reported a problem: \(message)")) }
+        host.onFailure = { [weak self] error in self?.show(error: Self.message(for: error)) }
     }
 
     // MARK: Observation

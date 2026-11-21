@@ -41,7 +41,7 @@ final class LiveEngineHost: EngineHosting {
     /// beginBackgroundTask token taken synchronously in the didEnterBackground
     /// callback, before any queued work (see `prepareForBackground`).
     @ObservationIgnored private var pendingBackgroundToken: Int?
-    @ObservationIgnored var onFailure: (@MainActor (String) -> Void)?
+    @ObservationIgnored var onFailure: (@MainActor (Error) -> Void)?
     /// After every successful start (foreground or BG): Files projector + request server.
     @ObservationIgnored var onEngineStarted: (@MainActor () async -> Void)?
     /// Before every stop: close files.sqlite etc. so nothing is held when suspended (I2).
@@ -160,9 +160,10 @@ final class LiveEngineHost: EngineHosting {
             await onEngineStarted?()
         } catch {
             phase = .idle
-            fail("start: \(error)")
+            noteStopTimeout(error)
+            fail("start", error)
             // A timed-out start may still complete later: make sure it is stopped.
-            await stopQuietly()
+            if !restartRequired { await stopQuietly() }
         }
     }
 
@@ -196,8 +197,9 @@ final class LiveEngineHost: EngineHosting {
             if backgroundExpired { log.record("bg-expired-during-start") }
         } catch {
             phase = .idle
-            fail("bg-start: \(error)")
-            await stopQuietly()
+            noteStopTimeout(error)
+            fail("bg-start", error)
+            if !restartRequired { await stopQuietly() }
         }
     }
 
@@ -260,11 +262,9 @@ final class LiveEngineHost: EngineHosting {
             engineMaybeLive = false
             log.record("lock-released", "engine stopped remaining=\(Int(min(tasks.remaining, 9999)))s")
         } catch {
-            if case let .bridge(code, _) = error as? EngineError, code == BridgeContract.Code.stopTimeout.rawValue {
-                restartRequired = true
-            }
+            noteStopTimeout(error)
             // engineMaybeLive stays true: the next background transition retries the stop.
-            fail("stop: \(error)")
+            fail("stop", error)
         }
         phase = .idle
         let elapsed = clock.now - t0
@@ -317,14 +317,23 @@ final class LiveEngineHost: EngineHosting {
             try await engine.apply(next)
             log.record("policy-applied", "hold=\(next.hold?.rawValue ?? "none")")
         } catch {
-            fail("policy: \(error)")
+            fail("policy", error)
         }
     }
 
-    private func fail(_ message: String) {
+    private func fail(_ operation: String, _ error: Error) {
+        let message = "\(operation): \(error)"
         log.record("failure", message)
         lastFailure = message
-        onFailure?(message)
+        onFailure?(error)
+    }
+
+    /// `stop_timeout` (from stop, or from a later start of a poisoned engine):
+    /// this process must not try again (DESIGN §4.3); the UI asks for a restart.
+    private func noteStopTimeout(_ error: Error) {
+        if case let .bridge(code, _) = error as? EngineError, code == BridgeContract.Code.stopTimeout.rawValue {
+            restartRequired = true
+        }
     }
 
     private func withTimeout(_ timeout: Duration, _ body: @escaping @Sendable () async throws -> Void) async throws {
