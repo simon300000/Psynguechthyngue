@@ -395,6 +395,7 @@ public actor LiveSyncEngine: SyncEngine {
                 deviceID: DeviceID(rawValue: dto.deviceID),
                 state: state,
                 transport: c?.connected == true ? c?.type : nil,
+                isLocalNetwork: c?.connected == true ? c?.isLocal : nil,
                 address: c?.connected == true ? c?.address : nil,
                 clientVersion: c?.connected == true ? c?.clientVersion : nil,
                 lastSeen: SyncthingDate.parseNonZero(stats[dto.deviceID]?.lastSeen),

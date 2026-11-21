@@ -86,10 +86,13 @@ enum Format {
         date.formatted(.relative(presentation: .named))
     }
 
-    static func connectionLabel(_ transport: String?) -> LocalizedStringKey {
-        guard let t = transport else { return "Connected" }
+    /// Upstream `type` is "tcp-client"/"quic-server"/"relay-client"…: it names
+    /// the protocol, not LAN vs WAN, so LAN comes from `isLocalNetwork`.
+    static func connectionLabel(_ conn: DeviceConnection?) -> LocalizedStringKey {
+        let t = conn?.transport ?? ""
         if t.contains("relay") { return "Connected via relay" }
-        if t.contains("lan") { return "Connected on local network" }
-        return "Connected over the internet"
+        if conn?.isLocalNetwork == true || t.contains("lan") { return "Connected on local network" }
+        if conn?.isLocalNetwork == false || t.contains("wan") { return "Connected over the internet" }
+        return "Connected"
     }
 }

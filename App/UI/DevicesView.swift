@@ -101,7 +101,7 @@ struct DeviceRow: View {
         if device.paused {
             Text("Paused")
         } else if conn?.state == .connected {
-            Text(Format.connectionLabel(conn?.transport))
+            Text(Format.connectionLabel(conn))
         } else if let seen = conn?.lastSeen {
             Text("Last seen \(Format.relative(seen))")
         } else {
@@ -140,7 +140,7 @@ struct DeviceDetailView: View {
                 Section("Status") {
                     LabeledContent("Connection") {
                         if device.paused { Text("Paused") }
-                        else if conn?.state == .connected { Text(Format.connectionLabel(conn?.transport)) }
+                        else if conn?.state == .connected { Text(Format.connectionLabel(conn)) }
                         else { Text("Offline") }
                     }
                     if let seen = conn?.lastSeen, conn?.state != .connected {
