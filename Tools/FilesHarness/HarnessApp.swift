@@ -1,3 +1,4 @@
+import FileProvider
 import PsySync
 import SwiftUI
 import os
@@ -28,7 +29,7 @@ struct FilesHarnessApp: App {
         }
         .onChange(of: phase) { _, newPhase in
             Task {
-                if newPhase == .active { await model.activate() } else if newPhase == .background { await model.deactivate() }
+                if newPhase == .active { await model.activate() } else if newPhase == .background { await model.backgrounded() }
             }
         }
     }
@@ -82,11 +83,63 @@ final class HarnessModel: ObservableObject {
             self.files = files
             await files.engineDidStart()
             status = "running"
+            await performEditIfRequested()
             logger.info("harness active root=\(layout.root.path(percentEncoded: false), privacy: .public)")
         } catch {
             status = "error: \(error)"
         }
         refresh()
+    }
+
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    private func argument(_ key: String) -> String? {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[key] as? String
+    }
+
+    /// Production behaviour: stop on background (I2). `-PsyHarnessKeepAlive 1`
+    /// keeps serving within a background task so the UI test can exercise
+    /// delegatedToApp from the Files app (as on iPad split view / Mac).
+    func backgrounded() async {
+        guard argument("PsyHarnessKeepAlive") == "1" else {
+            await deactivate()
+            return
+        }
+        logger.info("harness backgrounded; keep-alive")
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "files-harness") { [weak self] in
+            Task { @MainActor in
+                await self?.deactivate()
+                if let task = self?.backgroundTask { UIApplication.shared.endBackgroundTask(task) }
+            }
+        }
+    }
+
+    /// `-PsyHarnessEdit <path> -PsyHarnessEditText <text>`: rewrite an item through
+    /// its user-visible URL with NSFileCoordinator, like another app editing
+    /// the document → the system calls the extension's modifyItem(contents).
+    private func performEditIfRequested() async {
+        guard let layout, let path = argument("PsyHarnessEdit"), let text = argument("PsyHarnessEditText") else { return }
+        let folder = FolderID(rawValue: argument("PsyHarnessFolder") ?? "psy-test-wpc-files")
+        do {
+            let store = try FilesStore(url: layout.filesDatabase)
+            defer { store.close() }
+            guard let record = try store.record(folder: folder, path: RelativePath(rawValue: path)) else {
+                logger.error("edit: no such item \(path, privacy: .public)")
+                return
+            }
+            let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(folder.rawValue), displayName: "")
+            guard let manager = NSFileProviderManager(for: domain) else { return }
+            let url = try await manager.getUserVisibleURL(for: NSFileProviderItemIdentifier(record.itemID.rawValue))
+            var coordinationError: NSError?
+            var writeError: Error?
+            NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { target in
+                do { try Data(text.utf8).write(to: target) } catch { writeError = error }
+            }
+            logger.info("edit \(path, privacy: .public) via \(url.path(percentEncoded: false), privacy: .public) error=\(String(describing: coordinationError ?? writeError as NSError?), privacy: .public)")
+            log.append("edited \(path)")
+        } catch {
+            logger.error("edit failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     func deactivate() async {

@@ -15,15 +15,19 @@ project = Xcodeproj::Project.new(PATH)
 app = project.new_target(:application, "PsyFilesHarness", :ios, "17.0")
 ext = project.new_target(:app_extension, "PsyFileProvider", :ios, "17.0")
 
-def add_dir(project, target, dir, group_name)
+def add_dir(project, target, dir, group_name, exclude: nil)
   group = project.main_group.new_group(group_name, dir, :absolute)
   Dir.glob(File.join(dir, "**", "*.swift")).sort.each do |path|
+    next if exclude && path.include?(exclude)
     target.add_file_references([group.new_reference(path, :absolute)])
   end
   group
 end
 
-add_dir(project, app, HERE, "Harness")
+add_dir(project, app, HERE, "Harness", exclude: "/UITests/")
+ui = project.new_target(:ui_test_bundle, "FilesUITests", :ios, "17.0")
+add_dir(project, ui, File.join(HERE, "UITests"), "UITests")
+ui.add_dependency(app)
 add_dir(project, app, File.join(ROOT, "App/Files"), "AppFiles")
 fp = add_dir(project, ext, File.join(ROOT, "FileProvider"), "FileProvider")
 %w[en zh-Hans].each do |lang|
@@ -69,10 +73,17 @@ ext.build_configurations.each do |c|
     "APPLICATION_EXTENSION_API_ONLY" => "YES", "SKIP_INSTALL" => "YES",
     "LD_RUNPATH_SEARCH_PATHS" => "$(inherited) @executable_path/../../Frameworks")
 end
+ui.build_configurations.each do |c|
+  c.build_settings.merge!(common).merge!(
+    "PRODUCT_BUNDLE_IDENTIFIER" => "com.example.PsyFilesHarness.UITests", "PRODUCT_NAME" => "FilesUITests",
+    "GENERATE_INFOPLIST_FILE" => "YES", "TEST_TARGET_NAME" => "PsyFilesHarness", "SWIFT_STRICT_CONCURRENCY" => "minimal",
+    "CODE_SIGN_ENTITLEMENTS" => "")
+end
 project.save
 scheme = Xcodeproj::XCScheme.new
 scheme.add_build_target(app, true)
 scheme.add_build_target(ext, false)
+scheme.add_test_target(ui)
 scheme.set_launch_target(app)
 scheme.save_as(PATH, "PsyFilesHarness", true)
 puts "Generated #{PATH}"

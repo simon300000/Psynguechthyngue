@@ -1,0 +1,139 @@
+import XCTest
+
+/// WP-C acceptance in the Files app (DESIGN.md §11): browse, open via all three
+/// content paths, create, edit, rename, delete. Run in order by
+/// `Tools/FilesHarness/run-acceptance.sh`, which also prepares the peers and
+/// verifies the results on the official Syncthing instance between steps.
+@MainActor
+final class FilesAcceptanceUITests: XCTestCase {
+    let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")
+    let harness = XCUIApplication(bundleIdentifier: "com.example.PsyFilesHarness")
+
+    override func setUp() async throws {
+        continueAfterFailure = false
+    }
+
+    func dump(_ name: String) {
+        try? files.debugDescription.write(toFile: "/Users/user/SyncthingTest/wpc/ui-\(name).txt", atomically: true, encoding: .utf8)
+    }
+
+    func launchHarness(_ extra: [String] = []) {
+        let env = ProcessInfo.processInfo.environment
+        harness.launchArguments = [
+            "-PsyHarnessREST", env["PSY_HARNESS_REST"] ?? "http://127.0.0.1:8484",
+            "-PsyHarnessKey", env["PSY_HARNESS_KEY"] ?? "",
+            "-PsyHarnessKeepAlive", "1",
+        ] + extra
+        harness.launch()
+        XCTAssertTrue(harness.staticTexts["running"].waitForExistence(timeout: 20), "harness engine running")
+    }
+
+    func openFolder() {
+        files.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        if files.state == .notRunning { files.launch() } else { files.activate() }
+        let browse = files.tabBars.buttons["Browse"].firstMatch
+        XCTAssertTrue(browse.waitForExistence(timeout: 10))
+        browse.tap()
+        browse.tap()
+        let location = files.cells["DOC.sidebar.item.PsyFilesHarness"].firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 10))
+        location.tap()
+    }
+
+    func cell(_ name: String, _ ext: String? = "txt") -> XCUIElement {
+        files.cells[ext.map { "\(name), \($0)" } ?? "\(name), Folder"].firstMatch
+    }
+
+    /// Opens a file in Quick Look and waits for `text` to be rendered.
+    func open(_ name: String, expect text: String) {
+        let c = cell(name)
+        XCTAssertTrue(c.waitForExistence(timeout: 15), "\(name) listed")
+        c.tap()
+        let match = files.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", text, text)).firstMatch
+        let shown = match.waitForExistence(timeout: 60)
+        dump("open-\(name)")
+        XCTAssertTrue(shown, "contents of \(name) shown")
+        let done = files.buttons["Done"].firstMatch
+        if done.exists { done.tap() } else { files.navigationBars.buttons.firstMatch.tap() }
+    }
+
+    func contextMenu(_ element: XCUIElement, _ item: String) {
+        XCTAssertTrue(element.waitForExistence(timeout: 15))
+        element.press(forDuration: 1.2)
+        let button = files.buttons[item].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "menu item \(item)")
+        button.tap()
+    }
+
+    func test01Browse() {
+        launchHarness()
+        openFolder()
+        for (name, ext) in [("hello", "txt"), ("remote-only", "txt"), ("fetched-offline", "txt"), ("docs", nil)] {
+            XCTAssertTrue(cell(name, ext).waitForExistence(timeout: 15), "\(name) listed")
+        }
+        dump("browse")
+    }
+
+    /// remote-only.txt is not local (on-demand) and the App engine runs → delegatedToApp.
+    func test02OpenDelegated() {
+        launchHarness()
+        openFolder()
+        open("remote-only", expect: "opened through delegatedToApp")
+    }
+
+    /// hello.txt was made local by the script beforehand → localClone.
+    func test03OpenLocal() {
+        openFolder()
+        open("hello", expect: "hello from the official instance")
+    }
+
+    func test04CreateFolderAndDuplicate() {
+        launchHarness()
+        openFolder()
+        contextMenu(cell("hello"), "Duplicate")
+        XCTAssertTrue(cell("hello 2").waitForExistence(timeout: 15))
+        // New folder via the "More" menu.
+        files.buttons["OverflowBarButtonItem"].firstMatch.tap()
+        let newFolder = files.buttons["New Folder"].firstMatch
+        XCTAssertTrue(newFolder.waitForExistence(timeout: 5))
+        newFolder.tap()
+        files.typeText("made-in-files\n")
+        XCTAssertTrue(cell("made-in-files", nil).waitForExistence(timeout: 15))
+        dump("created")
+    }
+
+    func test05Rename() {
+        launchHarness()
+        openFolder()
+        contextMenu(cell("hello 2"), "Rename")
+        files.typeText("renamed-in-files\n")
+        XCTAssertTrue(cell("renamed-in-files").waitForExistence(timeout: 15))
+        dump("renamed")
+    }
+
+    func test06Delete() {
+        launchHarness()
+        openFolder()
+        contextMenu(cell("remote-only"), "Delete")
+        let confirm = files.alerts.buttons["Delete"].firstMatch
+        if confirm.waitForExistence(timeout: 3) { confirm.tap() }
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: cell("remote-only"))
+        waitForExpectations(timeout: 15)
+        dump("deleted")
+    }
+
+    func test07EditThroughCoordinator() {
+        launchHarness(["-PsyHarnessEdit", "renamed-in-files.txt", "-PsyHarnessEditText", "edited through Files coordination\n"])
+        XCTAssertTrue(harness.staticTexts["edited renamed-in-files.txt"].waitForExistence(timeout: 20))
+        openFolder()
+        open("renamed-in-files", expect: "edited through Files coordination")
+    }
+
+    /// App not running (lock free) → restrictedFetch.
+    func test08OpenRestricted() {
+        harness.terminate()
+        openFolder()
+        open("fetched-offline", expect: "opened through restrictedFetch")
+    }
+}

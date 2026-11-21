@@ -63,6 +63,7 @@ final class SQLiteConnection {
 
     func scalarInt64(_ sql: String, _ bindings: [SQLiteValue] = []) throws -> Int64? {
         let statement = try prepare(sql)
+        defer { sqlite3_reset(statement.handle) }
         try statement.bind(bindings)
         guard try statement.step() == SQLITE_ROW, !statement.isNull(at: 0) else { return nil }
         return statement.int64(at: 0)
@@ -70,8 +71,16 @@ final class SQLiteConnection {
 
     func run(_ sql: String, _ bindings: [SQLiteValue] = []) throws {
         let statement = try prepare(sql)
+        defer { sqlite3_reset(statement.handle) }
         try statement.bind(bindings)
         while try statement.step() == SQLITE_ROW {}
+    }
+
+    /// Resets every cached statement so no read transaction (WAL snapshot)
+    /// stays open between calls — otherwise a later write from this
+    /// connection fails with SQLITE_BUSY_SNAPSHOT after another process wrote.
+    func resetStatements() {
+        for statement in statementCache.values { sqlite3_reset(statement.handle) }
     }
 
     var changes: Int { handle.map { Int(sqlite3_changes($0)) } ?? 0 }
@@ -80,9 +89,11 @@ final class SQLiteConnection {
         try execute("BEGIN IMMEDIATE")
         do {
             let value = try body()
+            resetStatements()
             try execute("COMMIT")
             return value
         } catch {
+            resetStatements()
             try? execute("ROLLBACK")
             throw error
         }

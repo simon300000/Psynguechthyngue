@@ -140,6 +140,22 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(throws: FilesStoreError.anchorExpired) { try store.reader(folder: f1).changes(since: 1, limit: 10) }
     }
 
+    /// Regression (found in the simulator): a read left a cached statement
+    /// active, pinning a WAL snapshot; the next write from that connection
+    /// failed with SQLITE_BUSY_SNAPSHOT (517) after the other process wrote.
+    @Test func secondConnectionWritesDoNotStaleFirstConnection() throws {
+        let dir = Fixtures.tempDir()
+        let app = try Fixtures.store(dir)
+        let ext = try FilesStore(url: dir.appending(path: "Files/files.sqlite"))
+        _ = try app.applyIndexBatch(f1, entries: [Fixtures.file("a")])
+        let a = try #require(try ext.record(folder: f1, path: RelativePath(rawValue: "a")))
+        _ = try ext.reader(folder: f1).children(of: FilesStore.rootItemID(f1), after: nil, limit: 1)
+        _ = try app.applyIndexBatch(f1, entries: [Fixtures.file("b")])
+        _ = try ext.post(f1, path: a.path, version: a.contentVersion)
+        try ext.append(f1, kind: .modified, path: a.path, previousPath: nil)
+        #expect(try app.open(limit: 10).count == 1)
+    }
+
     @Test func reopensAfterCorruption() throws {
         let dir = Fixtures.tempDir()
         let url = dir.appending(path: "Files/files.sqlite")

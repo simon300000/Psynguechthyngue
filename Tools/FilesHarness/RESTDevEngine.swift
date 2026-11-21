@@ -81,13 +81,10 @@ final class RESTDevEngine: SyncEngine, @unchecked Sendable {
     }
 
     private func eventLoop() async {
+        // Event ids are per subscription (per `events=` mask): always use the
+        // same mask. The first masked request creates the subscription, so no
+        // history is replayed.
         var since = 0
-        // Skip history.
-        if let latest = try? await json("GET", "rest/events", query: ["since": "0", "limit": "1", "timeout": "0"]) as? [[String: Any]],
-            let id = latest.last?["id"] as? Int
-        {
-            since = id
-        }
         while !Task.isCancelled {
             do {
                 let events = try await json(

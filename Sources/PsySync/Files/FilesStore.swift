@@ -155,7 +155,10 @@ public final class FilesStore: @unchecked Sendable {
     // MARK: Locking helpers
 
     func read<T>(_ body: (SQLiteConnection) throws -> T) throws -> T {
-        try lock.withLock { try body(connection) }
+        try lock.withLock {
+            defer { connection.resetStatements() }
+            return try body(connection)
+        }
     }
 
     func write<T>(_ body: (WriteContext) throws -> T) throws -> T {
