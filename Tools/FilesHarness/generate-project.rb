@@ -29,7 +29,17 @@ ui = project.new_target(:ui_test_bundle, "FilesUITests", :ios, "17.0")
 add_dir(project, ui, File.join(HERE, "UITests"), "UITests")
 ui.add_dependency(app)
 add_dir(project, app, File.join(ROOT, "App/Files"), "AppFiles")
+# WP-D's protocol implemented by App/Files/FilesLocationStatusProvider.swift.
+app.add_file_references([project.main_group.new_reference(File.join(ROOT, "App/UI/FilesLocationStatus.swift"), :absolute)])
 fp = add_dir(project, ext, File.join(ROOT, "FileProvider"), "FileProvider")
+# Real bridge (WP-A): Swift adapter + static xcframework in both targets.
+platform = project.main_group.new_group("Platform", File.join(ROOT, "Platform"), :absolute)
+adapter = platform.new_reference(File.join(ROOT, "Platform/PsyBridgeAdapter.swift"), :absolute)
+xcf = platform.new_reference(File.join(ROOT, "Artifacts/PsyBridge.xcframework"), :absolute)
+[app, ext].each do |t|
+  t.add_file_references([adapter])
+  t.frameworks_build_phase.add_file_reference(xcf)
+end
 %w[en zh-Hans].each do |lang|
   ref = fp.new_reference(File.join(ROOT, "FileProvider/Resources/#{lang}.lproj/Localizable.strings"), :absolute)
   ext.resources_build_phase.add_file_reference(ref)
@@ -57,7 +67,8 @@ common = {
   "IPHONEOS_DEPLOYMENT_TARGET" => "17.0", "TARGETED_DEVICE_FAMILY" => "1,2", "SWIFT_VERSION" => "6.0",
   "SWIFT_STRICT_CONCURRENCY" => "complete", "GENERATE_INFOPLIST_FILE" => "NO",
   "CODE_SIGN_STYLE" => "Manual", "CODE_SIGN_IDENTITY" => "-", "DEVELOPMENT_TEAM" => "",
-  "APP_GROUP_IDENTIFIER" => "group.com.example.PsyFilesHarness", "ENABLE_USER_SCRIPT_SANDBOXING" => "NO",
+  "APP_GROUP_IDENTIFIER" => "group.com.example.PsyFilesHarness",
+  "KEYCHAIN_ACCESS_GROUP" => "com.example.PsyFilesHarness.shared", "OTHER_LDFLAGS" => "$(inherited) -lresolv", "ENABLE_USER_SCRIPT_SANDBOXING" => "NO",
 }
 app.build_configurations.each do |c|
   c.build_settings.merge!(common).merge!(

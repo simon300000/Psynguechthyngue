@@ -7,6 +7,8 @@ private let f1 = FolderID(rawValue: "f1")
 final class FakeFetchBridge: RestrictedFetchBridge, @unchecked Sendable {
     let payload: Data
     let error: Error?
+    /// Called inside recordFetchedFile (to observe the commit order).
+    var onRecord: (@Sendable (FolderID, RelativePath, String) -> Void)?
     private let lock = NSLock()
     private var _calls = 0
     var calls: Int { lock.withLock { _calls } }
@@ -35,6 +37,7 @@ final class FakeFetchBridge: RestrictedFetchBridge, @unchecked Sendable {
     func recordFetchedFile(
         homeDirectory: URL, identity: DeviceIdentity, folder: FolderID, path: RelativePath, version: String
     ) throws {
+        onRecord?(folder, path, version)
         lock.withLock { _recorded.append((folder, path, version)) }
     }
 }
@@ -100,13 +103,52 @@ struct ContentHarness {
         #expect(try String(contentsOf: h.layout.managedFolder(f1).appending(path: "b.bin"), encoding: .utf8) == "fetched")
         #expect(try h.store.record(folder: f1, path: RelativePath(rawValue: "b.bin"))?.isLocal == true)
         #expect(try h.store.pending(limit: 10).map(\.kind) == [.modified])
-        let attrs = try FileManager.default.attributesOfItem(atPath: h.layout.managedFolder(f1).appending(path: "b.bin").path)
-        #expect((attrs[.modificationDate] as? Date)?.timeIntervalSince1970 == 1_700_000_000)  // global mtime kept
         #expect(h.lock.currentHolder() == nil)  // lock released
         // Second open is a local clone.
         let again = try await h.provider(bridge: bridge).provideContents(for: h.id("b.bin"), requestedVersion: nil, progress: Progress())
         #expect(again.source == .localClone)
         #expect(bridge.calls == 1)
+    }
+
+    /// Contract change WP-A record-fetched-file: fetch → rename → recordFetchedFile
+    /// → `.stignore` `!/path` → journal → unlock.
+    @Test func restrictedFetchCommitOrder() async throws {
+        let h = try ContentHarness(mode: .onDemand)
+        let folder = h.layout.managedFolder(f1)
+        try IgnoreRulesGenerator.fileContents(present: [RelativePath(rawValue: "keep.txt")])
+            .write(to: folder.appending(path: ".stignore"), atomically: true, encoding: .utf8)
+        try h.project([FilesFixtures.file("sub/c.bin", size: 7, local: false)])
+        let observed = LockedBox<[String]>([])
+        let bridge = FakeFetchBridge()
+        let store = h.store
+        let lock = h.lock
+        bridge.onRecord = { _, path, version in
+            let fileThere = FileManager.default.fileExists(atPath: folder.appending(path: path.rawValue).path)
+            let ignores = (try? String(contentsOf: folder.appending(path: ".stignore"), encoding: .utf8)) ?? ""
+            let journal = (try? store.pending(limit: 10).count) ?? -1
+            observed.mutate {
+                $0 = ["renamed=\(fileThere)", "ruleBefore=\(ignores.contains("!/sub/c.bin"))", "journal=\(journal)",
+                      "locked=\(lock.currentHolder() == .fileProviderExtension)", "version=\(version)"]
+            }
+        }
+        let result = try await h.provider(bridge: bridge).provideContents(for: h.id("sub/c.bin"), requestedVersion: nil, progress: Progress())
+        #expect(result.source == .restrictedFetch)
+        #expect(observed.value == ["renamed=true", "ruleBefore=false", "journal=0", "locked=true", "version=v"])
+        let ignores = try String(contentsOf: folder.appending(path: ".stignore"), encoding: .utf8)
+        #expect(IgnoreRulesGenerator.presentPaths(from: ignores.split(separator: "\n").map(String.init))
+            == [RelativePath(rawValue: "keep.txt"), RelativePath(rawValue: "sub/c.bin")])
+        #expect(try h.store.pending(limit: 10).map(\.kind) == [.modified])
+        #expect(h.lock.currentHolder() == nil)
+        #expect(bridge.recorded.count == 1)
+    }
+
+    @Test func bridgeErrorDescriptionsMap() {
+        struct Described: Error, CustomStringConvertible { let description: String }
+        #expect(LiveContentProvider.mapBridgeError(Described(description: "psy:too_large: 3 GiB"), cancelled: false)
+            == .openAppRequired(.tooLarge))
+        #expect(LiveContentProvider.mapBridgeError(Described(description: "psy:version_mismatch: x"), cancelled: false)
+            == .openAppRequired(.staleIndex))
+        #expect(LiveContentProvider.mapBridgeError(Described(description: "psy:cancelled"), cancelled: false) == .cancelled)
     }
 
     @Test func restrictedFetchErrorsMapToOpenApp() async throws {

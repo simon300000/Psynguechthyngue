@@ -186,10 +186,33 @@ def setup(appgroup_root):
     print("connected:", conns.get(official_id, {}).get("connected"), "guard:", guard_ok())
 
 
+def setup_live(sim_id):
+    """Real-bridge mode: the simulator App runs LiveSyncEngine itself (device
+    psy-test-wpc-sim); the official instance shares psy-test-wpc-files with it."""
+    os.makedirs(OFFICIAL_DIR, exist_ok=True)
+    if not os.path.exists(BASELINE):
+        with open(BASELINE, "w") as f:
+            json.dump(official_ids(), f)
+    official_id = off("GET", "/rest/system/status")["myID"]
+    off("PUT", "/rest/config/devices/" + sim_id, body={
+        "deviceID": sim_id, "name": "psy-test-wpc-sim", "addresses": ["dynamic"], "autoAcceptFolders": False})
+    seed = {"hello.txt": "hello from the official instance\n",
+            "fetched-offline.txt": "opened through the real restricted fetch\n",
+            "docs/report.txt": "nested report\n"}
+    for rel, text in seed.items():
+        p = os.path.join(OFFICIAL_DIR, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as f:
+            f.write(text)
+    off("PUT", "/rest/config/folders/" + FOLDER, body={
+        "id": FOLDER, "label": FOLDER, "path": OFFICIAL_DIR, "type": "sendreceive",
+        "devices": [{"deviceID": official_id}, {"deviceID": sim_id}],
+        "fsWatcherEnabled": True, "fsWatcherDelayS": 1, "rescanIntervalS": 60})
+    print(official_id)
+
+
 def status():
-    s = phone("GET", "/rest/db/status", {"folder": FOLDER})
     o = off("GET", "/rest/db/status", {"folder": FOLDER})
-    print("phone:", s.get("state"), "local", s.get("localFiles"), "global", s.get("globalFiles"), "need", s.get("needFiles"))
     print("official:", o.get("state"), "local", o.get("localFiles"), "global", o.get("globalFiles"))
     print("official files:", sorted(
         os.path.relpath(os.path.join(d, n), OFFICIAL_DIR) for d, _, ns in os.walk(OFFICIAL_DIR) for n in ns
@@ -246,6 +269,8 @@ if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "setup":
         setup(sys.argv[2])
+    elif cmd == "setup-live":
+        setup_live(sys.argv[2])
     elif cmd == "peer-setup":
         peer_setup()
     elif cmd == "peer-status":

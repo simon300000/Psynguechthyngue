@@ -45,6 +45,7 @@ final class HarnessModel: ObservableObject {
 
     private var layout: AppGroupLayout?
     private var engine: RESTDevEngine?
+    private var liveEngine: LiveSyncEngine?
     private var files: FilesIntegration?
     private var lease: (any EngineLockLease)?
     private let logger = Logger(subsystem: FilesLog.subsystem, category: "harness")
@@ -64,33 +65,71 @@ final class HarnessModel: ObservableObject {
             let layout = try AppGroupResolver.layout()
             self.layout = layout
             try FileManager.default.createDirectory(at: layout.engineHome, withIntermediateDirectories: true)
-            guard let rest = UserDefaults.standard.string(forKey: "persisted.PsyHarnessREST").flatMap(URL.init(string:)),
+            if let rest = UserDefaults.standard.string(forKey: "persisted.PsyHarnessREST").flatMap(URL.init(string:)),
                 let key = UserDefaults.standard.string(forKey: "persisted.PsyHarnessKey")
-            else {
-                status = "not configured"
-                return
+            {
+                try await activateREST(layout: layout, rest: rest, key: key)
+            } else {
+                try await activateLive(layout: layout)
             }
-            status = "acquiring lock"
-            guard let lease = await FlockEngineLock(layout: layout).acquire(owner: .app, timeout: .seconds(5)) else {
-                status = "lock unavailable"
-                return
-            }
-            self.lease = lease
-            let engine = RESTDevEngine(baseURL: rest, apiKey: key, layout: layout)
-            try await engine.start(context: .foreground)
-            let files = FilesIntegration(engine: engine, layout: layout)
-            self.engine = engine
-            self.files = files
-            await files.engineDidStart()
             status = "running"
             await performEditIfRequested()
             logger.info("harness active root=\(layout.root.path(percentEncoded: false), privacy: .public)")
         } catch {
             status = "error: \(error)"
+            logger.error("harness activate failed: \(String(describing: error), privacy: .public)")
         }
         refresh()
     }
 
+    /// Stand-in engine over an external Syncthing (pre-integration mode).
+    private func activateREST(layout: AppGroupLayout, rest: URL, key: String) async throws {
+        status = "acquiring lock"
+        guard let lease = await FlockEngineLock(layout: layout).acquire(owner: .app, timeout: .seconds(5)) else {
+            throw EngineError.lockUnavailable
+        }
+        self.lease = lease
+        let engine = RESTDevEngine(baseURL: rest, apiKey: key, layout: layout)
+        try await engine.start(context: .foreground)
+        let files = FilesIntegration(engine: engine, layout: layout)
+        self.engine = engine
+        self.files = files
+        await files.engineDidStart()
+    }
+
+    /// Real engine: WP-B LiveSyncEngine over WP-A PsyBridgeAdapter, wired the
+    /// way the App does it (FilesIntegration.attach()).
+    /// `-PsyHarnessPeer <deviceID> -PsyHarnessPeerAddress tcp://127.0.0.1:22000
+    ///  -PsyHarnessFolder <folderID>` adds the peer and an on-demand managed folder.
+    private func activateLive(layout: AppGroupLayout) async throws {
+        let group = Bundle.main.object(forInfoDictionaryKey: "PsyKeychainAccessGroup") as? String
+        let engine = LiveSyncEngine(
+            bridge: PsyBridgeAdapter(logLevel: "warn"), lock: FlockEngineLock(layout: layout),
+            identityStore: KeychainIdentityStore(accessGroup: group),
+            configuration: LiveSyncEngineConfiguration(layout: layout, deviceName: "psy-test-wpc-sim"))
+        let files = FilesIntegration(engine: engine, layout: layout)
+        files.attach()
+        self.liveEngine = engine
+        self.files = files
+        status = "starting engine"
+        try await engine.start(context: .foreground)
+        if let id = await engine.localDeviceID {
+            try? id.rawValue.write(to: layout.root.appending(path: "harness-device-id.txt"), atomically: true, encoding: .utf8)
+        }
+        if let peer = argument("PsyHarnessPeer") {
+            let device = DeviceID(rawValue: peer)
+            if try await !engine.devices().contains(where: { $0.id == device }) {
+                try await engine.addDevice(Device(id: device, name: "psy-test-wpc-official",
+                                                  addresses: [argument("PsyHarnessPeerAddress") ?? "dynamic"]))
+            }
+            if let folderID = argument("PsyHarnessFolder").map(FolderID.init(rawValue:)),
+                try await !engine.folders().contains(where: { $0.id == folderID })
+            {
+                try await engine.addFolder(Folder(id: folderID, label: "Test Files", contentMode: .onDemand, devices: [device]))
+            }
+        }
+        await files.foldersChanged()
+    }
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     private func argument(_ key: String) -> String? {
@@ -145,6 +184,8 @@ final class HarnessModel: ObservableObject {
     func deactivate() async {
         await files?.engineWillStop()
         try? await engine?.stop(deadline: .seconds(5))
+        try? await liveEngine?.stop(deadline: .seconds(10))
+        liveEngine = nil
         lease?.release()
         files = nil
         engine = nil
