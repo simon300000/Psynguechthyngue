@@ -1,4 +1,4 @@
-#if DEBUG && !PSY_RESTRICTED_FETCH
+#if DEBUG
 import Foundation
 import PsySync
 
@@ -45,7 +45,19 @@ struct DevRestrictedFetchBridge: RestrictedFetchBridge {
             progress(done, total)
         }
         try output.synchronize()
+        // Like FetchFile: carry the source mtime so the App's rescan matches.
+        if let mtime = (try? FileManager.default.attributesOfItem(atPath: file.path(percentEncoded: false)))?[.modificationDate] {
+            try? FileManager.default.setAttributes([.modificationDate: mtime], ofItemAtPath: destination.path(percentEncoded: false))
+        }
         return RestrictedFetchResult(stagedFile: destination, size: done, version: "dev", servedBy: [identity.deviceID])
+    }
+
+    /// No engine database to update in the dev stand-in; records the call so
+    /// the harness log shows the commit order.
+    func recordFetchedFile(
+        homeDirectory: URL, identity: DeviceIdentity, folder: FolderID, path: RelativePath, version: String
+    ) throws {
+        NSLog("DevRestrictedFetchBridge.recordFetchedFile %@ %@", folder.rawValue, path.rawValue)
     }
 }
 #endif

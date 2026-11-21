@@ -163,4 +163,26 @@ final class FilesAcceptanceUITests: XCTestCase {
         launchHarness()
         sleep(8)
     }
+
+    /// Real bridge (integration): the App's engine is stopped gracefully by
+    /// backgrounding, then terminated; Files opens a never-downloaded file →
+    /// restrictedFetch through PsyBridgeAdapter.FetchFile against the peer.
+    func test11OpenRealRestricted() {
+        files.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        files.launch()  // backgrounds the harness → engine.stop + lock released
+        sleep(8)
+        harness.terminate()
+        openFolder()
+        open("fetched-offline", expect: "opened through the real restricted fetch")
+    }
+
+    /// Larger file through the real restricted fetch (RSS measurement run).
+    func test12OpenRealRestrictedLarge() {
+        files.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        files.launch()
+        sleep(8)
+        harness.terminate()
+        openFolder()
+        open("large-offline", expect: "LARGE-START")
+    }
 }

@@ -262,28 +262,51 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
                     isCancelled: { progress.isCancelled || cancelFlag.isSet })
             }
         } catch {
+            log.error("restricted fetch failed: \(String(describing: error), privacy: .public)")
             throw Self.mapBridgeError(error, cancelled: progress.isCancelled || cancelFlag.isSet)
         }
 
+        // Commit order (contract change WP-A record-fetched-file), all under the lock:
+        // 1 fetch (done) → 2 rename into folder → 3 recordFetchedFile →
+        // 4 `.stignore` `!/path` (on-demand) → 5 journal → (6 unlock in defer).
         let destination = try containment.url(for: record.path)
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         if rename(result.stagedFile.path(percentEncoded: false), destination.path(percentEncoded: false)) != 0 {
             throw FilesContentError.requestFailed("rename errno \(errno)")
         }
-        // Keep the global mtime: otherwise the App's rescan sees a metadata
-        // change and announces a new version (observed with Syncthing 2.1.6).
-        if record.modified.timeIntervalSince1970 > 0 {
-            try? FileManager.default.setAttributes(
-                [.modificationDate: record.modified], ofItemAtPath: destination.path(percentEncoded: false))
+        do {
+            let version = result.version
+            try await BlockingThread.run {
+                try fetchBridge.recordFetchedFile(
+                    homeDirectory: home, identity: identity, folder: folder, path: record.path, version: version)
+            }
+        } catch {
+            // Fallback = previous behaviour: the App's scan may mint an extra
+            // metadata-only version. Harmless, so keep the fetched file.
+            log.error("recordFetchedFile failed: \(String(describing: error), privacy: .public)")
+        }
+        if try store.folderInfo(folder)?.contentMode == .onDemand {
+            try Self.addPresentRule(record.path, folderRoot: layout.managedFolder(folder))
         }
         try store.markLocal(record.itemID, isLocal: true)
-        // The App un-ignores (on-demand) and rescans on next start; blocks
-        // equal the global version, so no new version is created.
         try store.append(folder, kind: .modified, path: record.path, previousPath: nil)
         DarwinNotifier.post(DarwinNotification.filesRequestPosted)
         var fresh = try reader.item(record.itemID) ?? record
         fresh.isLocal = true
         return (try cloneToTemporary(destination), fresh, .restrictedFetch)
+    }
+
+    /// Adds `!/path` to a managed on-demand `.stignore` (same generator the
+    /// engine uses; the engine reads rules back from upstream, so they stay
+    /// consistent). Unmanaged/user-written files are left alone.
+    static func addPresentRule(_ path: RelativePath, folderRoot: URL) throws {
+        let url = folderRoot.appending(path: ".stignore")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard IgnoreRulesGenerator.isManaged(lines) else { return }
+        var present = IgnoreRulesGenerator.presentPaths(from: lines)
+        guard present.insert(path).inserted else { return }
+        try Data(IgnoreRulesGenerator.fileContents(present: present).utf8).write(to: url, options: .atomic)
     }
 
     static func mapBridgeError(_ error: Error, cancelled: Bool) -> FilesContentError {
@@ -293,7 +316,10 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         if case EngineError.bridge(let raw, _) = error {
             code = BridgeContract.Code(rawValue: raw)
         } else {
-            code = BridgeContract.parse(String(describing: (error as NSError).localizedDescription)).code
+            // PsyBridgeError describes itself as "psy:<code>: <detail>"; raw
+            // gomobile NSErrors carry it in localizedDescription.
+            code = BridgeContract.parse(String(describing: error)).code
+                ?? BridgeContract.parse((error as NSError).localizedDescription).code
         }
         switch code {
         case .cancelled: return .cancelled
