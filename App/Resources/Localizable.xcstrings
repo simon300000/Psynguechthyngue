@@ -17,6 +17,22 @@
         }
       }
     },
+    "%@ (+%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (+%2$lld)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@（另有 %2$lld 个）"
+          }
+        }
+      }
+    },
     "%@ left · %lld items": {
       "localizations": {
         "en": {

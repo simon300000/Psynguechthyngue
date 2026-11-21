@@ -113,6 +113,7 @@ struct FolderDetailView: View {
                         .accessibilityIdentifier("folder.remove")
                 }
             }
+            .glassScreen()
             .navigationTitle(folder.label)
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $issue) { IssueDetailView(issue: $0) }
@@ -159,6 +160,7 @@ struct IgnoreRulesEditor: View {
                 Text("One pattern per line, e.g. *.tmp or /Archive. Matching files are not synced. Lines starting with // are comments.")
             }
         }
+        .glassScreen()
         .navigationTitle("Ignore Patterns")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

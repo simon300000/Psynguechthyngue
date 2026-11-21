@@ -28,7 +28,7 @@ final class BackgroundScheduler {
         Bundle.main.object(forInfoDictionaryKey: "PsyProcessingTaskIdentifier") as? String
     }
     /// Prefix for BGContinuedProcessingTask identifiers ("<bundle>.continued");
-    /// Info.plist permits "<prefix>.*" (iOS 26+).
+    /// Info.plist permits "<prefix>.*".
     nonisolated static var continuedPrefix: String? {
         Bundle.main.object(forInfoDictionaryKey: "PsyContinuedTaskPrefix") as? String
     }
@@ -50,7 +50,7 @@ final class BackgroundScheduler {
             let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: Self.launchHandler(self, kind: .processing))
             log.record("bgtask-register", "\(id) ok=\(ok)")
         }
-        if #available(iOS 26.0, *), let prefix = Self.continuedPrefix {
+        if let prefix = Self.continuedPrefix {
             let pattern = prefix + ".*"
             let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: pattern, using: .main,
                                                      launchHandler: Self.continuedLaunchHandler(self))
@@ -58,12 +58,12 @@ final class BackgroundScheduler {
         }
     }
 
-    // MARK: Continued processing (iOS 26+)
+    // MARK: Continued processing
 
-    /// Whether "Keep syncing in background" can be offered (iOS 26+, not on Mac).
+    /// Whether "Keep syncing in background" can be offered (not on Mac).
     var canContinueInBackground: Bool {
         if simulateContinuedProcessing { return true }
-        guard #available(iOS 26.0, *), !ProcessInfo.processInfo.isiOSAppOnMac, Self.continuedPrefix != nil else { return false }
+        guard !ProcessInfo.processInfo.isiOSAppOnMac, Self.continuedPrefix != nil else { return false }
         return true
     }
 
@@ -79,7 +79,7 @@ final class BackgroundScheduler {
             Task { @MainActor in await self.runContinued(progress: progress, isExpired: { false }, finish: { _ in }) }
             return true
         }
-        guard #available(iOS 26.0, *), let prefix = Self.continuedPrefix else { return false }
+        guard let prefix = Self.continuedPrefix else { return false }
         let id = "\(prefix).sync-\(UUID().uuidString.prefix(8))"
         let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: subtitle)
         request.strategy = .fail
@@ -93,7 +93,6 @@ final class BackgroundScheduler {
         }
     }
 
-    @available(iOS 26.0, *)
     private nonisolated static func continuedLaunchHandler(_ scheduler: BackgroundScheduler) -> @Sendable (BGTask) -> Void {
         { [weak scheduler] task in
             guard let task = task as? BGContinuedProcessingTask else { return }
@@ -102,7 +101,6 @@ final class BackgroundScheduler {
         }
     }
 
-    @available(iOS 26.0, *)
     private func runContinued(task: BGContinuedProcessingTask) {
         log.record("bgtask-launched", "\(task.identifier) kind=continuedProcessing")
         let expired = ExpiryFlag()
@@ -173,16 +171,16 @@ final class BackgroundScheduler {
         CFNotificationCenterAddObserver(center, observer, { _, observer, _, _, _ in
             guard let observer else { return }
             let scheduler = Unmanaged<BackgroundScheduler>.fromOpaque(observer).takeUnretainedValue()
-            nonisolated(unsafe) let s = scheduler
-            Task { @MainActor in s.debugRun(kind: .appRefresh) }
+            Task { @MainActor in scheduler.debugRun(kind: .appRefresh) }
         }, Self.debugRefreshNotification as CFString, nil, .deliverImmediately)
     }
 
     private func debugRun(kind: BackgroundTaskKind) {
         log.record("bgtask-launched", "debug-trigger kind=\(kind.rawValue)")
         let runner = UIKitBackgroundTaskRunner()
-        var token = 0
-        token = runner.begin(name: "psy.debug.bgtask") { runner.end(token) }
+        let box = TokenBox()
+        box.token = runner.begin(name: "psy.debug.bgtask") { runner.end(box.token) }
+        let token = box.token
         Task { @MainActor in
             let ok = await self.host.runBackgroundTask(kind: kind)
             self.defaults.set(Date(), forKey: Self.lastRunKey)
@@ -246,4 +244,9 @@ private final class ExpiryFlag: @unchecked Sendable {
     private var value = false
     func set() { lock.lock(); value = true; lock.unlock() }
     var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
+}
+
+@MainActor
+private final class TokenBox {
+    var token = 0
 }

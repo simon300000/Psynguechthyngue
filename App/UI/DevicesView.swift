@@ -15,22 +15,44 @@ struct DevicesView: View {
                         Text("Add the computer or phone you want to sync with.")
                     } actions: {
                         Button("Add Device") { adding = true }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .accessibilityIdentifier("devices.empty.add")
                     }
                 } else {
-                    List(model.devices) { device in
-                        NavigationLink(value: device.id) { DeviceRow(device: device) }
-                            .accessibilityIdentifier("device.row.\(device.id.short)")
+                    ScrollView {
+                        GlassEffectContainer(spacing: 4) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], spacing: 12) {
+                                ForEach(model.devices) { device in
+                                    NavigationLink(value: device.id) {
+                                        DeviceRow(device: device)
+                                            .padding(.horizontal, 18).padding(.vertical, 14)
+                                            .glassCard(cornerRadius: GlassMetrics.row, interactive: true)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("device.row.\(device.id.short)")
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 96)   // room for the floating button
                     }
                 }
             }
+            .glassScreen()
             .navigationTitle("Devices")
             .navigationDestination(for: DeviceID.self) { DeviceDetailView(deviceID: $0) }
+            .overlay(alignment: .bottomTrailing) {
+                if !model.devices.isEmpty {
+                    FloatingActionButton(title: "Add Device", systemImage: "plus", identifier: "devices.add") { adding = true }
+                }
+            }
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { adding = true } label: { Label("Add Device", systemImage: "plus") }
-                        .accessibilityIdentifier("devices.add")
+                if model.devices.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { adding = true } label: { Label("Add Device", systemImage: "plus") }
+                            .accessibilityIdentifier("devices.add")
+                    }
                 }
             }
             .sheet(isPresented: $adding) { AddDeviceView() }
@@ -44,19 +66,32 @@ struct DeviceRow: View {
 
     var body: some View {
         let conn = model.connections[device.id]
-        HStack(spacing: 12) {
-            Circle().fill(color(conn)).frame(width: 10, height: 10).accessibilityHidden(true)
+        HStack(spacing: 14) {
+            Image(systemName: icon(conn))
+                .font(.title2)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(color(conn))
+                .frame(width: 34)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name.nilIfEmpty ?? device.id.short).font(.headline)
                 subtitle(conn).font(.subheadline).foregroundStyle(.secondary)
             }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
         }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private func icon(_ conn: DeviceConnection?) -> String {
+        if device.paused { return "pause.circle.fill" }
+        return conn?.state == .connected ? "checkmark.circle.fill" : "moon.zzz.fill"
     }
 
     private func color(_ conn: DeviceConnection?) -> Color {
         if device.paused { return .secondary }
-        return conn?.state == .connected ? .green : .gray
+        return conn?.state == .connected ? .green : .orange
     }
 
     @ViewBuilder private func subtitle(_ conn: DeviceConnection?) -> some View {
@@ -130,6 +165,7 @@ struct DeviceDetailView: View {
                         .accessibilityIdentifier("device.remove")
                 }
             }
+            .glassScreen()
             .navigationTitle(device.name.nilIfEmpty ?? device.id.short)
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: FolderID.self) { FolderDetailView(folderID: $0) }

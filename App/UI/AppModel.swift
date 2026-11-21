@@ -49,7 +49,7 @@ final class AppModel {
     /// Engine-owned settings (Settings ▸ Advanced); nil while the engine is not running.
     private(set) var engineOptions: EngineOptions?
     private(set) var syncthingVersion = ""
-    /// BG continued processing (iOS 26+), set by AppEnvironment.
+    /// BG continued processing, set by AppEnvironment.
     @ObservationIgnored var scheduler: BackgroundScheduler?
     private(set) var filesLocation: FilesLocationState = .unknown
     @ObservationIgnored var filesStatus: (any FilesLocationStatusProviding)?
@@ -210,7 +210,7 @@ final class AppModel {
         return ok
     }
 
-    // MARK: Continue in background (iOS 26+)
+    // MARK: Continue in background
 
     var canContinueInBackground: Bool { scheduler?.canContinueInBackground ?? false }
     var isContinuingInBackground: Bool { host.continuedProcessing }

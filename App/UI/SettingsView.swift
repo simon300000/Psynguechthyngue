@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppSettings.self) private var settings
     @State private var confirmReset = false
 
@@ -79,6 +80,9 @@ struct SettingsView: View {
                     }
                 }
             }
+            .contentMargins(.horizontal, sizeClass == .regular ? 80 : nil, for: .scrollContent)
+            .environment(\.defaultMinListRowHeight, 48)
+            .glassScreen()
             .navigationTitle("Settings")
             .task { await model.refreshFilesLocation() }
             .confirmationDialog("Reset devices and folders?", isPresented: $confirmReset, titleVisibility: .visible) {
@@ -109,6 +113,7 @@ struct LicensesView: View {
                 Section { Text(text).font(.caption.monospaced()) }
             }
         }
+        .glassScreen()
         .navigationTitle("Licenses")
     }
 }

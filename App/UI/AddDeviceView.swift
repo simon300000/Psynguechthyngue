@@ -148,7 +148,8 @@ private struct QRScannerRepresentable: UIViewControllerRepresentable {
     final class ScannerController: UIViewController, @preconcurrency AVCaptureMetadataOutputObjectsDelegate {
         var onPayload: ((String) -> Bool)?
         var onDenied: (() -> Void)?
-        private let session = AVCaptureSession()
+        // AVCaptureSession is thread-safe; startRunning must happen off the main thread.
+        nonisolated(unsafe) private let session = AVCaptureSession()
         private var preview: AVCaptureVideoPreviewLayer?
         private var finished = false
 

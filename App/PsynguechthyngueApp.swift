@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 }
             }
             center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { Task { await env.host.handle(.memoryWarning) } }
+                MainActor.assumeIsolated { _ = Task { await env.host.handle(.memoryWarning) } }
             }
             // Mac (Designed for iPad): closing the last window terminates the app ~5 s
             // later without a background transition. Stop the engine gracefully now.
@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 }
             }
             center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { Task { await env.host.handle(.willTerminate) } }
+                MainActor.assumeIsolated { _ = Task { await env.host.handle(.willTerminate) } }
             }
         }
         return true
