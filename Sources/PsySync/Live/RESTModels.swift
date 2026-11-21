@@ -125,6 +125,12 @@ struct FolderConfigDTO: Codable, Hashable {
 struct OptionsDTO: Codable, Hashable {
     var maxSendKbps: Int
     var maxRecvKbps: Int
+    /// Read-only here: written via `ListenOptionsDTO` (nil = omitted on PATCH).
+    var listenAddresses: [String]? = nil
+}
+
+struct ListenOptionsDTO: Codable, Hashable {
+    var listenAddresses: [String]
 }
 
 struct ConnectionDTO: Decodable {

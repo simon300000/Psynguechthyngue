@@ -40,6 +40,8 @@ struct LiveEngineAppState: Codable, Hashable, Sendable {
     /// device the user paused). Persisted for crash recovery.
     var policyPausedDevices: Set<String> = []
     var decision: PolicyDecision = .run
+    /// Sync listen port chosen instead of 22000 (ListenAddressPlanner); nil = default.
+    var listenPort: Int?
 
     static let fileName = "psy-app-state.json"
 
