@@ -61,6 +61,9 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
         let context = try context()
         if containerItemIdentifier == .workingSet { return WorkingSetEnumerator(context: context) }
         let record = try context.record(containerItemIdentifier)
+        #if DEBUG
+        FootprintProbe.file?.append("enumerator folder=\(context.folder.rawValue) path=/\(record.path) dir=\(record.isDirectory) pinned=\(record.isPinned)")
+        #endif
         return record.isDirectory
             ? DirectoryEnumerator(context: context, parent: record.itemID)
             : SingleItemEnumerator(context: context, id: record.itemID)
@@ -85,9 +88,15 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 let result = try await context.content.provideContents(
                     for: id, requestedVersion: versionData, progress: progressBox.value)
                 log.info("fetchContents id=\(itemIdentifier.rawValue, privacy: .public) source=\(String(describing: result.source), privacy: .public)")
+                #if DEBUG
+                FootprintProbe.file?.append("fetchContents source=\(result.source) size=\(result.record.size)")
+                #endif
                 completion.value(result.url, context.item(for: result.record), nil)
             } catch {
                 log.error("fetchContents id=\(itemIdentifier.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                #if DEBUG
+                FootprintProbe.file?.append("fetchContents failed: \(error)")
+                #endif
                 completion.value(nil, nil, ErrorMapping.map(error))
             }
         }

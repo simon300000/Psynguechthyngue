@@ -76,6 +76,9 @@ enum RestrictedFetchServices {
         let bridgeLog = Logger(subsystem: FilesLog.subsystem, category: "bridge")
         let sink: PsyBridgeLogHandler = { lvl, message in
             bridgeLog.log("[\(lvl, privacy: .public)] \(message, privacy: .public)")
+            #if DEBUG
+            FootprintProbe.file?.append("bridge[\(lvl)] \(message)")
+            #endif
         }
         #if DEBUG
         // "trace": one line per fetch phase with footprint=/footprintPeak= (WP-A).
@@ -116,8 +119,17 @@ enum FootprintProbe {
                       availableMiB: Double(os_proc_available_memory()) / 1_048_576)
     }
 
+    #if DEBUG
+    /// Device acceptance runs: `<AppGroup>/Diagnostics/extension.log`.
+    static let file = DiagnosticsFileLog.make(name: "extension")
+    #endif
+
     static func log(_ phase: String) {
         guard let s = sample() else { return }
+        #if DEBUG
+        file?.append(String(format: "phase=%@ footprint=%.1fMiB peak=%.1fMiB available=%.1fMiB",
+                            phase, s.footprintMiB, s.peakMiB, s.availableMiB))
+        #endif
         Logger(subsystem: "app.psynguechthyngue.files", category: "footprint")
             .log("phase=\(phase, privacy: .public) footprint=\(s.footprintMiB, format: .fixed(precision: 1))MiB peak=\(s.peakMiB, format: .fixed(precision: 1))MiB available=\(s.availableMiB, format: .fixed(precision: 1))MiB limit≈\(s.footprintMiB + s.availableMiB, format: .fixed(precision: 0))MiB")
     }

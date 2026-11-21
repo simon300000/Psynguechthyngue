@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import PsySync
 
 /// Lifecycle trace used to verify the background drain sequence
 /// (beginBackgroundTask → stop → lock released → endBackgroundTask).
@@ -15,6 +16,10 @@ final class LifecycleLog: @unchecked Sendable {
     }
 
     private let logger = Logger(subsystem: "app.psynguechthyngue", category: "lifecycle")
+    #if DEBUG
+    /// Device acceptance runs: `<AppGroup>/Diagnostics/app.log`.
+    private let file = DiagnosticsFileLog.make(name: "app")
+    #endif
     private let lock = NSLock()
     private var ring: [Entry] = []
 
@@ -25,6 +30,9 @@ final class LifecycleLog: @unchecked Sendable {
         if ring.count > 200 { ring.removeFirst(ring.count - 200) }
         lock.unlock()
         logger.notice("[lifecycle] \(stage, privacy: .public) \(detail, privacy: .public)")
+        #if DEBUG
+        file?.append("\(stage) \(detail)")
+        #endif
     }
 
     var entries: [Entry] {
