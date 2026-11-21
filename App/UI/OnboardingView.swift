@@ -22,12 +22,14 @@ struct OnboardingView: View {
                         header("Welcome", symbol: "arrow.triangle.2.circlepath",
                                text: "Keep folders in sync between this device and your other computers and phones — directly, without a cloud.")
                         LocalIDCard()
+                            .padding(18)
+                            .glassCard()
                     case 1:
                         header("Add a device", symbol: "laptopcomputer.and.iphone",
                                text: "Add the device you want to sync with. You can also add this device from the other one using the ID on the first page.")
                         if model.devices.isEmpty {
                             Button("Add Device") { addingDevice = true }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.glassProminent)
                                 .accessibilityIdentifier("onboarding.adddevice")
                         } else {
                             Label("\(model.devices.count) devices added", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
@@ -37,7 +39,7 @@ struct OnboardingView: View {
                                text: "Create a folder to share, or accept a folder another device offers. Invitations appear on the Sync tab.")
                         if model.folders.isEmpty {
                             Button("New Folder") { creatingFolder = true }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.glassProminent)
                                 .accessibilityIdentifier("onboarding.newfolder")
                         } else {
                             Label("\(model.folders.count) folders", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
@@ -50,14 +52,16 @@ struct OnboardingView: View {
                             header("Find your files", symbol: "folder",
                                    text: "Your synced folders appear in the Files app under Locations → Psynguechthyngue. If you don’t see it, tap ••• in Files, choose Edit, and turn it on.")
                             Button("Open Files") { openURL(URL(string: "shareddocuments://")!) }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.glass)
                         }
                     }
                 }
                 .padding(24)
                 .frame(maxWidth: 560)
                 .frame(maxWidth: .infinity)
+                .animation(.smooth, value: step)
             }
+            .background { AppBackground() }
             .safeAreaInset(edge: .bottom) {
                 HStack {
                     if step > 0 { Button("Back") { step -= 1 }.accessibilityIdentifier("onboarding.back") }
@@ -65,11 +69,11 @@ struct OnboardingView: View {
                     Button(step == lastStep ? "Done" : "Next") {
                         if step == lastStep { settings.onboardingDone = true } else { step += 1 }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .accessibilityIdentifier("onboarding.next")
                 }
-                .padding()
-                .background(.bar)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -86,7 +90,12 @@ struct OnboardingView: View {
 
     private func header(_ title: LocalizedStringKey, symbol: String, text: LocalizedStringKey) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 52)).foregroundStyle(.tint)
+            Image(systemName: symbol)
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 96, height: 96)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .contentTransition(.symbolEffect(.replace))
             Text(title).font(.largeTitle.bold()).multilineTextAlignment(.center)
                 .accessibilityIdentifier("onboarding.title")
             Text(text).multilineTextAlignment(.center).foregroundStyle(.secondary)

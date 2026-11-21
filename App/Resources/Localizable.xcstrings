@@ -17,6 +17,22 @@
         }
       }
     },
+    "%@ (+%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (+%2$lld)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@（另有 %2$lld 个）"
+          }
+        }
+      }
+    },
     "%@ left · %lld items": {
       "localizations": {
         "en": {
@@ -209,6 +225,16 @@
         }
       }
     },
+    "Add Device…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加设备…"
+          }
+        }
+      }
+    },
     "Add a device": {
       "localizations": {
         "zh-Hans": {
@@ -395,6 +421,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "选择其他文件夹…"
+          }
+        }
+      }
+    },
+    "Closing the last window quits Psynguechthyngue and stops the transfers in progress. Minimize the window to keep syncing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭最后一个窗口会退出 Psynguechthyngue，并停止正在进行的传输。最小化窗口可继续同步。"
           }
         }
       }
@@ -1103,6 +1139,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "新建文件夹"
+          }
+        }
+      }
+    },
+    "New Folder…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建文件夹…"
           }
         }
       }
@@ -1897,6 +1943,16 @@
         }
       }
     },
+    "Stop syncing?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止同步？"
+          }
+        }
+      }
+    },
     "Sync": {
       "localizations": {
         "zh-Hans": {
@@ -2033,6 +2089,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "App 在后台时同步会暂停。请打开 App 后重试。"
+          }
+        }
+      }
+    },
+    "Syncing more slowly while the system saves resources": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统正在节省资源，同步会放慢"
           }
         }
       }

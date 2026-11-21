@@ -37,19 +37,52 @@ class PsyUITestCase: XCTestCase {
     }
 
     /// Scrolls lazily rendered forms/lists until `e` exists and is hittable.
+    /// Also keeps the element out of the bottom area, where the tab bar and the
+    /// sync-progress accessory float over content (isHittable ignores overlays).
     @discardableResult
     func scrollTo(_ e: XCUIElement, maxSwipes: Int = 6) -> Bool {
+        var lastY: CGFloat?
         for _ in 0..<maxSwipes {
-            if e.exists && e.isHittable { return true }
-            app.swipeUp()
+            if e.exists && e.isHittable {
+                if inSafeZone(e) { return true }
+                // Reached the end of the content: it cannot move further up.
+                if let lastY, abs(lastY - e.frame.minY) < 1 { return true }
+                lastY = e.frame.minY
+            }
+            if e.exists && e.frame.minY < app.frame.height * 0.12 {
+                app.swipeDown()
+            } else {
+                gentleSwipeUp()
+            }
         }
         return e.exists
     }
 
+    /// Clear of the navigation bar and of the tab bar + accessory at the bottom.
+    private func inSafeZone(_ e: XCUIElement) -> Bool {
+        let h = app.frame.height
+        return e.frame.maxY < h - 170 && e.frame.minY > h * 0.1
+    }
+
+    /// A short drag (about a third of the screen) so targets don't overshoot.
+    private func gentleSwipeUp() {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        start.press(forDuration: 0.05, thenDragTo: end)
+    }
+
     func tab(_ label: String) {
         let inBar = app.tabBars.buttons[label]
-        if inBar.waitForExistence(timeout: 3) { inBar.tap(); return }
-        app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch.tap()
+        // The iPhone tab bar minimizes on scroll; scrolling back up restores it.
+        for _ in 0..<3 where !inBar.waitForExistence(timeout: 1.5) && !anyTabButton(label).exists {
+            app.swipeDown()
+        }
+        if inBar.exists { inBar.tap(); return }
+        anyTabButton(label).tap()
+    }
+
+    private func anyTabButton(_ label: String) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
     }
 
     func tapSwitch(_ id: String) {
@@ -315,7 +348,11 @@ final class EngineSettingsUITests: PsyUITestCase {
     /// so it may already be expanded and scrolled.
     private func openAdvancedSettings() {
         tab("Settings")
-        if el("settings.devicename").waitForExistence(timeout: 2) { return }
+        XCTAssertTrue(app.switches["settings.cellular"].waitForExistence(timeout: 5))
+        // Advanced is the last section: scroll to the end so lazily built rows exist,
+        // then expand only if it is still collapsed (tapping again would collapse it).
+        for _ in 0..<4 { app.swipeUp() }
+        if el("settings.devicename").waitForExistence(timeout: 1) { return }
         let advanced = app.buttons["Advanced"]
         for _ in 0..<4 where !advanced.exists { app.swipeDown() }
         scrollTo(advanced)
@@ -397,6 +434,20 @@ final class EngineSettingsUITests: PsyUITestCase {
         let probe = el("debug.engine")
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
         XCTAssertTrue(probe.label.contains("stops=0"), "engine kept running in background: \(probe.label)")
+    }
+}
+
+final class MenuCommandUITests: PsyUITestCase {
+    /// The "Sync" menu commands double as iPad keyboard shortcuts (and Mac menu items).
+    func testKeyboardShortcutsOpenAddDeviceAndNewFolder() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "hardware keyboard shortcuts are an iPad feature")
+        launch()
+        XCTAssertTrue(el("home.status").waitForExistence(timeout: 5))
+        app.typeKey("d", modifierFlags: [.command, .shift])
+        XCTAssertTrue(el("adddevice.id").waitForExistence(timeout: 5), "⇧⌘D opens Add Device")
+        app.buttons["Cancel"].firstMatch.tap()
+        app.typeKey("n", modifierFlags: [.command, .shift])
+        XCTAssertTrue(el("newfolder.name").waitForExistence(timeout: 5), "⇧⌘N opens New Folder")
     }
 }
 

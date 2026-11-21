@@ -21,7 +21,7 @@ final class LiveEngineHost: EngineHosting {
     private(set) var decision: PolicyDecision = .run
     /// Set when the engine failed to start/stop; the UI surfaces it.
     private(set) var lastFailure: String?
-    /// A user-initiated BGContinuedProcessingTask (iOS 26+) is running: the
+    /// A user-initiated BGContinuedProcessingTask is running: the
     /// engine keeps going when the app is backgrounded (DESIGN §4.1/§4.2).
     private(set) var continuedProcessing = false
     var preferences = PolicyPreferences() {
@@ -288,12 +288,13 @@ final class LiveEngineHost: EngineHosting {
     @ObservationIgnored private var liveTokens = Set<Int>()
 
     private func beginTask(reason: String) -> Int {
-        var token = -1
-        token = tasks.begin(name: "psy.engine.stop") { [weak self] in
+        let box = TokenRef()
+        let token = tasks.begin(name: "psy.engine.stop") { [weak self] in
             // Out of time: end the assertion now so the watchdog does not kill us.
             self?.log.record("bgtask-expired", "system expiration handler fired")
-            self?.endTask(token)
+            self?.endTask(box.value)
         }
+        box.value = token
         liveTokens.insert(token)
         log.record("beginBackgroundTask", "reason=\(reason) token=\(token) remaining=\(Int(min(tasks.remaining, 9999)))s")
         return token
@@ -339,7 +340,7 @@ final class LiveEngineHost: EngineHosting {
         onFailure?(error)
     }
 
-    // MARK: Continued processing (iOS 26+, user initiated)
+    // MARK: Continued processing (user initiated)
 
     /// Called when the system starts the user's BGContinuedProcessingTask.
     func beginContinuedProcessing() {
@@ -389,4 +390,10 @@ private final class ResumeGate<T: Sendable>: @unchecked Sendable {
         lock.lock(); let c = continuation; continuation = nil; lock.unlock()
         c?.resume(with: result)
     }
+}
+
+/// Lets an expiration handler refer to the token returned by the call that installs it.
+@MainActor
+private final class TokenRef {
+    var value = -1
 }

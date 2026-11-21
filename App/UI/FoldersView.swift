@@ -2,7 +2,7 @@ import PsySync
 import SwiftUI
 
 struct FoldersView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) var model
     @State private var creating = false
 
     var body: some View {
@@ -15,26 +15,60 @@ struct FoldersView: View {
                         Text("Create a folder to share, or accept one that another device offers.")
                     } actions: {
                         Button("New Folder") { creating = true }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .accessibilityIdentifier("folders.empty.new")
                     }
                 } else {
-                    List(model.folders) { folder in
-                        NavigationLink(value: folder.id) { FolderRow(folder: folder) }
-                            .accessibilityIdentifier("folder.row.\(folder.label)")
+                    ScrollView {
+                        GlassEffectContainer(spacing: 4) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], spacing: 12) {
+                                ForEach(model.folders) { folder in
+                                    NavigationLink(value: folder.id) {
+                                        FolderRow(folder: folder)
+                                            .padding(.horizontal, 18).padding(.vertical, 14)
+                                            .glassCard(cornerRadius: GlassMetrics.row, tint: tint(for: folder), interactive: true)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("folder.row.\(folder.label)")
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 96)   // room for the floating button
                     }
                 }
             }
+            .glassScreen()
             .navigationTitle("Folders")
             .navigationDestination(for: FolderID.self) { FolderDetailView(folderID: $0) }
+            .overlay(alignment: .bottomTrailing) {
+                if !model.folders.isEmpty {
+                    FloatingActionButton(title: "New Folder", systemImage: "plus", identifier: "folders.new") { creating = true }
+                }
+            }
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { creating = true } label: { Label("New Folder", systemImage: "plus") }
-                        .accessibilityIdentifier("folders.new")
+                if model.folders.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { creating = true } label: { Label("New Folder", systemImage: "plus") }
+                            .accessibilityIdentifier("folders.new")
+                    }
                 }
             }
             .sheet(isPresented: $creating) { NewFolderView() }
+            .onChange(of: model.pendingCommand, initial: true) { _, command in
+                if command == .newFolder { model.pendingCommand = nil; creating = true }
+            }
         }
+    }
+}
+
+extension FoldersView {
+    /// Errors tint the card red; everything else stays neutral glass.
+    func tint(for folder: Folder) -> Color? {
+        let status = model.status(of: folder)
+        if status.state == .error { return .red }
+        return status.issues.isEmpty ? nil : .orange
     }
 }
 
@@ -44,8 +78,12 @@ struct FolderRow: View {
 
     var body: some View {
         let status = model.status(of: folder)
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: folder.location == .managed ? "folder.fill" : "externaldrive.fill")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
                 Text(folder.label).font(.headline)
                 Spacer()
                 Label(status.state.title, systemImage: status.state.symbol)
@@ -56,8 +94,16 @@ struct FolderRow: View {
             if status.state == .syncing {
                 ProgressView(value: status.progress.fractionCompleted)
             }
-            if status.state == .error, let issue = status.issues.first {
-                Text(issue.kind.title).font(.caption).foregroundStyle(.red)
+            if let issue = status.issues.first {
+                Label {
+                    if status.issues.count > 1 {
+                        Text("\(Text(issue.kind.title)) (+\(status.issues.count - 1))")
+                    } else {
+                        Text(issue.kind.title)
+                    }
+                } icon: { Image(systemName: "exclamationmark.triangle.fill") }
+                .font(.caption)
+                .foregroundStyle(status.state == .error ? .red : .orange)
             }
         }
         .padding(.vertical, 2)

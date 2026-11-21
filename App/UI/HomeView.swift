@@ -3,19 +3,38 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var acceptingFolder: PendingFolder?
     @State private var detailIssue: SyncIssue?
+    @Namespace private var glass
 
     var body: some View {
         NavigationStack {
-            List {
-                Section { StatusCard() }
-                if model.filesLocation == .disabled { Section { FilesDisabledCard() } }
-                if model.pendingCount > 0 { inbox }
-                if !model.syncingFolders.isEmpty || !model.transfers.isEmpty { transfers }
-                if !model.allIssues.isEmpty { problems }
-                Section("This device") { LocalIDCard() }
+            ScrollView {
+                GlassEffectContainer(spacing: 6) {
+                    if sizeClass == .regular {
+                        // iPad / large windows: status + activity on the left, identity on the right.
+                        HStack(alignment: .top, spacing: 20) {
+                            VStack(spacing: 20) { primaryCards }
+                                .frame(maxWidth: .infinity)
+                            VStack(spacing: 20) { identityCard }
+                                .frame(width: 340)
+                        }
+                    } else {
+                        VStack(spacing: 20) {
+                            primaryCards
+                            identityCard
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: 1100)
+                .frame(maxWidth: .infinity)
+                .animation(.smooth, value: model.pendingCount)
+                .animation(.smooth, value: model.allIssues.count)
             }
+            .glassScreen()
             .navigationTitle("Sync")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -29,111 +48,189 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder private var primaryCards: some View {
+        VStack(spacing: 10) {
+            CardHeader(title: "Status", systemImage: "waveform.path.ecg")
+            StatusCard()
+                .glassEffectID("status", in: glass)
+        }
+        if model.filesLocation == .disabled {
+            FilesDisabledCard()
+                .padding(18)
+                .glassCard(tint: .orange)
+        }
+        if model.pendingCount > 0 { inbox }
+        if !model.syncingFolders.isEmpty || !model.transfers.isEmpty { transfers }
+        if !model.allIssues.isEmpty { problems }
+    }
+
+    private var identityCard: some View {
+        VStack(spacing: 10) {
+            CardHeader(title: "This device", systemImage: "iphone")
+            LocalIDCard()
+                .padding(18)
+                .glassCard()
+                .glassEffectID("identity", in: glass)
+        }
+    }
+
+    // MARK: Inbox
+
     private var inbox: some View {
-        Section {
+        VStack(spacing: 12) {
+            CardHeader(title: "Needs your attention", systemImage: "tray.full")
             ForEach(model.pendingDevices) { device in
-                VStack(alignment: .leading, spacing: 8) {
-                    Label {
-                        VStack(alignment: .leading) {
-                            Text("\(device.name.nilIfEmpty ?? device.id.short) wants to connect")
-                            Text(device.id.short).font(.caption.monospaced()).foregroundStyle(.secondary)
-                        }
-                    } icon: { Image(systemName: "person.crop.circle.badge.questionmark") }
-                    HStack {
-                        Button("Accept") { Task { await model.acceptPending(device) } }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityIdentifier("pending.device.accept")
-                        Button("Ignore", role: .cancel) { Task { await model.dismissPending(device) } }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("pending.device.ignore")
-                    }
-                }
-                .padding(.vertical, 4)
+                InboxCard(
+                    symbol: "person.crop.circle.badge.questionmark",
+                    title: "\(device.name.nilIfEmpty ?? device.id.short) wants to connect",
+                    subtitle: Text(device.id.short).font(.caption.monospaced()),
+                    accept: ("Accept", "pending.device.accept", { Task { await model.acceptPending(device) } }),
+                    ignore: ("pending.device.ignore", { Task { await model.dismissPending(device) } })
+                )
+                .glassEffectID("device-\(device.id.rawValue)", in: glass)
+                .glassEffectTransition(.matchedGeometry)
             }
             ForEach(model.pendingFolders) { pending in
-                VStack(alignment: .leading, spacing: 8) {
-                    Label {
-                        VStack(alignment: .leading) {
-                            Text("“\(pending.label)” was shared with you")
-                            Text("From \(model.deviceName(pending.offeredBy))").font(.caption).foregroundStyle(.secondary)
-                        }
-                    } icon: { Image(systemName: "folder.badge.plus") }
-                    HStack {
-                        Button("Accept…") { acceptingFolder = pending }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityIdentifier("pending.folder.accept")
-                        Button("Ignore", role: .cancel) { Task { await model.dismissPending(pending) } }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("pending.folder.ignore")
-                    }
-                }
-                .padding(.vertical, 4)
+                InboxCard(
+                    symbol: "folder.badge.plus",
+                    title: "“\(pending.label)” was shared with you",
+                    subtitle: Text("From \(model.deviceName(pending.offeredBy))"),
+                    accept: ("Accept…", "pending.folder.accept", { acceptingFolder = pending }),
+                    ignore: ("pending.folder.ignore", { Task { await model.dismissPending(pending) } })
+                )
+                .glassEffectID("folder-\(pending.id)", in: glass)
+                .glassEffectTransition(.matchedGeometry)
             }
-        } header: {
-            Text("Needs your attention")
         }
     }
+
+    // MARK: Transfers
 
     private var transfers: some View {
-        Section("Transfers") {
-            ForEach(model.syncingFolders) { folder in
-                let status = model.status(of: folder)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(folder.label).font(.headline)
-                        Spacer()
-                        Text(status.progress.fractionCompleted, format: .percent.precision(.fractionLength(0)))
-                            .monospacedDigit().foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            CardHeader(title: "Transfers", systemImage: "arrow.up.arrow.down")
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(model.syncingFolders) { folder in
+                    let status = model.status(of: folder)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(folder.label).font(.headline)
+                            Spacer()
+                            Text(status.progress.fractionCompleted, format: .percent.precision(.fractionLength(0)))
+                                .monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        ProgressView(value: status.progress.fractionCompleted)
+                            .tint(.accentColor)
+                        Text("\(Format.bytes(status.progress.needBytes)) left · \(status.progress.needItems) items")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if let file = status.lastSyncedFile {
+                            Text(file.rawValue).font(.caption2).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
+                        }
                     }
-                    ProgressView(value: status.progress.fractionCompleted)
-                    Text("\(Format.bytes(status.progress.needBytes)) left · \(status.progress.needItems) items")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if let file = status.lastSyncedFile {
-                        Text(file.rawValue).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("transfer.\(folder.id.rawValue)")
+                }
+                ForEach(model.transfers.values.sorted { $0.id < $1.id }) { t in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(t.path.lastComponent, systemImage: "doc").font(.subheadline).lineLimit(1)
+                        ProgressView(value: t.fraction)
                     }
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("transfer.\(folder.id.rawValue)")
-            }
-            if model.isContinuingInBackground {
-                Label("Syncing continues in the background", systemImage: "arrow.down.app")
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("home.continuing")
-            } else if model.canContinueInBackground && !model.syncingFolders.isEmpty {
-                Button { model.continueInBackground() } label: {
-                    Label("Keep Syncing in Background", systemImage: "arrow.down.app")
-                }
-                .accessibilityIdentifier("home.continueinbg")
-            }
-            ForEach(model.transfers.values.sorted { $0.id < $1.id }) { t in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t.path.lastComponent).lineLimit(1)
-                    ProgressView(value: t.fraction)
+                if model.isContinuingInBackground {
+                    Label("Syncing continues in the background", systemImage: "arrow.down.app")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("home.continuing")
+                } else if model.canContinueInBackground && !model.syncingFolders.isEmpty {
+                    Button { Task { await model.continueInBackground() } } label: {
+                        Label("Keep Syncing in Background", systemImage: "arrow.down.app")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("home.continueinbg")
                 }
             }
+            .padding(18)
+            .glassCard()
+            .glassEffectID("transfers", in: glass)
         }
     }
 
+    // MARK: Problems
+
     private var problems: some View {
-        Section("Recent problems") {
-            ForEach(model.allIssues) { issue in
-                Button { detailIssue = issue } label: {
-                    Label {
-                        VStack(alignment: .leading) {
-                            Text(issue.kind.title)
-                            if let folder = issue.folderID, let f = model.folders.first(where: { $0.id == folder }) {
-                                Text(f.label).font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            CardHeader(title: "Recent problems", systemImage: "exclamationmark.triangle")
+            VStack(spacing: 0) {
+                ForEach(Array(model.allIssues.enumerated()), id: \.element.id) { index, issue in
+                    if index > 0 { Divider().padding(.leading, 52) }
+                    Button { detailIssue = issue } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: issue.kind == .conflict ? "doc.on.doc.fill" : "exclamationmark.triangle.fill")
+                                .font(.title3)
+                                .foregroundStyle(issue.kind == .conflict ? .orange : .red)
+                                .frame(width: 26)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(issue.kind.title).foregroundStyle(.primary)
+                                if let folder = issue.folderID, let f = model.folders.first(where: { $0.id == folder }) {
+                                    Text(f.label).font(.caption).foregroundStyle(.secondary)
+                                }
                             }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                         }
-                    } icon: {
-                        Image(systemName: issue.kind == .conflict ? "doc.on.doc" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(issue.kind == .conflict ? .orange : .red)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("issue.\(issue.id)")
                 }
-                .foregroundStyle(.primary)
-                .accessibilityIdentifier("issue.\(issue.id)")
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 6)
+            .glassCard()
+            .glassEffectID("problems", in: glass)
+        }
+    }
+}
+
+/// One pending request (device or folder) with Accept / Ignore glass buttons.
+struct InboxCard: View {
+    let symbol: String
+    let title: LocalizedStringKey
+    let subtitle: Text
+    let accept: (title: LocalizedStringKey, id: String, action: () -> Void)
+    let ignore: (id: String, action: () -> Void)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.title2)
+                    .foregroundStyle(.tint)
+                    .frame(width: 34)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.body.weight(.medium))
+                    subtitle.foregroundStyle(.secondary).font(.caption)
+                }
+                Spacer(minLength: 0)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { buttons }
+                VStack(alignment: .leading, spacing: 10) { buttons }
             }
         }
+        .padding(18)
+        .glassCard()
+    }
+
+    @ViewBuilder private var buttons: some View {
+        Button(accept.title, action: accept.action)
+            .buttonStyle(.glassProminent)
+            .accessibilityIdentifier(accept.id)
+        Button("Ignore", role: .cancel, action: ignore.action)
+            .buttonStyle(.glass)
+            .accessibilityIdentifier(ignore.id)
     }
 }
 
@@ -186,11 +283,18 @@ struct StatusCard: View {
     var body: some View {
         let s = summary
         HStack(spacing: 14) {
-            Image(systemName: s.symbol).font(.largeTitle).foregroundStyle(s.tint)
+            Image(systemName: s.symbol)
+                .font(.system(size: 40, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(s.tint)
+                .contentTransition(.symbolEffect(.replace))
             VStack(alignment: .leading, spacing: 4) {
-                Text(s.title).font(.headline).accessibilityIdentifier("home.status.title")
+                Text(s.title).font(.title3.weight(.semibold)).accessibilityIdentifier("home.status.title")
                 if let hold = model.policyHold {
                     Text(hold.message).font(.subheadline).foregroundStyle(.secondary)
+                } else if model.host.decision.reducedResourceUsage {
+                    Text("Syncing more slowly while the system saves resources")
+                        .font(.subheadline).foregroundStyle(.secondary)
                 } else if !model.devices.isEmpty {
                     Text("\(model.connectedCount) of \(model.devices.count) devices connected")
                         .font(.subheadline).foregroundStyle(.secondary)
@@ -204,7 +308,9 @@ struct StatusCard: View {
                 }
             }
         }
-        .padding(.vertical, 6)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard(tint: s.tint)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("home.status")
     }
@@ -214,14 +320,16 @@ struct StatusCard: View {
 struct LocalIDCard: View {
     @Environment(AppModel.self) private var model
     @State private var copied = false
+    @ScaledMetric(relativeTo: .body) private var qrSize: CGFloat = 180
 
     var body: some View {
         if let id = model.localID {
             VStack(spacing: 12) {
                 QRCodeView(value: id.rawValue)
-                    .frame(width: 180, height: 180)
-                    .padding(8)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                    .frame(width: min(qrSize, 240), height: min(qrSize, 240))
+                    .padding(10)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .accessibilityHidden(false)
                 Text(id.rawValue)
                     .font(.caption.monospaced())
                     .multilineTextAlignment(.center)
@@ -233,16 +341,16 @@ struct LocalIDCard: View {
                         copied = true
                         Task { try? await Task.sleep(for: .seconds(2)); copied = false }
                     } label: { Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
+                        .contentTransition(.symbolEffect(.replace))
                         .accessibilityIdentifier("home.copyid")
                     ShareLink(item: id.rawValue) { Label("Share", systemImage: "square.and.arrow.up") }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
                 }
                 Text("On the other device, add this device using its ID or QR code.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
         } else {
             HStack { ProgressView(); Text("Preparing this device’s ID…").foregroundStyle(.secondary) }
         }

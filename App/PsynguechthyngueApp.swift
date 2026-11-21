@@ -18,7 +18,7 @@ struct PsynguechthyngueApp: App {
 /// Launch plumbing: BGTask handlers must be registered before launch finishes,
 /// and lifecycle signals are app-level (not per scene) so a second iPad window
 /// cannot stop the engine.
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -46,12 +46,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 }
             }
             center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { Task { await env.host.handle(.memoryWarning) } }
+                MainActor.assumeIsolated { _ = Task { await env.host.handle(.memoryWarning) } }
             }
             // Mac (Designed for iPad): closing the last window terminates the app ~5 s
             // later without a background transition. Stop the engine gracefully now.
+            center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    ClosureConfirmation.update(transfersActive: env.model.hasActiveTransfers, isOnMac: env.model.isOnMac)
+                }
+            }
             center.addObserver(forName: UIScene.didDisconnectNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated {
+                    ClosureConfirmation.update(transfersActive: env.model.hasActiveTransfers, isOnMac: env.model.isOnMac)
                     let remaining = UIApplication.shared.connectedScenes.filter { $0.activationState != .unattached }
                     guard env.model.isOnMac, remaining.isEmpty else { return }
                     LifecycleLog.shared.record("last-window-closed", "isiOSAppOnMac: stopping engine before termination")
@@ -59,9 +65,33 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 }
             }
             center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { Task { await env.host.handle(.willTerminate) } }
+                MainActor.assumeIsolated { _ = Task { await env.host.handle(.willTerminate) } }
             }
         }
         return true
+    }
+
+    // MARK: Menu bar (Mac) / keyboard shortcuts (iPad)
+
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        AppMenu.build(with: builder)
+    }
+
+    @objc func menuSyncNow(_ sender: Any?) { send(.syncNow) }
+    @objc func menuAddDevice(_ sender: Any?) { send(.addDevice) }
+    @objc func menuNewFolder(_ sender: Any?) { send(.newFolder) }
+
+    override func validate(_ command: UICommand) {
+        super.validate(command)
+        if command.action == #selector(menuSyncNow(_:)) {
+            let model = MainActor.assumeIsolated { AppEnvironment.shared.model }
+            let enabled = MainActor.assumeIsolated { model.isRunning && !model.folders.isEmpty }
+            command.attributes = enabled ? [] : [.disabled]
+        }
+    }
+
+    private func send(_ command: AppCommand) {
+        MainActor.assumeIsolated { AppEnvironment.shared.model.pendingCommand = command }
     }
 }

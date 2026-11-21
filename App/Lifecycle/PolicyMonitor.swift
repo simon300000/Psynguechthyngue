@@ -36,7 +36,12 @@ final class PolicyMonitor {
             UIDevice.batteryStateDidChangeNotification,
             UIDevice.batteryLevelDidChangeNotification,
         ]
-        for name in names {
+        var allNames = names
+        if #available(iOS 27.0, *) {
+            // iOS 27: the system asks apps to scale back resource-intensive work.
+            allNames.append(UIApplication.systemPrefersReducedResourceUsageDidChangeNotification)
+        }
+        for name in allNames {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.publish() }
             })
@@ -72,6 +77,10 @@ final class PolicyMonitor {
         let level: Double? = (onMac || device.batteryLevel < 0) ? nil : Double(device.batteryLevel)
         let charging = !onMac && (device.batteryState == .charging || device.batteryState == .full)
         let thermal = info.thermalState == .serious || info.thermalState == .critical
+        var reduced = false
+        if #available(iOS 27.0, *) {
+            reduced = UIApplication.shared.systemPrefersReducedResourceUsage
+        }
         return PolicyInputs(
             network: network,
             isExpensive: path?.isExpensive ?? false,
@@ -79,7 +88,8 @@ final class PolicyMonitor {
             isLowPowerMode: info.isLowPowerModeEnabled,
             isCharging: charging,
             batteryLevel: level,
-            thermalSerious: thermal
+            thermalSerious: thermal,
+            systemPrefersReducedResourceUsage: reduced
         )
     }
 }

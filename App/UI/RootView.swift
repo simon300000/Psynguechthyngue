@@ -4,27 +4,40 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppSettings.self) private var settings
-    @State private var selection: Tab = .home
+    @State private var selection: AppTab = RootView.initialTab
 
-    enum Tab: Hashable { case home, devices, folders, settings }
+    enum AppTab: String, Hashable { case home, devices, folders, settings }
+
+    /// `-PsyUITestInitialTab <name>` (fixtures only) for screenshots.
+    private static var initialTab: AppTab {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-PsyUITestFixture"), let i = args.firstIndex(of: "-PsyUITestInitialTab"), i + 1 < args.count else { return .home }
+        return AppTab(rawValue: args[i + 1]) ?? .home
+    }
 
     var body: some View {
         TabView(selection: $selection) {
-            HomeView()
-                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
-                .badge(model.pendingCount)
-                .tag(Tab.home)
-            DevicesView()
-                .tabItem { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
-                .tag(Tab.devices)
-            FoldersView()
-                .tabItem { Label("Folders", systemImage: "folder") }
-                .tag(Tab.folders)
-            SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
-                .tag(Tab.settings)
+            Tab("Sync", systemImage: "arrow.triangle.2.circlepath", value: AppTab.home) {
+                HomeView()
+            }
+            .badge(model.pendingCount)
+            Tab("Devices", systemImage: "laptopcomputer.and.iphone", value: AppTab.devices) {
+                DevicesView()
+            }
+            Tab("Folders", systemImage: "folder", value: AppTab.folders) {
+                FoldersView()
+            }
+            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
+                SettingsView()
+            }
         }
+        // iPad: floating top tab bar that can become a sidebar; iPhone: bottom bar.
+        .tabViewStyle(.sidebarAdaptable)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        // The Sync tab already shows transfers; show the accessory elsewhere.
+        .modifier(SyncAccessoryModifier(enabled: !model.syncingFolders.isEmpty && selection != .home))
         .overlay(alignment: .top) { BannerView() }
+        .animation(.smooth, value: model.banner)
         .overlay(alignment: .bottomLeading) {
             if model.isFixture {
                 // Invisible probe for UI tests: engine transitions seen by the UI.
@@ -34,8 +47,20 @@ struct RootView: View {
                     .allowsHitTesting(false)
             }
         }
-        .animation(.default, value: model.banner)
         .fullScreenCover(isPresented: onboardingBinding) { OnboardingView() }
+        .onChange(of: model.pendingCommand) { _, command in
+            switch command {
+            case .syncNow:
+                model.pendingCommand = nil
+                Task { await model.syncNow() }
+            case .addDevice: selection = .devices    // DevicesView presents the sheet
+            case .newFolder: selection = .folders    // FoldersView presents the sheet
+            case nil: break
+            }
+        }
+        .onChange(of: model.hasActiveTransfers, initial: true) { _, active in
+            ClosureConfirmation.update(transfersActive: active, isOnMac: model.isOnMac)
+        }
     }
 
     private var onboardingBinding: Binding<Bool> {
@@ -43,6 +68,48 @@ struct RootView: View {
             get: { !settings.onboardingDone },
             set: { if !$0 { settings.onboardingDone = true } }
         )
+    }
+}
+
+/// The dynamic bottom accessory needs iOS 26.1 (deployment target is 26.0);
+/// on 26.0 progress is still shown on the Sync tab.
+private struct SyncAccessoryModifier: ViewModifier {
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.1, *) {
+            content.tabViewBottomAccessory(isEnabled: enabled) { SyncProgressAccessory() }
+        } else {
+            content
+        }
+    }
+}
+
+/// Compact progress shown above (or inline with) the tab bar while syncing.
+struct SyncProgressAccessory: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let folders = model.syncingFolders
+        let statuses = folders.map { model.status(of: $0).progress }
+        let total = statuses.reduce(Int64(0)) { $0 + $1.globalBytes }
+        let need = statuses.reduce(Int64(0)) { $0 + $1.needBytes }
+        let fraction = total > 0 ? Double(total - need) / Double(total) : 0
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .symbolEffect(.rotate, options: .repeating)
+                .foregroundStyle(.tint)
+            Text(folders.count == 1 ? folders[0].label : String(localized: "\(folders.count) folders"))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(fraction, format: .percent.precision(.fractionLength(0)))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("accessory.progress")
     }
 }
 
@@ -61,9 +128,8 @@ struct BannerView: View {
                 Button { model.dismissBanner() } label: { Image(systemName: "xmark") }
                     .accessibilityLabel("Dismiss")
             }
-            .padding(12)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .shadow(radius: 6, y: 2)
+            .padding(14)
+            .glassCard(cornerRadius: GlassMetrics.row, tint: banner.kind == .error ? .red : .blue)
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .frame(maxWidth: 600)
