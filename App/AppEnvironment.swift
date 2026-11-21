@@ -41,12 +41,15 @@ final class AppEnvironment {
             let fake = FakeSyncEngine(named: name)
             if let ms = Self.argument("-PsyUITestStartDelayMS", in: args).flatMap(Int.init) { fake.startDelay = .milliseconds(ms) }
             if let ms = Self.argument("-PsyUITestStopDelayMS", in: args).flatMap(Int.init) { fake.stopDelay = .milliseconds(ms) }
+            if args.contains("-PsyUITestStopTimeout") {
+                fake.nextStopFailure = .bridge(code: BridgeContract.Code.stopTimeout.rawValue, detail: "simulated")
+            }
             engine = fake
             files = nil
             bridge = nil
         } else {
-            let name = settings.deviceName.isEmpty ? UIDevice.current.name : settings.deviceName
-            let live = EngineFactory.makeLiveEngine(deviceName: name)
+            // Used only on the very first start; afterwards the name lives in the engine config.
+            let live = EngineFactory.makeLiveEngine(deviceName: UIDevice.current.name)
             engine = live.engine
             bridge = live.bridge
             files = live.layout.map { FilesIntegration(engine: live.engine, layout: $0) }
@@ -61,19 +64,20 @@ final class AppEnvironment {
         model = AppModel(engine: engine, host: host, settings: settings,
                          notifier: AppNotifier(enabled: !fixture), isFixture: fixture, isOnMac: onMac)
         let filesDisabled = fixture && args.contains("-PsyUITestFilesDisabled")
+        model.scheduler = scheduler
+        scheduler.simulateContinuedProcessing = fixture && args.contains("-PsyUITestSimulateContinued")
         if let files {
-            model.filesStatus = FilesIntegrationLocationStatus(files: files)
-            host.onEngineStarted = { [weak model] in
-                await files.engineDidStart()
-                await model?.refreshFilesLocation()
-            }
+            // WP-C: FilesIntegration follows engine state itself (attach); the host
+            // additionally closes files.sqlite right before stop (I2).
+            files.attach()
+            model.filesStatus = FilesLocationStatusProvider(files: files)
+            host.onEngineStarted = { [weak model] in await model?.refreshFilesLocation() }
             host.onEngineWillStop = { await files.engineWillStop() }
         } else {
             model.filesStatus = StaticFilesLocationStatus(filesDisabled ? .disabled : .unknown)
         }
         if let bridge {
             host.onMemoryWarning = { Task { await PsyBridgeThread.shared.run { bridge.onMemoryWarning() } } }
-            AppInfo.syncthingVersionProvider = { bridge.syncthingVersion() }
         }
         settings.onChange = { [weak self] in
             guard let self else { return }

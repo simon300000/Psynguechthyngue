@@ -27,6 +27,16 @@ final class BackgroundScheduler {
     nonisolated static var processingIdentifier: String? {
         Bundle.main.object(forInfoDictionaryKey: "PsyProcessingTaskIdentifier") as? String
     }
+    /// Prefix for BGContinuedProcessingTask identifiers ("<bundle>.continued");
+    /// Info.plist permits "<prefix>.*" (iOS 26+).
+    nonisolated static var continuedPrefix: String? {
+        Bundle.main.object(forInfoDictionaryKey: "PsyContinuedTaskPrefix") as? String
+    }
+
+    /// UI tests: run the continued-processing path without BGTaskScheduler
+    /// (unavailable in the Simulator).
+    var simulateContinuedProcessing = false
+    private(set) var continuedRunning = false
 
     var isEnabled: Bool { defaults.object(forKey: Self.enabledKey) == nil ? true : defaults.bool(forKey: Self.enabledKey) }
 
@@ -40,6 +50,96 @@ final class BackgroundScheduler {
             let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: Self.launchHandler(self, kind: .processing))
             log.record("bgtask-register", "\(id) ok=\(ok)")
         }
+        if #available(iOS 26.0, *), let prefix = Self.continuedPrefix {
+            let pattern = prefix + ".*"
+            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: pattern, using: .main,
+                                                     launchHandler: Self.continuedLaunchHandler(self))
+            log.record("bgtask-register", "\(pattern) ok=\(ok)")
+        }
+    }
+
+    // MARK: Continued processing (iOS 26+)
+
+    /// Whether "Keep syncing in background" can be offered (iOS 26+, not on Mac).
+    var canContinueInBackground: Bool {
+        if simulateContinuedProcessing { return true }
+        guard #available(iOS 26.0, *), !ProcessInfo.processInfo.isiOSAppOnMac, Self.continuedPrefix != nil else { return false }
+        return true
+    }
+
+    /// User action: keep the current transfers going after leaving the app,
+    /// with the system's progress UI. Must be called while in the foreground.
+    /// Returns false when the system refused (e.g. too busy, or unsupported).
+    @discardableResult
+    func continueInBackground(title: String, subtitle: String) -> Bool {
+        guard !continuedRunning else { return true }
+        if simulateContinuedProcessing {
+            log.record("continued-submit", "simulated")
+            let progress = Progress(totalUnitCount: 100)
+            Task { @MainActor in await self.runContinued(progress: progress, isExpired: { false }, finish: { _ in }) }
+            return true
+        }
+        guard #available(iOS 26.0, *), let prefix = Self.continuedPrefix else { return false }
+        let id = "\(prefix).sync-\(UUID().uuidString.prefix(8))"
+        let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: subtitle)
+        request.strategy = .fail
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            log.record("continued-submit", id)
+            return true
+        } catch {
+            log.record("continued-submit-failed", "\(id): \(error)")
+            return false
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private nonisolated static func continuedLaunchHandler(_ scheduler: BackgroundScheduler) -> @Sendable (BGTask) -> Void {
+        { [weak scheduler] task in
+            guard let task = task as? BGContinuedProcessingTask else { return }
+            nonisolated(unsafe) let unsafeTask = task
+            Task { @MainActor in scheduler?.runContinued(task: unsafeTask) }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func runContinued(task: BGContinuedProcessingTask) {
+        log.record("bgtask-launched", "\(task.identifier) kind=continuedProcessing")
+        let expired = ExpiryFlag()
+        task.expirationHandler = { expired.set() }
+        nonisolated(unsafe) let unsafeTask = task
+        Task { @MainActor in
+            await self.runContinued(progress: task.progress, isExpired: { expired.isSet }, finish: { ok in
+                unsafeTask.setTaskCompleted(success: ok)
+            })
+        }
+    }
+
+    /// Shared by the real task and the UI-test simulation: report byte progress
+    /// until every folder is settled (or cannot progress), then end.
+    private func runContinued(progress: Progress, isExpired: @escaping () -> Bool, finish: @escaping (Bool) -> Void) async {
+        continuedRunning = true
+        host.beginContinuedProcessing()
+        var reason = "done"
+        while true {
+            if isExpired() { reason = "expired"; break }
+            guard let status = try? await host.engine.snapshot() else { reason = "engine-unavailable"; break }
+            let total = status.folders.reduce(Int64(0)) { $0 + max($1.progress.globalBytes, 0) }
+            let need = status.folders.reduce(Int64(0)) { $0 + max($1.progress.needBytes, 0) }
+            progress.totalUnitCount = max(total, 1)
+            progress.completedUnitCount = max(total - need, 0)
+            let active = status.folders.contains { $0.state == .syncing || $0.state == .scanning }
+            if !active {
+                // Up to date, or waiting for devices / on hold: nothing more to do in background.
+                reason = need == 0 ? "done" : "stalled"
+                break
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        log.record("continued-finished", "reason=\(reason)")
+        finish(reason == "done")
+        continuedRunning = false
+        await host.endContinuedProcessing(reason: reason)
     }
 
     /// Built outside the main actor so the closure carries no actor-isolation
@@ -138,4 +238,12 @@ final class BackgroundScheduler {
         }
         task.expirationHandler = Self.expirationHandler(host: host, work: work)
     }
+}
+
+/// Thread-safe one-way flag for expiration handlers.
+private final class ExpiryFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func set() { lock.lock(); value = true; lock.unlock() }
+    var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
 }

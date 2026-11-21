@@ -46,6 +46,11 @@ final class AppModel {
     private(set) var engineStarts = 0
     private(set) var engineStops = 0
     var isActive = false
+    /// Engine-owned settings (Settings ▸ Advanced); nil while the engine is not running.
+    private(set) var engineOptions: EngineOptions?
+    private(set) var syncthingVersion = ""
+    /// BG continued processing (iOS 26+), set by AppEnvironment.
+    @ObservationIgnored var scheduler: BackgroundScheduler?
     private(set) var filesLocation: FilesLocationState = .unknown
     @ObservationIgnored var filesStatus: (any FilesLocationStatusProviding)?
 
@@ -137,6 +142,9 @@ final class AppModel {
             let snap = try await engine.snapshot()
             statuses = Dictionary(uniqueKeysWithValues: snap.folders.map { ($0.folderID, $0) })
             localID = snap.localDeviceID ?? localID
+            engineOptions = try? await engine.options()
+            let version = await engine.syncthingVersion
+            if !version.isEmpty { syncthingVersion = version }
             // Existing configuration (e.g. reinstall with kept identity): no first-run guide.
             if !settings.onboardingDone && !onboardingInProgress && (!devices.isEmpty || !folders.isEmpty) {
                 settings.onboardingDone = true
@@ -167,7 +175,57 @@ final class AppModel {
     }
 
     var displayName: String {
-        settings.deviceName.nilIfEmpty ?? UIDevice.current.name
+        engineOptions?.deviceName.nilIfEmpty ?? UIDevice.current.name
+    }
+
+    // MARK: Engine options / ignore rules
+
+    /// Applies a change to the engine's options immediately (no Save button).
+    func updateOptions(_ change: (inout EngineOptions) -> Void) async {
+        guard var options = engineOptions else {
+            show(error: Self.message(for: EngineError.notRunning))
+            return
+        }
+        change(&options)
+        guard options != engineOptions else { return }
+        if await perform({ try await engine.updateOptions(options) }) {
+            engineOptions = (try? await engine.options()) ?? options
+        } else {
+            engineOptions = try? await engine.options()   // revert the UI to the engine's truth
+        }
+    }
+
+    func userIgnoreRules(_ folder: Folder) async -> [String]? {
+        do { return try await engine.userIgnoreRules(folder.id) } catch {
+            show(error: Self.message(for: error))
+            return nil
+        }
+    }
+
+    func setUserIgnoreRules(_ folder: Folder, text: String) async -> Bool {
+        var lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        while lines.last == "" { lines.removeLast() }
+        let ok = await perform { try await engine.setUserIgnoreRules(folder.id, lines) }
+        if ok { show(info: String(localized: "Ignore patterns saved.")) }
+        return ok
+    }
+
+    // MARK: Continue in background (iOS 26+)
+
+    var canContinueInBackground: Bool { scheduler?.canContinueInBackground ?? false }
+    var isContinuingInBackground: Bool { host.continuedProcessing }
+
+    func continueInBackground() {
+        guard let scheduler else { return }
+        let ok = scheduler.continueInBackground(
+            title: String(localized: "Syncing files"),
+            subtitle: String(localized: "Psynguechthyngue keeps syncing until your transfers finish.")
+        )
+        if ok {
+            show(info: String(localized: "Syncing will continue after you leave the app."))
+        } else {
+            show(error: String(localized: "iOS can’t continue syncing in the background right now. Keep the app open to finish."))
+        }
     }
 
     // MARK: Banner
@@ -212,7 +270,7 @@ final class AppModel {
             case BridgeContract.Code.listen.rawValue:
                 return String(localized: "The sync engine could not open its network port.")
             case BridgeContract.Code.stopTimeout.rawValue:
-                return String(localized: "The sync engine did not stop in time. Please restart the app.")
+                return String(localized: "The sync engine took too long to stop. It will restart when you return to the app.")
             case BridgeContract.Code.invalidArgument.rawValue:
                 return String(localized: "That value is not valid.")
             default:
@@ -325,7 +383,7 @@ final class AppModel {
     func diagnosticsText() -> String {
         var lines = [
             "Psynguechthyngue \(AppInfo.version) (\(AppInfo.build))",
-            "Syncthing \(AppInfo.syncthingVersion)",
+            "Syncthing \(syncthingVersion.isEmpty ? "?" : syncthingVersion)",
             "Engine: \(engineState)",
             "Policy hold: \(policyHold?.rawValue ?? "none")",
             "Devices: \(devices.count) (\(connectedCount) connected)",
@@ -344,9 +402,7 @@ final class AppModel {
 enum AppInfo {
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0" }
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1" }
-    /// Pinned upstream release (DESIGN.md §3.4); the bridge reports the linked one.
-    @MainActor static var syncthingVersionProvider: (() -> String)?
-    @MainActor static var syncthingVersion: String { syncthingVersionProvider?() ?? "v2.1.6" }
+
 }
 
 extension String {

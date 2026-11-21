@@ -65,20 +65,14 @@ struct SettingsView: View {
 
                 Section("About") {
                     LabeledContent("Version") { Text("\(AppInfo.version) (\(AppInfo.build))") }
-                    LabeledContent("Syncthing") { Text(AppInfo.syncthingVersion) }
+                    LabeledContent("Syncthing") { Text(model.syncthingVersion.isEmpty ? "—" : model.syncthingVersion) }
+                        .accessibilityIdentifier("settings.syncthingversion")
                     NavigationLink("Licenses") { LicensesView() }
                 }
 
                 Section {
                     DisclosureGroup("Advanced") {
-                        TextField("Device name", text: $settings.deviceName, prompt: Text(UIDevice.current.name))
-                            .accessibilityIdentifier("settings.devicename")
-                        Toggle("Global discovery", isOn: $settings.globalDiscovery)
-                            .accessibilityIdentifier("settings.globaldiscovery")
-                        Toggle("Relays", isOn: $settings.relaysEnabled)
-                            .accessibilityIdentifier("settings.relays")
-                        Text("Global discovery and relays help devices find each other over the internet. They share this device’s ID and IP address with the public Syncthing servers.")
-                            .font(.footnote).foregroundStyle(.secondary)
+                        EngineOptionsSection()
                         ShareLink(item: model.diagnosticsText()) { Label("Export Diagnostics", systemImage: "stethoscope") }
                         Button("Reset Devices and Folders", role: .destructive) { confirmReset = true }
                             .accessibilityIdentifier("settings.reset")
@@ -116,5 +110,74 @@ struct LicensesView: View {
             }
         }
         .navigationTitle("Licenses")
+    }
+}
+
+/// Engine-owned options (device name, discovery, relays, listen addresses).
+/// Read from and written straight to the engine; changes apply immediately.
+struct EngineOptionsSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var name = ""
+    @State private var listen = ""
+    @State private var loadedFrom: EngineOptions?
+
+    var body: some View {
+        if let options = model.engineOptions {
+            Group {
+                TextField("Device name", text: $name, prompt: Text(UIDevice.current.name))
+                    .submitLabel(.done)
+                    .onSubmit { commitName() }
+                    .accessibilityIdentifier("settings.devicename")
+                Toggle("Global discovery", isOn: Binding(
+                    get: { options.globalDiscovery },
+                    set: { v in Task { await model.updateOptions { $0.globalDiscovery = v } } }
+                ))
+                .accessibilityIdentifier("settings.globaldiscovery")
+                Toggle("Relays", isOn: Binding(
+                    get: { options.relays },
+                    set: { v in Task { await model.updateOptions { $0.relays = v } } }
+                ))
+                .accessibilityIdentifier("settings.relays")
+                Text("Global discovery and relays help devices find each other over the internet. They share this device’s ID and IP address with the public Syncthing servers.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Listen addresses").font(.subheadline)
+                    TextField("default", text: $listen)
+                        .font(.footnote.monospaced())
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .onSubmit { commitListen() }
+                        .accessibilityIdentifier("settings.listen")
+                    Text("Separate several addresses with commas, e.g. tcp://:22000. “default” lets Syncthing choose.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .onAppear { load(options) }
+            .onChange(of: options) { _, new in load(new) }
+            .onDisappear { commitName(); commitListen() }
+        } else {
+            Text("Advanced options are available while syncing is running.")
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+    }
+
+    private func load(_ options: EngineOptions) {
+        guard options != loadedFrom else { return }
+        loadedFrom = options
+        name = options.deviceName
+        listen = options.listenAddresses.joined(separator: ", ")
+    }
+
+    private func commitName() {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != model.engineOptions?.deviceName else { return }
+        Task { await model.updateOptions { $0.deviceName = trimmed } }
+    }
+
+    private func commitListen() {
+        let list = listen.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard !list.isEmpty, list != model.engineOptions?.listenAddresses else { return }
+        Task { await model.updateOptions { $0.listenAddresses = list } }
     }
 }

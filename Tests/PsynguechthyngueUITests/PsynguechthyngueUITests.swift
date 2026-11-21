@@ -310,6 +310,96 @@ final class PsynguechthyngueUITests: PsyUITestCase {
     }
 }
 
+final class EngineSettingsUITests: PsyUITestCase {
+    /// Opens Settings ▸ Advanced; the disclosure state survives tab switches,
+    /// so it may already be expanded and scrolled.
+    private func openAdvancedSettings() {
+        tab("Settings")
+        if el("settings.devicename").waitForExistence(timeout: 2) { return }
+        let advanced = app.buttons["Advanced"]
+        for _ in 0..<4 where !advanced.exists { app.swipeDown() }
+        scrollTo(advanced)
+        XCTAssertTrue(advanced.exists, "Advanced disclosure")
+        advanced.tap()
+    }
+
+    func testAdvancedOptionsAreReadFromAndWrittenToEngine() {
+        launch()
+        openAdvancedSettings()
+        let name = el("settings.devicename")
+        XCTAssertTrue(scrollTo(name))
+        XCTAssertEqual(name.value as? String, "iPhone", "device name comes from engine options")
+        name.tap()
+        name.typeText(" Pro\n")
+        let relays = app.switches["settings.relays"]
+        XCTAssertTrue(scrollTo(relays))
+        XCTAssertEqual(relays.value as? String, "1")
+        tapSwitch("settings.relays")
+        XCTAssertTrue(anyLabel("Syncthing").exists)
+        // Leave Settings and come back: values are re-read from the engine.
+        tab("Sync")
+        openAdvancedSettings()
+        XCTAssertTrue(scrollTo(el("settings.devicename")))
+        XCTAssertEqual(el("settings.devicename").value as? String, "iPhone Pro")
+        XCTAssertTrue(scrollTo(app.switches["settings.relays"]))
+        XCTAssertEqual(app.switches["settings.relays"].value as? String, "0")
+        XCTAssertTrue(scrollTo(el("settings.syncthingversion")))
+        XCTAssertTrue(anyLabel("v2.1.6").exists, "version from engine.syncthingVersion")
+    }
+
+    func testIgnorePatternsEditorSavesToEngine() {
+        launch()
+        tab("Folders")
+        el("folder.row.Documents").tap()
+        let advanced = app.buttons["Advanced"]
+        scrollTo(advanced)
+        advanced.tap()
+        let ignores = el("folder.ignores")
+        XCTAssertTrue(scrollTo(ignores))
+        ignores.tap()
+        let editor = el("ignores.editor")
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertFalse(el("ignores.save").isEnabled, "nothing to save yet")
+        editor.tap()
+        editor.typeText("*.tmp\n/Archive")
+        el("ignores.save").tap()
+        XCTAssertTrue(anyLabel("Ignore patterns saved").waitForExistence(timeout: 5))
+        // Reopen: rules are read back from the engine.
+        XCTAssertTrue(scrollTo(el("folder.ignores")))
+        el("folder.ignores").tap()
+        XCTAssertTrue(el("ignores.editor").waitForExistence(timeout: 5))
+        XCTAssertTrue((el("ignores.editor").value as? String ?? "").contains("/Archive"))
+    }
+
+    func testStopTimeoutRestartsAutomaticallyOnReturn() {
+        launch(extra: ["-PsyUITestStopTimeout"])
+        XCTAssertTrue(text("1 of 2 devices connected").waitForExistence(timeout: 5))
+        XCUIDevice.shared.press(.home)
+        sleep(2)
+        app.activate()
+        XCTAssertTrue(text("1 of 2 devices connected").waitForExistence(timeout: 10), "engine restarted on return")
+        let probe = el("debug.engine")
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        XCTAssertTrue(probe.label.contains("starts=2"), "restarted: \(probe.label)")
+        XCTAssertFalse(anyLabel("Please restart the app").exists, "no manual restart prompt")
+        XCTAssertFalse(text("Sync engine stopped").exists)
+    }
+
+    func testKeepSyncingInBackgroundKeepsEngineRunning() {
+        launch(extra: ["-PsyUITestSimulateContinued"])
+        let button = el("home.continueinbg")
+        XCTAssertTrue(scrollTo(button), "offered while a folder is syncing")
+        button.tap()
+        XCTAssertTrue(el("home.continuing").waitForExistence(timeout: 5))
+        XCUIDevice.shared.press(.home)
+        sleep(2)
+        app.activate()
+        let probe = el("debug.engine")
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        XCTAssertTrue(probe.label.contains("stops=0"), "engine kept running in background: \(probe.label)")
+    }
+}
+
 final class ZhHansUITests: PsyUITestCase {
     override var language: String { "zh-Hans" }
 

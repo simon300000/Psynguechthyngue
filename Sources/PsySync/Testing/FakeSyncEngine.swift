@@ -28,6 +28,9 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
     /// Simulated start latency (seconds) to exercise "starting" UI.
     public var startDelay: Duration = .zero
     public var stopDelay: Duration = .zero
+    /// When set, the next `stop` takes the engine down but reports this error
+    /// (e.g. `stop_timeout`), like a bridge whose Stop overran its deadline.
+    public var nextStopFailure: EngineError?
 
     public init(scenario: Scenario) { self.m = Mutable(scenario: scenario) }
 
@@ -112,6 +115,7 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
     public func start(context: EngineRunContext) async throws {
         record("start:\(context.rawValue)")
         if case .running = sync({ $0.engineState }) { return }
+        if case .failed = sync({ $0.engineState }) { record("restart-after-failure") }
         setState(.starting)
         if startDelay > .zero { await Self.blockOnThread(startDelay) }
         setState(.running(since: Date()))
@@ -122,6 +126,12 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
         if case .stopped = sync({ $0.engineState }) { return }
         setState(.stopping)
         if stopDelay > .zero { await Self.blockOnThread(stopDelay) }
+        if let failure = nextStopFailure {
+            nextStopFailure = nil
+            setState(.failed(code: BridgeContract.Code.stopTimeout.rawValue, detail: "stop overran its deadline"))
+            record("stop-failed")
+            throw failure
+        }
         setState(.stopped)
     }
 

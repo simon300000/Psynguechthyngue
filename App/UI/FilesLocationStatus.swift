@@ -15,21 +15,6 @@ protocol FilesLocationStatusProviding: AnyObject {
     func currentState() async -> FilesLocationState
 }
 
-/// Real status from WP-C's `FilesIntegration` (one domain per managed folder).
-/// Any managed folder whose domain the user has turned off → `.disabled`.
-@MainActor
-final class FilesIntegrationLocationStatus: FilesLocationStatusProviding {
-    private let files: FilesIntegration
-    init(files: FilesIntegration) { self.files = files }
-
-    func currentState() async -> FilesLocationState {
-        let statuses = await files.refreshDomainStatuses()
-        if statuses.values.contains(.disabledByUser) { return .disabled }
-        if !statuses.isEmpty && statuses.values.allSatisfy({ $0 == .enabled }) { return .enabled }
-        return .unknown
-    }
-}
-
 /// Fixtures / no Files integration (`-PsyUITestFilesDisabled` forces "disabled" in fixtures).
 @MainActor
 final class StaticFilesLocationStatus: FilesLocationStatusProviding {
