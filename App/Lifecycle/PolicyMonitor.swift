@@ -81,7 +81,7 @@ final class PolicyMonitor {
         if #available(iOS 27.0, *) {
             reduced = UIApplication.shared.systemPrefersReducedResourceUsage
         }
-        return PolicyInputs(
+        var inputs = PolicyInputs(
             network: network,
             isExpensive: path?.isExpensive ?? false,
             isConstrained: path?.isConstrained ?? false,
@@ -91,5 +91,28 @@ final class PolicyMonitor {
             thermalSerious: thermal,
             systemPrefersReducedResourceUsage: reduced
         )
+        #if DEBUG
+        Self.applyDebugOverride(&inputs)
+        #endif
+        return inputs
     }
+
+    #if DEBUG
+    /// Simulator acceptance only: `-psy.debug.policy cellular,constrained,lowpower,thermal,reduced,offline`
+    /// forces policy inputs the simulator cannot produce. Never compiled into Release.
+    static func applyDebugOverride(_ inputs: inout PolicyInputs) {
+        guard let raw = UserDefaults.standard.string(forKey: "psy.debug.policy"), !raw.isEmpty else { return }
+        for flag in raw.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            switch flag {
+            case "cellular": inputs.network = .cellular; inputs.isExpensive = true
+            case "offline": inputs.network = .none
+            case "constrained": inputs.isConstrained = true
+            case "lowpower": inputs.isLowPowerMode = true
+            case "thermal": inputs.thermalSerious = true
+            case "reduced": inputs.systemPrefersReducedResourceUsage = true
+            default: break
+            }
+        }
+    }
+    #endif
 }
