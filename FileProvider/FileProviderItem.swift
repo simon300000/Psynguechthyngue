@@ -8,10 +8,13 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
     private let rootID: ItemIdentifier
     private let folderLabel: String
 
-    init(record: FileItemRecord, rootID: ItemIdentifier, folderLabel: String) {
+    private let contentMode: ContentMode?
+
+    init(record: FileItemRecord, rootID: ItemIdentifier, folderLabel: String, contentMode: ContentMode?) {
         self.record = record
         self.rootID = rootID
         self.folderLabel = folderLabel
+        self.contentMode = contentMode
     }
 
     static func identifier(_ id: ItemIdentifier, rootID: ItemIdentifier) -> NSFileProviderItemIdentifier {
@@ -39,7 +42,8 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
     var contentModificationDate: Date? { record.modified.timeIntervalSince1970 > 0 ? record.modified : nil }
 
     var itemVersion: NSFileProviderItemVersion {
-        NSFileProviderItemVersion(contentVersion: record.contentVersion, metadataVersion: record.metadataVersion)
+        NSFileProviderItemVersion(
+            contentVersion: record.contentVersion, metadataVersion: FilesItemPolicy.exposedMetadataVersion(for: record))
     }
 
     var capabilities: NSFileProviderItemCapabilities {
@@ -60,8 +64,20 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
     var isUploaded: Bool { !record.pendingUpload }
     var isUploading: Bool { false }
 
-    // iOS has no eager/keep-downloaded content policy: "Keep Downloaded" keeps
-    // the Syncthing copy local (un-ignored), so reopening is a cheap APFS clone.
+    // contentPolicy: iOS has no eager/keep-downloaded case, so it stays at the
+    // default (lazy). "Keep Downloaded" keeps the Syncthing copy local
+    // (un-ignored), so reopening is a cheap APFS clone.
+
+    /// iOS 27+: keep pinned folders and "Download everything" roots fully
+    /// enumerated (FilesItemPolicy). Independent of contentPolicy, which only
+    /// governs file contents.
+    @available(iOS 27.0, macOS 27.0, *)
+    var namespacePolicy: NSFileProviderNamespacePolicy {
+        switch FilesItemPolicy.namespace(for: record, isRoot: isRoot, contentMode: contentMode) {
+        case .inherited: .inherited
+        case .materializeEagerly: .materializeEagerly
+        }
+    }
 
     /// Used by the custom actions' activation rules (Info.plist).
     var userInfo: [AnyHashable: Any]? {
