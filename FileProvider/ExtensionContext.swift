@@ -62,7 +62,7 @@ enum RestrictedFetchServices {
             return (dev, { DevRestrictedFetchBridge.identity })
         }
         #endif
-        #if canImport(PsyBridge)
+        #if PSY_RESTRICTED_FETCH || canImport(PsyBridge)
         let group = Bundle.main.object(forInfoDictionaryKey: "PsyKeychainAccessGroup") as? String
         let identityStore = KeychainIdentityStore(accessGroup: group)
         let bridgeLog = Logger(subsystem: FilesLog.subsystem, category: "bridge")
