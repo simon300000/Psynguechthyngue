@@ -10,6 +10,7 @@ import XCTest
 ///     terminate
 ///     useApp [bundleID]     drive another app (Files) / back to this app
 ///     tapCell <text> / longPress <text> / typeKeys <text>
+///     menu <cell>|<item>    context menu   openText <cell>|<text>|<s>   killApp (terminate this app)
 ///     tap <id>              tap element with accessibility identifier
 ///     tapLabel <text>       tap first button / element whose label contains text
 ///     wait <id> [s]         wait for identifier (default 60 s)
@@ -66,7 +67,39 @@ final class AcceptanceDriverUITests: PsyUITestCase {
         case "useApp":
             // e.g. `useApp com.apple.DocumentsApp` (Files); `useApp` alone → this app.
             app = rest.isEmpty ? XCUIApplication() : XCUIApplication(bundleIdentifier: rest)
-            if rest.isEmpty { app.activate() } else { app.launch() }
+            if rest.isEmpty {
+                app.activate()
+            } else {
+                app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+                app.terminate()
+                app.launch()
+            }
+        case "menu":
+            // Context-menu item: `menu <cell text>|<item>`.
+            let p = rest.components(separatedBy: "|")
+            let c = app.cells.matching(NSPredicate(format: "label CONTAINS %@", p[0])).firstMatch
+            XCTAssertTrue(c.waitForExistence(timeout: 20), "missing cell \(p[0])")
+            c.press(forDuration: 1.2)
+            let b = app.buttons[p[1]].firstMatch
+            XCTAssertTrue(b.waitForExistence(timeout: 5), "menu item \(p[1])")
+            b.tap()
+        case "openText":
+            // Files: tap a file cell and wait for Quick Look to render text; `openText <cell>|<text>|<timeout>`.
+            let p = rest.components(separatedBy: "|")
+            let c = app.cells.matching(NSPredicate(format: "label CONTAINS %@", p[0])).firstMatch
+            XCTAssertTrue(c.waitForExistence(timeout: 20), "missing cell \(p[0])")
+            for _ in 0..<4 where !c.isHittable || c.frame.maxY > app.frame.height - 90 { app.swipeUp() }
+            c.tap()
+            let t = p.count > 2 ? TimeInterval(p[2]) ?? 60 : 60
+            let m = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", p[1], p[1])).firstMatch
+            XCTAssertTrue(m.waitForExistence(timeout: t), "contents of \(p[0]) not shown")
+        case "closeQL":
+            // Dismiss a Quick Look preview Files restored or we opened.
+            for label in ["Close", "Done", "关闭", "完成"] where app.buttons[label].firstMatch.exists {
+                app.buttons[label].firstMatch.tap(); break
+            }
+        case "killApp":
+            XCUIApplication().terminate()
         case "tapCell":
             // Files app items: tap a cell / any element whose label contains text.
             let e = app.cells.matching(NSPredicate(format: "label CONTAINS %@", rest)).firstMatch
