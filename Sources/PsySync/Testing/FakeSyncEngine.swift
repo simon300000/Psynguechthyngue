@@ -262,7 +262,8 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
     public func prioritize(_ folder: FolderID, path: RelativePath) async throws { record("prioritize:\(path.rawValue)") }
     public func setLocalPresence(_ folder: FolderID, paths: [RelativePath], present: Bool) async throws { record("presence:\(present)") }
     public func apply(_ decision: PolicyDecision) async throws {
-        record("apply:\(decision.hold?.rawValue ?? "run"):\(decision.sendLimitKiBps)/\(decision.receiveLimitKiBps)")
+        record("apply:\(decision.hold?.rawValue ?? "run"):\(decision.sendLimitKiBps)/\(decision.receiveLimitKiBps)"
+               + (decision.reducedResourceUsage ? ":reduced" : ""))
         sync { $0.policy = decision }
     }
     public func globalIndex(_ folder: FolderID, pageSize: Int) -> AsyncThrowingStream<[GlobalIndexEntry], Error> {

@@ -130,6 +130,13 @@ struct OptionsDTO: Codable, Hashable {
     var listenAddresses: [String]? = nil
     var globalAnnounceEnabled: Bool? = nil
     var relaysEnabled: Bool? = nil
+    var maxFolderConcurrency: Int? = nil
+    var limitBandwidthInLan: Bool? = nil
+}
+
+struct LoadOptionsDTO: Codable, Hashable {
+    var maxFolderConcurrency: Int
+    var limitBandwidthInLan: Bool
 }
 
 struct EngineOptionsPatchDTO: Codable, Hashable {

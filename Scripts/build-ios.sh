@@ -11,6 +11,8 @@ DERIVED_DATA="${PSY_DERIVED_DATA_PATH:-${VERIFY_ROOT}/DerivedData}"
 SIM_CONFIGURATION="${PSY_SIM_CONFIGURATION:-Debug}"
 EXPECTED_VERSION="1.0.0"
 EXPECTED_BUILD="1"
+# Single source of truth for the minimum OS: Config/Base.xcconfig.
+EXPECTED_MIN_OS="$(sed -n 's/^IPHONEOS_DEPLOYMENT_TARGET *= *//p' "${ROOT_DIR}/Config/Base.xcconfig" | head -1)"
 
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
@@ -50,7 +52,7 @@ validate() { # products-dir platform
     plist_is "${app}/Info.plist" CFBundleIdentifier com.example.Psynguechthyngue.CI
     plist_is "${app}/Info.plist" CFBundleShortVersionString "${EXPECTED_VERSION}"
     plist_is "${app}/Info.plist" CFBundleVersion "${EXPECTED_BUILD}"
-    plist_is "${app}/Info.plist" MinimumOSVersion 26.0
+    plist_is "${app}/Info.plist" MinimumOSVersion "${EXPECTED_MIN_OS}"
     plist_is "${app}/Info.plist" CFBundleSupportedPlatforms.0 "${platform}"
     plist_is "${app}/Info.plist" PsyKeychainAccessGroup com.example.Psynguechthyngue.CI
     plist_is "${ext}/Info.plist" CFBundleIdentifier com.example.Psynguechthyngue.CI.FileProvider
