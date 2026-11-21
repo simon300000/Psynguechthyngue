@@ -48,12 +48,12 @@ enum DomainManager {
         }
         let present = Dictionary(uniqueKeysWithValues: existing.map { ($0.identifier.rawValue, $0) })
         for (id, folder) in wanted {
-            if let domain = present[id], domain.displayName == folder.label, !needsTrashFix(domain) { continue }
+            if let domain = present[id], domain.displayName == folder.label, !domain.supportsSyncingTrash { continue }
             let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(id), displayName: folder.label)
             // We do not sync a trash container; without this the system (default
             // YES) asks for NSFileProviderTrashContainerItemIdentifier and Finder
             // keeps reporting errors (Mac spike).
-            if #available(iOS 18.0, *) { domain.supportsSyncingTrash = false }
+            domain.supportsSyncingTrash = false
             do {
                 try await NSFileProviderManager.add(domain)
                 log.info("added domain \(id, privacy: .public)")
@@ -61,11 +61,6 @@ enum DomainManager {
                 log.error("add domain \(id, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
-    }
-
-    private static func needsTrashFix(_ domain: NSFileProviderDomain) -> Bool {
-        if #available(iOS 18.0, *) { return domain.supportsSyncingTrash }
-        return false
     }
 
     /// Per-folder Files location state for the UI (e.g. "Enable in Settings" hint on Mac).
