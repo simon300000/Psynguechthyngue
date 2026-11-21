@@ -81,13 +81,12 @@ public struct FolderStatusInputs: Hashable, Sendable {
 /// Pure mapping from upstream folder state to `FolderStatus` (DESIGN.md §5.2).
 ///
 /// Key property (fixes AUDIT P0): an offline device never makes a folder look
-/// failed or stuck. Remote completion only counts for peers whose
-/// `remoteState == "valid"`; if work is outstanding and *no* sharing peer is
-/// connected the state is `waitingForDevices`, otherwise offline peers are
-/// simply ignored.
+/// failed or stuck. If work is outstanding and *no* sharing peer is connected
+/// the state is `waitingForDevices`; as soon as one peer is connected and up
+/// to date, offline peers are ignored.
 public enum StatusMapper {
     public static func map(_ i: FolderStatusInputs) -> FolderStatus {
-        let validRemotes = i.remotes.filter { $0.value.remoteState == "valid" }
+        let validRemotes = relevantRemotes(i)
         let progress = SyncProgress(
             globalBytes: i.globalBytes,
             localBytes: i.localBytes,
@@ -105,6 +104,17 @@ public enum StatusMapper {
             lastScan: nil,
             lastSyncedFile: nil
         )
+    }
+
+    /// Peers whose completion we trust: connected peers that have sent a
+    /// valid index for this folder, plus *disconnected* peers (upstream then
+    /// reports "unknown"/"paused" but the last known completion still says
+    /// what they are missing). Connected peers that do not share the folder
+    /// back ("notSharing" / not yet "valid") are ignored.
+    static func relevantRemotes(_ i: FolderStatusInputs) -> [DeviceID: FolderStatusInputs.RemoteCompletion] {
+        i.remotes.filter { _, r in
+            r.remoteState == "valid" || (!r.connected && r.remoteState != "notSharing")
+        }
     }
 
     static func state(_ i: FolderStatusInputs, validRemotes: [DeviceID: FolderStatusInputs.RemoteCompletion]) -> FolderSyncState {

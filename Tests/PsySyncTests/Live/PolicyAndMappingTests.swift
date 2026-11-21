@@ -129,9 +129,14 @@ import Testing
             $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true),
                           b: .init(completion: 10, remoteState: "valid", connected: false)]
         } == .upToDate)
-        // Never-seen device (remoteState unknown, completion 0) is ignored entirely.
+        // Never-seen device next to an online, complete peer: ignored.
         #expect(state {
-            $0.remotes = [b: .init(completion: 0, remoteState: "unknown", connected: false)]
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true),
+                          b: .init(completion: 0, remoteState: "unknown", connected: false)]
+        } == .upToDate)
+        // Connected peer that does not share the folder back: ignored.
+        #expect(state {
+            $0.remotes = [a: .init(completion: 0, remoteState: "notSharing", connected: true)]
         } == .upToDate)
     }
 
@@ -141,10 +146,13 @@ import Testing
             $0.needBytes = 10; $0.needItems = 1
             $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: false)]
         } == .waitingForDevices)
-        // Our changes not yet uploaded, nobody online.
-        #expect(state {
-            $0.remotes = [a: .init(completion: 50, remoteState: "valid", connected: false)]
-        } == .waitingForDevices)
+        // Our changes not yet uploaded, nobody online (upstream reports a
+        // disconnected peer as "unknown"/"paused", not "valid").
+        for rs in ["valid", "unknown", "paused"] {
+            #expect(state {
+                $0.remotes = [a: .init(completion: 50, remoteState: rs, connected: false)]
+            } == .waitingForDevices)
+        }
         // Same with a peer online → syncing (upload).
         #expect(state {
             $0.remotes = [a: .init(completion: 50, remoteState: "valid", connected: true)]

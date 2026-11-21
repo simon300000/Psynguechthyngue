@@ -70,3 +70,7 @@ verify-app-store-export:
 	@test -n "$(APP_STORE_ARCHIVE)" || { echo "APP_STORE_ARCHIVE is required" >&2; exit 64; }
 	@test -n "$(APP_STORE_IPA)" || { echo "APP_STORE_IPA is required" >&2; exit 64; }
 	bash Scripts/verify-app-store-export.sh --archive "$(APP_STORE_ARCHIVE)" --ipa "$(APP_STORE_IPA)"
+
+.PHONY: e2e-local
+e2e-local:
+	bash Scripts/e2e-local-syncthing.sh
