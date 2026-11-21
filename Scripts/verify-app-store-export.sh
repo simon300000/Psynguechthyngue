@@ -216,22 +216,19 @@ for executable in "${app}/Psynguechthyngue" "${provider}/PsyFileProvider"; do
     grep -Eq '(^|[[:space:]])arm64($|[[:space:]])' <<<"${architectures}" \
         || fail "arm64 is missing from ${executable}"
     linked_libraries="$(otool -L "${executable}")"
-    if grep -Fq Mobilebridge <<<"${linked_libraries}"; then
-        fail "Mobilebridge is dynamically loaded by ${executable}"
+    if grep -Fq PsyBridge <<<"${linked_libraries}"; then
+        fail "PsyBridge is dynamically loaded by ${executable}"
     fi
     grep -Fq /usr/lib/libresolv <<<"${linked_libraries}" \
         || fail "libresolv is missing from ${executable}"
 done
 
-expected_core_revision="$(
-    sed -n 's/^const coreRevision = "\([^"]*\)"$/\1/p' \
-        "${ROOT_DIR}/GoCore/mobilebridge/bridge.go"
-)"
-[[ -n "${expected_core_revision}" ]] || fail "pinned core revision could not be read"
+expected_core_revision="$(plutil -extract tag raw -o - "${ROOT_DIR}/GoBridge/SyncthingPin.json")"
+[[ -n "${expected_core_revision}" ]] || fail "pinned Syncthing tag could not be read"
 app_strings="${temporary_directory}/app-strings.txt"
 strings "${app}/Psynguechthyngue" >"${app_strings}"
 grep -Fq "${expected_core_revision}" "${app_strings}" \
-    || fail "exported app does not contain the exact embedded core revision"
+    || fail "exported app does not contain the pinned Syncthing version"
 
 binary_uuids() {
     dwarfdump --uuid "$1" | awk '{ gsub(/[()]/, "", $3); print $2 ":" $3 }' | sort

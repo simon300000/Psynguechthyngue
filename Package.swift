@@ -2,6 +2,10 @@
 
 import PackageDescription
 
+// PsySync: engine contracts, LiveSyncEngine (REST/events), policy, Files
+// projection. Consumed by the App and File Provider targets of
+// Psynguechthyngue.xcodeproj (Scripts/generate-xcodeproj.rb). The Go bridge
+// (GoBridge/, PsyBridge.xcframework) is linked only by the Xcode targets.
 let package = Package(
     name: "Psynguechthyngue",
     defaultLocalization: "en",
@@ -10,21 +14,9 @@ let package = Package(
         .macOS(.v14),
     ],
     products: [
-        .library(name: "PsyCore", targets: ["PsyCore"]),
-        // Rewrite (Docs/REWRITE/DESIGN.md): new contracts; PsyCore is removed by WP-E.
         .library(name: "PsySync", targets: ["PsySync"]),
     ],
     targets: [
-        .target(
-            name: "PsyCore",
-            path: "Sources/PsyCore",
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-            ],
-            linkerSettings: [
-                .linkedLibrary("sqlite3"),
-            ]
-        ),
         .target(
             name: "PsySync",
             path: "Sources/PsySync"
@@ -33,12 +25,6 @@ let package = Package(
             name: "PsySyncTests",
             dependencies: ["PsySync"],
             path: "Tests/PsySyncTests"
-        ),
-        .testTarget(
-            name: "PsyCoreTests",
-            dependencies: ["PsyCore"],
-            path: "Tests/PsyCoreTests",
-            exclude: ["PhysicalFileProviderE2ETests.swift"]
         ),
     ]
 )
