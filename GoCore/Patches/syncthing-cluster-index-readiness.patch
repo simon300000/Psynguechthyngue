@@ -1,0 +1,4275 @@
+diff --git a/internal/db/interface.go b/internal/db/interface.go
+index ed15acc..29cfea8 100644
+--- a/internal/db/interface.go
++++ b/internal/db/interface.go
+@@ -99,6 +99,7 @@ type DB interface {
+ 	// Index IDs
+ 	DropAllIndexIDs() error
+ 	GetIndexID(folder string, device protocol.DeviceID) (protocol.IndexID, error)
++	GetIndexIDAndSequence(folder string, device protocol.DeviceID) (protocol.IndexID, int64, error)
+ 	SetIndexID(folder string, device protocol.DeviceID, id protocol.IndexID) error
+ 
+ 	// MtimeFS
+diff --git a/internal/db/metrics.go b/internal/db/metrics.go
+index 8c8fe8f..d88f515 100644
+--- a/internal/db/metrics.go
++++ b/internal/db/metrics.go
+@@ -173,6 +173,11 @@ func (m metricsDB) GetIndexID(folder string, device protocol.DeviceID) (protocol
+ 	return m.DB.GetIndexID(folder, device)
+ }
+ 
++func (m metricsDB) GetIndexIDAndSequence(folder string, device protocol.DeviceID) (protocol.IndexID, int64, error) {
++	defer m.account(folder, "IndexIDAndSequenceGet")()
++	return m.DB.GetIndexIDAndSequence(folder, device)
++}
++
+ func (m metricsDB) GetDeviceFile(folder string, device protocol.DeviceID, file string) (protocol.FileInfo, bool, error) {
+ 	defer m.account(folder, "GetDeviceFile")()
+ 	return m.DB.GetDeviceFile(folder, device, file)
+diff --git a/internal/db/sqlite/db_folderdb.go b/internal/db/sqlite/db_folderdb.go
+index 97039b3..8914c0e 100644
+--- a/internal/db/sqlite/db_folderdb.go
++++ b/internal/db/sqlite/db_folderdb.go
+@@ -357,6 +357,17 @@ func (s *DB) GetIndexID(folder string, device protocol.DeviceID) (protocol.Index
+ 	return fdb.GetIndexID(device)
+ }
+ 
++func (s *DB) GetIndexIDAndSequence(folder string, device protocol.DeviceID) (protocol.IndexID, int64, error) {
++	fdb, err := s.getFolderDB(folder, false)
++	if errors.Is(err, errNoSuchFolder) {
++		return 0, 0, nil
++	}
++	if err != nil {
++		return 0, 0, err
++	}
++	return fdb.GetIndexIDAndSequence(device)
++}
++
+ func (s *DB) SetIndexID(folder string, device protocol.DeviceID, id protocol.IndexID) error {
+ 	fdb, err := s.getFolderDB(folder, true)
+ 	if err != nil {
+diff --git a/internal/db/sqlite/db_indexid_test.go b/internal/db/sqlite/db_indexid_test.go
+index 2ecd0c7..d6bd8f5 100644
+--- a/internal/db/sqlite/db_indexid_test.go
++++ b/internal/db/sqlite/db_indexid_test.go
+@@ -79,3 +79,61 @@ func TestIndexIDs(t *testing.T) {
+ 		}
+ 	})
+ }
++
++func TestAtomicIndexIDAndSequence(t *testing.T) {
++	database, err := Open(t.TempDir())
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() {
++		if err := database.Close(); err != nil {
++			t.Fatal(err)
++		}
++	})
++
++	device := protocol.DeviceID{42}
++	indexID, sequence, err := database.GetIndexIDAndSequence("missing", device)
++	if err != nil || indexID != 0 || sequence != 0 {
++		t.Fatalf("missing folder pair = (%v, %d, %v), want (0, 0, nil)", indexID, sequence, err)
++	}
++
++	const folder = "atomic-index-pair"
++	indexID, sequence, err = database.GetIndexIDAndSequence(folder, device)
++	if err != nil || indexID != 0 || sequence != 0 {
++		t.Fatalf("missing device pair = (%v, %d, %v), want (0, 0, nil)", indexID, sequence, err)
++	}
++
++	const firstIndexID = protocol.IndexID(101)
++	if err := database.SetIndexID(folder, device, firstIndexID); err != nil {
++		t.Fatal(err)
++	}
++	file := genFile("indexed", 1, 73)
++	file.Version = file.Version.Update(42)
++	if err := database.Update(folder, device, []protocol.FileInfo{file}); err != nil {
++		t.Fatal(err)
++	}
++	indexID, sequence, err = database.GetIndexIDAndSequence(folder, device)
++	if err != nil || indexID != firstIndexID || sequence != 73 {
++		t.Fatalf("stored pair = (%v, %d, %v), want (%v, 73, nil)", indexID, sequence, err, firstIndexID)
++	}
++
++	const replacementIndexID = protocol.IndexID(202)
++	if err := database.SetIndexID(folder, device, replacementIndexID); err != nil {
++		t.Fatal(err)
++	}
++	indexID, sequence, err = database.GetIndexIDAndSequence(folder, device)
++	if err != nil || indexID != replacementIndexID || sequence != 0 {
++		t.Fatalf("reset pair = (%v, %d, %v), want (%v, 0, nil)", indexID, sequence, err, replacementIndexID)
++	}
++
++	zeroIDDevice := protocol.DeviceID{43}
++	zeroIDFile := genFile("zero-id", 1, 9)
++	zeroIDFile.Version = zeroIDFile.Version.Update(43)
++	if err := database.Update(folder, zeroIDDevice, []protocol.FileInfo{zeroIDFile}); err != nil {
++		t.Fatal(err)
++	}
++	indexID, sequence, err = database.GetIndexIDAndSequence(folder, zeroIDDevice)
++	if err != nil || indexID != 0 || sequence != 9 {
++		t.Fatalf("zero-ID pair = (%v, %d, %v), want (0, 9, nil)", indexID, sequence, err)
++	}
++}
+diff --git a/internal/db/sqlite/folderdb_indexid.go b/internal/db/sqlite/folderdb_indexid.go
+index 1a4f693..ae061dc 100644
+--- a/internal/db/sqlite/folderdb_indexid.go
++++ b/internal/db/sqlite/folderdb_indexid.go
+@@ -64,6 +64,32 @@ func (s *folderDB) GetIndexID(device protocol.DeviceID) (protocol.IndexID, error
+ 	return indexIDFromHex(indexID)
+ }
+ 
++// GetIndexIDAndSequence reads the remote index identity and its accepted
++// sequence from one SQLite statement, so callers cannot combine values from
++// different index-reset epochs.
++func (s *folderDB) GetIndexIDAndSequence(device protocol.DeviceID) (protocol.IndexID, int64, error) {
++	var result struct {
++		IndexID  string `db:"index_id"`
++		Sequence int64  `db:"sequence"`
++	}
++	err := s.stmt(`
++		SELECT i.index_id, i.sequence FROM indexids i
++		INNER JOIN devices d ON d.idx = i.device_idx
++		WHERE d.device_id = ?
++	`).Get(&result, device.String())
++	if errors.Is(err, sql.ErrNoRows) {
++		return 0, 0, nil
++	}
++	if err != nil {
++		return 0, 0, wrap(err, "select index identity and sequence")
++	}
++	if result.IndexID == "" {
++		return 0, result.Sequence, nil
++	}
++	indexID, err := indexIDFromHex(result.IndexID)
++	return indexID, result.Sequence, wrap(err, "decode index identity")
++}
++
+ func (s *folderDB) SetIndexID(device protocol.DeviceID, id protocol.IndexID) error {
+ 	s.updateLock.Lock()
+ 	defer s.updateLock.Unlock()
+diff --git a/.build/go/syncthing-readiness-v1/lib/connections/connection_log_privacy_test.go b/lib/connections/connection_log_privacy_test.go
+new file mode 100644
+index 0000000..99c6e63
+--- /dev/null
++++ b/lib/connections/connection_log_privacy_test.go
+@@ -0,0 +1,35 @@
++// Copyright (C) 2026 The Syncthing Authors.
++//
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++package connections
++
++import (
++	"bytes"
++	"crypto/tls"
++	"log/slog"
++	"net"
++	"strings"
++	"testing"
++)
++
++func TestInternalConnectionLoggingOmitsRawConnectionID(t *testing.T) {
++	client, server := net.Pipe()
++	defer client.Close()
++	defer server.Close()
++
++	connection := newInternalConn(tls.Client(client, &tls.Config{InsecureSkipVerify: true}), connTypeTCPClient, true, 10)
++	rawConnectionID := "raw-connection-id-log-sentinel"
++	connection.connectionID = rawConnectionID
++
++	if rendered := connection.String(); strings.Contains(rendered, rawConnectionID) {
++		t.Fatalf("connection String exposed the raw connection ID: %q", rendered)
++	}
++	var output bytes.Buffer
++	slog.New(slog.NewTextHandler(&output, nil)).Info("Established secure connection", slog.Any("connection", connection))
++	if rendered := output.String(); strings.Contains(rendered, rawConnectionID) {
++		t.Fatalf("connection LogValue exposed the raw connection ID: %q", rendered)
++	}
++}
+diff --git a/lib/connections/structs.go b/lib/connections/structs.go
+index 4cd7212..ac2967f 100644
+--- a/lib/connections/structs.go
++++ b/lib/connections/structs.go
+@@ -151,11 +151,11 @@ func (c internalConn) String() string {
+ 	if c.isLocal {
+ 		t = "LAN"
+ 	}
+-	return fmt.Sprintf("%s-%s/%s/%s/%s-P%d-%s", c.LocalAddr(), c.RemoteAddr(), c.Type(), c.Crypto(), t, c.Priority(), c.connectionID)
++	return fmt.Sprintf("%s-%s/%s/%s/%s-P%d", c.LocalAddr(), c.RemoteAddr(), c.Type(), c.Crypto(), t, c.Priority())
+ }
+ 
+ func (c internalConn) LogValue() slog.Value {
+-	return slog.GroupValue(slog.String("local", c.LocalAddr().String()), slog.String("remote", c.RemoteAddr().String()), slog.String("type", c.Type()), slog.Bool("lan", c.isLocal), slog.String("crypto", c.Crypto()), slog.Int("prio", c.priority), slog.String("id", c.ConnectionID()))
++	return slog.GroupValue(slog.String("local", c.LocalAddr().String()), slog.String("remote", c.RemoteAddr().String()), slog.String("type", c.Type()), slog.Bool("lan", c.isLocal), slog.String("crypto", c.Crypto()), slog.Int("prio", c.priority))
+ }
+ 
+ type dialerFactory interface {
+diff --git a/.build/go/syncthing-readiness-v1/lib/model/dataless_test.go b/lib/model/dataless_test.go
+new file mode 100644
+index 0000000..bf6b6a6
+--- /dev/null
++++ b/lib/model/dataless_test.go
+@@ -0,0 +1,83 @@
++// Copyright (C) 2026 The Syncthing Authors.
++//
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++package model
++
++import (
++	"testing"
++
++	"github.com/syncthing/syncthing/lib/protocol"
++)
++
++func TestLocalDatalessRetainsGlobalMetadataWithoutSourceAuthority(t *testing.T) {
++	m, conn, folder := setupModelWithConnection(t)
++	filesystem := folder.Filesystem()
++	defer cleanupModelAndRemoveDir(m, filesystem.URI())
++
++	const name = "kept-as-placeholder.txt"
++	writeFile(t, filesystem, name, []byte("verified contents"))
++	must(t, m.ScanFolder(folder.ID))
++	local, ok := m.testCurrentFolderFile(folder.ID, name)
++	if !ok {
++		t.Fatal("local file was not indexed")
++	}
++	must(t, m.IndexUpdate(conn, indexUpdateForTest(t, m, conn, folder.ID, []protocol.FileInfo{local})))
++
++	holders, err := m.GlobalFileAvailability(folder.ID, name)
++	if err != nil || len(holders) != 1 || holders[0] != conn.DeviceID() {
++		t.Fatalf("unexpected exact remote availability: %v, %v", holders, err)
++	}
++	must(t, m.SetLocalContentUnavailable(folder.ID, name, local.Version.String()))
++
++	dataless, ok, err := m.sdb.GetDeviceFile(folder.ID, protocol.LocalDeviceID, name)
++	if err != nil || !ok || !dataless.IsDataless() || !dataless.IsInvalid() {
++		t.Fatalf("local item did not become invalid dataless metadata: %+v, %v", dataless, err)
++	}
++	availability, err := m.sdb.GetGlobalAvailability(folder.ID, name)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, deviceID := range availability {
++		if deviceID == protocol.LocalDeviceID {
++			t.Fatal("dataless local item remained a global source")
++		}
++	}
++	completion, err := m.folderCompletion(protocol.LocalDeviceID, folder.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if completion.NeedItems != 0 || completion.NeedBytes != 0 {
++		t.Fatalf("intentional dataless content remained an automatic download need: %+v", completion)
++	}
++
++	must(t, filesystem.Remove(name))
++	must(t, m.ScanFolder(folder.ID))
++	afterRemoval, ok, err := m.sdb.GetDeviceFile(folder.ID, protocol.LocalDeviceID, name)
++	if err != nil || !ok || !afterRemoval.IsDataless() || afterRemoval.IsDeleted() {
++		t.Fatalf("scanner converted dataless absence into deletion: %+v, %v", afterRemoval, err)
++	}
++
++	writeFile(t, filesystem, name, []byte("leftover bytes"))
++	must(t, m.ScanFolder(folder.ID))
++	afterLeftover, ok, err := m.sdb.GetDeviceFile(folder.ID, protocol.LocalDeviceID, name)
++	if err != nil || !ok || !afterLeftover.IsDataless() {
++		t.Fatalf("scanner restored source authority from leftover bytes: %+v, %v", afterLeftover, err)
++	}
++	if err := m.SetLocalContentAvailable(folder.ID, name, local.Version.String(), true); err == nil {
++		t.Fatal("wrong leftover bytes were accepted as the exact global version")
++	}
++	stillDataless, ok, err := m.sdb.GetDeviceFile(folder.ID, protocol.LocalDeviceID, name)
++	if err != nil || !ok || !stillDataless.IsDataless() {
++		t.Fatalf("failed availability proof changed dataless authority: %+v, %v", stillDataless, err)
++	}
++
++	writeFile(t, filesystem, name, []byte("verified contents"))
++	must(t, m.SetLocalContentAvailable(folder.ID, name, local.Version.String(), true))
++	materialized, ok, err := m.sdb.GetDeviceFile(folder.ID, protocol.LocalDeviceID, name)
++	if err != nil || !ok || materialized.IsDataless() || !materialized.IsOnDemand() || materialized.IsInvalid() {
++		t.Fatalf("verified on-demand bytes did not become a local source: %+v, %v", materialized, err)
++	}
++}
+diff --git a/lib/model/fakeconns_test.go b/lib/model/fakeconns_test.go
+index 65b77cb..e15912c 100644
+--- a/lib/model/fakeconns_test.go
++++ b/lib/model/fakeconns_test.go
+@@ -10,6 +10,7 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"sync"
++	"testing"
+ 	"time"
+ 
+ 	"github.com/syncthing/syncthing/internal/timeutil"
+@@ -154,7 +155,57 @@ func (f *fakeConnection) sendIndexUpdate() {
+ 	for i := range f.files {
+ 		toSend[i] = prepareFileInfoForIndex(f.files[i])
+ 	}
+-	f.model.IndexUpdate(f, &protocol.IndexUpdate{Folder: f.folder, Files: toSend})
++	// This fixture always sends its complete in-memory file set. Model it as
++	// the full frame it represents and provide real frame sequence bounds, so
++	// production proof validation remains strict in tests as well.
++	f.model.Index(f, fullIndexForTest(f.folder, toSend))
++}
++
++func fullIndexForTest(folder string, files []protocol.FileInfo) *protocol.Index {
++	files, lastSequence := sequencedIndexFilesForTest(0, files)
++	return &protocol.Index{Folder: folder, Files: files, LastSequence: lastSequence}
++}
++
++func indexUpdateForTest(t testing.TB, m *testModel, conn protocol.Connection, folder string, files []protocol.FileInfo) *protocol.IndexUpdate {
++	t.Helper()
++	prevSequence, err := m.sdb.GetDeviceSequence(folder, conn.DeviceID())
++	if err != nil {
++		t.Fatal(err)
++	}
++	files, lastSequence := sequencedIndexFilesForTest(prevSequence, files)
++	return &protocol.IndexUpdate{
++		Folder:       folder,
++		Files:        files,
++		PrevSequence: prevSequence,
++		LastSequence: lastSequence,
++	}
++}
++
++func sequencedIndexFilesForTest(prevSequence int64, files []protocol.FileInfo) ([]protocol.FileInfo, int64) {
++	sequenced := append([]protocol.FileInfo(nil), files...)
++	lastSequence := prevSequence
++	for index := range sequenced {
++		if sequenced[index].Sequence <= lastSequence {
++			sequenced[index].Sequence = lastSequence + 1
++		}
++		lastSequence = sequenced[index].Sequence
++	}
++	return sequenced, lastSequence
++}
++
++func clusterConfigForTest(t testing.TB, m *testModel, device protocol.DeviceID, clusterConfig *protocol.ClusterConfig) error {
++	t.Helper()
++	m.mut.RLock()
++	connectionIDs := append([]string(nil), m.deviceConnIDs[device]...)
++	var connection protocol.Connection
++	if len(connectionIDs) > 0 {
++		connection = m.connections[connectionIDs[0]]
++	}
++	m.mut.RUnlock()
++	if connection == nil {
++		t.Fatalf("missing registered test connection for device %s", device.Short())
++	}
++	return m.ClusterConfig(connection, clusterConfig)
+ }
+ 
+ func addFakeConn(m *testModel, dev protocol.DeviceID, folderID string) *fakeConnection {
+diff --git a/lib/model/folder.go b/lib/model/folder.go
+index 9f9f572..4654ad5 100644
+--- a/lib/model/folder.go
++++ b/lib/model/folder.go
+@@ -648,6 +648,18 @@ func (b *scanBatch) shouldSkipInFindRenames(name string) bool {
+ // Update adds the fileinfo to the batch for updating, and does a few checks.
+ // It returns false if the checks result in the file not going to be updated or removed.
+ func (b *scanBatch) Update(fi protocol.FileInfo) (bool, error) {
++	// App-managed dataless items are materialized only through the explicit
++	// verified-content bridge. A background scanner must not turn leftover or
++	// partially installed bytes back into source authority.
++	if current, ok, err := b.f.db.GetDeviceFile(
++		b.f.folderID,
++		protocol.LocalDeviceID,
++		fi.Name,
++	); err != nil {
++		return false, err
++	} else if ok && current.IsDataless() && !fi.IsDataless() {
++		return false, nil
++	}
+ 	// Check for a "virtual" parent directory of encrypted files. We don't track
+ 	// it, but check if anything still exists within and delete it otherwise.
+ 	if b.f.Type == config.FolderTypeReceiveEncrypted && fi.IsDirectory() && protocol.IsEncryptedParent(fs.PathComponents(fi.Name)) {
+@@ -835,6 +847,9 @@ outer:
+ 				// the scan, so check whether it is deleted.
+ 				fallthrough
+ 			case !fi.IsIgnored() && !fi.IsDeleted() && !fi.IsUnsupported():
++				if fi.IsDataless() {
++					continue
++				}
+ 				// The file is not ignored, deleted or unsupported. Lets check if
+ 				// it's still here. Simply stat:ing it won't do as there are
+ 				// tons of corner cases (e.g. parent dir->symlink, missing
+diff --git a/lib/model/folder_recvonly_test.go b/lib/model/folder_recvonly_test.go
+index 6e3be24..646b06e 100644
+--- a/lib/model/folder_recvonly_test.go
++++ b/lib/model/folder_recvonly_test.go
+@@ -46,7 +46,7 @@ func TestRecvOnlyRevertDeletes(t *testing.T) {
+ 
+ 	// Send and index update for the known stuff
+ 
+-	must(t, m.Index(conn, &protocol.Index{Folder: "ro", Files: knownFiles}))
++	must(t, m.Index(conn, fullIndexForTest("ro", knownFiles)))
+ 	if err := f.updateLocalsFromScanning(knownFiles); err != nil {
+ 		t.Fatal(err)
+ 	}
+@@ -128,7 +128,7 @@ func TestRecvOnlyRevertNeeds(t *testing.T) {
+ 	// pull starting and causing race flakiness for the rest of the test.
+ 
+ 	f.updateLocalsFromScanning(knownFiles)
+-	must(t, m.Index(conn, &protocol.Index{Folder: "ro", Files: knownFiles}))
++	must(t, m.Index(conn, fullIndexForTest("ro", knownFiles)))
+ 
+ 	// Scan the folder.
+ 
+@@ -216,7 +216,7 @@ func TestRecvOnlyUndoChanges(t *testing.T) {
+ 
+ 	// Send an index update for the known stuff
+ 
+-	must(t, m.Index(conn, &protocol.Index{Folder: "ro", Files: knownFiles}))
++	must(t, m.Index(conn, fullIndexForTest("ro", knownFiles)))
+ 	f.updateLocalsFromScanning(knownFiles)
+ 
+ 	// Scan the folder.
+@@ -286,7 +286,7 @@ func TestRecvOnlyDeletedRemoteDrop(t *testing.T) {
+ 
+ 	// Send an index update for the known stuff
+ 
+-	must(t, m.Index(conn, &protocol.Index{Folder: "ro", Files: knownFiles}))
++	must(t, m.Index(conn, fullIndexForTest("ro", knownFiles)))
+ 	f.updateLocalsFromScanning(knownFiles)
+ 
+ 	// Scan the folder.
+@@ -351,7 +351,7 @@ func TestRecvOnlyRemoteUndoChanges(t *testing.T) {
+ 
+ 	// Send an index update for the known stuff
+ 
+-	must(t, m.Index(conn, &protocol.Index{Folder: "ro", Files: knownFiles}))
++	must(t, m.Index(conn, fullIndexForTest("ro", knownFiles)))
+ 	f.updateLocalsFromScanning(knownFiles)
+ 
+ 	// Scan the folder.
+@@ -405,7 +405,7 @@ func TestRecvOnlyRemoteUndoChanges(t *testing.T) {
+ 		f.Version = protocol.Vector{}.Update(device1.Short())
+ 		files = append(files, f)
+ 	}
+-	must(t, m.IndexUpdate(conn, &protocol.IndexUpdate{Folder: "ro", Files: files}))
++	must(t, m.IndexUpdate(conn, indexUpdateForTest(t, m, conn, "ro", files)))
+ 
+ 	// Ensure the pull to resolve conflicts (content identical) happened
+ 	must(t, f.doInSync(func(ctx context.Context) error {
+@@ -477,7 +477,7 @@ func TestRecvOnlyRevertOwnID(t *testing.T) {
+ 	}()
+ 
+ 	// Receive an index update with an older version, but valid and then revert
+-	must(t, m.Index(conn, &protocol.Index{Folder: f.ID, Files: []protocol.FileInfo{fi}}))
++	must(t, m.Index(conn, fullIndexForTest(f.ID, []protocol.FileInfo{fi})))
+ 	f.Revert()
+ 
+ 	select {
+@@ -504,7 +504,7 @@ func TestRecvOnlyLocalChangeDoesNotCauseConflict(t *testing.T) {
+ 
+ 	// Send an index update for the known stuff
+ 
+-	must(t, m.Index(conn, &protocol.Index{Folder: "ro", Files: knownFiles}))
++	must(t, m.Index(conn, fullIndexForTest("ro", knownFiles)))
+ 	f.updateLocalsFromScanning(knownFiles)
+ 
+ 	// Scan the folder.
+diff --git a/lib/model/folder_sendrecv_test.go b/lib/model/folder_sendrecv_test.go
+index 1daba2c..195bc4e 100644
+--- a/lib/model/folder_sendrecv_test.go
++++ b/lib/model/folder_sendrecv_test.go
+@@ -1232,7 +1232,7 @@ func TestPullSymlinkOverExistingWindows(t *testing.T) {
+ 	if !ok {
+ 		t.Fatal("file missing")
+ 	}
+-	must(t, m.Index(conn, &protocol.Index{Folder: f.ID, Files: []protocol.FileInfo{{Name: name, Type: protocol.FileInfoTypeSymlink, Version: file.Version.Update(device1.Short())}}}))
++	must(t, m.Index(conn, fullIndexForTest(f.ID, []protocol.FileInfo{{Name: name, Type: protocol.FileInfoTypeSymlink, Version: file.Version.Update(device1.Short())}})))
+ 
+ 	scanChan := make(chan string)
+ 
+diff --git a/lib/model/indexhandler.go b/lib/model/indexhandler.go
+index 60ec501..27fcea0 100644
+--- a/lib/model/indexhandler.go
++++ b/lib/model/indexhandler.go
+@@ -29,6 +29,8 @@ type indexHandler struct {
+ 	folder                   string
+ 	folderIsReceiveEncrypted bool
+ 	evLogger                 events.Logger
++	proofs                   *remoteIndexProofState
++	epoch                    remoteIndexEpoch
+ 
+ 	// We track the latest / highest sequence number in two ways for two
+ 	// different reasons. Initially they are the same -- the highest seen
+@@ -52,7 +54,7 @@ type indexHandler struct {
+ 	runner service
+ }
+ 
+-func newIndexHandler(conn protocol.Connection, downloads *deviceDownloadState, folder config.FolderConfiguration, sdb db.DB, runner service, startInfo *clusterConfigDeviceInfo, evLogger events.Logger) (*indexHandler, error) {
++func newIndexHandler(conn protocol.Connection, downloads *deviceDownloadState, folder config.FolderConfiguration, sdb db.DB, runner service, startInfo *clusterConfigDeviceInfo, evLogger events.Logger, proofs *remoteIndexProofState, epoch remoteIndexEpoch) (*indexHandler, error) {
+ 	myIndexID, err := sdb.GetIndexID(folder.ID, protocol.LocalDeviceID)
+ 	if err != nil {
+ 		return nil, err
+@@ -103,29 +105,38 @@ func newIndexHandler(conn protocol.Connection, downloads *deviceDownloadState, f
+ 	// otherwise we drop our old index data and expect to get a
+ 	// completely new set.
+ 
+-	theirIndexID, _ := sdb.GetIndexID(folder.ID, conn.DeviceID())
++	theirIndexID, err := sdb.GetIndexID(folder.ID, conn.DeviceID())
++	if err != nil {
++		return nil, err
++	}
+ 	if startInfo.remote.IndexID == 0 {
+-		// They're not announcing an index ID. This means they
+-		// do not support delta indexes and we should clear any
+-		// information we have from them before accepting their
+-		// index, which will presumably be a full index.
+-		l.Debugf("Device %v folder %s does not announce an index ID", conn.DeviceID().Short(), folder.Description())
+-		if err := sdb.DropAllFiles(folder.ID, conn.DeviceID()); err != nil {
++		if err := proofs.reset(epoch, folder.ID, true, func() error {
++			// They're not announcing an index ID. This means they
++			// do not support delta indexes and we should clear any
++			// information we have from them before accepting their
++			// index, which will presumably be a full index.
++			l.Debugf("Device %v folder %s does not announce an index ID", conn.DeviceID().Short(), folder.Description())
++			return sdb.DropAllFiles(folder.ID, conn.DeviceID())
++		}); err != nil {
+ 			return nil, err
+ 		}
+ 	} else if startInfo.remote.IndexID != theirIndexID {
+-		// The index ID we have on file is not what they're
+-		// announcing. They must have reset their database and
+-		// will probably send us a full index. We drop any
+-		// information we have and remember this new index ID
+-		// instead.
+-		slog.Info("Peer has a new index ID", conn.DeviceID().LogAttr(), folder.LogAttr(), slog.Any("indexid", startInfo.remote.IndexID))
+-		if err := sdb.DropAllFiles(folder.ID, conn.DeviceID()); err != nil {
+-			return nil, err
+-		}
+-		if err := sdb.SetIndexID(folder.ID, conn.DeviceID(), startInfo.remote.IndexID); err != nil {
++		if err := proofs.reset(epoch, folder.ID, false, func() error {
++			// The index ID we have on file is not what they're
++			// announcing. They must have reset their database and
++			// will probably send us a full index. We drop any
++			// information we have and remember this new index ID
++			// instead.
++			slog.Info("Peer has a new index ID", conn.DeviceID().LogAttr(), folder.LogAttr(), slog.Any("indexid", startInfo.remote.IndexID))
++			if err := sdb.DropAllFiles(folder.ID, conn.DeviceID()); err != nil {
++				return err
++			}
++			return sdb.SetIndexID(folder.ID, conn.DeviceID(), startInfo.remote.IndexID)
++		}); err != nil {
+ 			return nil, err
+ 		}
++	} else if err := proofs.withEpoch(epoch, func() error { return nil }); err != nil {
++		return nil, err
+ 	}
+ 
+ 	return &indexHandler{
+@@ -136,6 +147,8 @@ func newIndexHandler(conn protocol.Connection, downloads *deviceDownloadState, f
+ 		localPrevSequence:        startSequence,
+ 		sentPrevSequence:         startSequence,
+ 		evLogger:                 evLogger,
++		proofs:                   proofs,
++		epoch:                    epoch,
+ 
+ 		sdb:    sdb,
+ 		runner: runner,
+@@ -369,75 +382,98 @@ func (s *indexHandler) receive(fs []protocol.FileInfo, update bool, op string, p
+ 	defer runner.SchedulePull()
+ 
+ 	s.downloads.Update(s.folder, makeForgetUpdate(fs))
+-
+-	if !update {
+-		if err := s.sdb.DropAllFiles(s.folder, deviceID); err != nil {
+-			return err
++	seq, err := s.proofs.accept(s.epoch, s.folder, !update, lastSequence, func() (bool, error) {
++		frameValid := true
++		l.Debugf("Received %d files for %s from %s, prevSeq=%d, lastSeq=%d", len(fs), s.folder, deviceID.Short(), prevSequence, lastSequence)
++
++		// Validate the complete frame before mutating the durable remote
++		// index. A rejected frame must not manufacture a cursor that a later
++		// ClusterConfig epoch could mistake for authoritative stored state.
++		exp, err := s.sdb.GetDeviceSequence(s.folder, deviceID)
++		if err != nil {
++			return false, err
++		}
++		expectedPrev := exp
++		if !update {
++			expectedPrev = 0
++		}
++		if prevSequence != expectedPrev {
++			frameValid = false
++			s.logSequenceAnomaly("index update with unexpected sequence", map[string]any{
++				"prevSeq":      prevSequence,
++				"lastSeq":      lastSequence,
++				"batch":        len(fs),
++				"expectedPrev": expectedPrev,
++			})
+ 		}
+-	}
+-
+-	l.Debugf("Received %d files for %s from %s, prevSeq=%d, lastSeq=%d", len(fs), s.folder, deviceID.Short(), prevSequence, lastSequence)
+ 
+-	// Verify that the previous sequence number matches what we expected
+-	exp, err := s.sdb.GetDeviceSequence(s.folder, deviceID)
+-	if err != nil {
+-		return err
+-	}
+-	if prevSequence > 0 && prevSequence != exp {
+-		s.logSequenceAnomaly("index update with unexpected sequence", map[string]any{
+-			"prevSeq":      prevSequence,
+-			"lastSeq":      lastSequence,
+-			"batch":        len(fs),
+-			"expectedPrev": exp,
+-		})
+-	}
++		for i := range fs {
++			// Verify index in relation to the claimed sequence boundaries
++			if fs[i].Sequence <= prevSequence {
++				frameValid = false
++				s.logSequenceAnomaly("file with sequence before prevSequence", map[string]any{
++					"prevSeq": prevSequence,
++					"lastSeq": lastSequence,
++					"batch":   len(fs),
++					"seenSeq": fs[i].Sequence,
++					"atIndex": i,
++				})
++			}
++			if lastSequence > 0 && fs[i].Sequence > lastSequence {
++				frameValid = false
++				s.logSequenceAnomaly("file with sequence after lastSequence", map[string]any{
++					"prevSeq": prevSequence,
++					"lastSeq": lastSequence,
++					"batch":   len(fs),
++					"seenSeq": fs[i].Sequence,
++					"atIndex": i,
++				})
++			}
++			if i > 0 && fs[i].Sequence <= fs[i-1].Sequence {
++				frameValid = false
++				s.logSequenceAnomaly("index update with non-increasing sequence", map[string]any{
++					"prevSeq":      prevSequence,
++					"lastSeq":      lastSequence,
++					"batch":        len(fs),
++					"seenSeq":      fs[i].Sequence,
++					"atIndex":      i,
++					"precedingSeq": fs[i-1].Sequence,
++				})
++			}
++		}
+ 
+-	for i := range fs {
+-		// Verify index in relation to the claimed sequence boundaries
+-		if fs[i].Sequence < prevSequence {
+-			s.logSequenceAnomaly("file with sequence before prevSequence", map[string]any{
++		if len(fs) == 0 {
++			if lastSequence != expectedPrev {
++				frameValid = false
++				s.logSequenceAnomaly("empty index with unexpected last sequence", map[string]any{
++					"prevSeq":      prevSequence,
++					"lastSeq":      lastSequence,
++					"expectedLast": expectedPrev,
++				})
++			}
++		} else if lastSequence <= 0 || lastSequence != fs[len(fs)-1].Sequence {
++			frameValid = false
++			s.logSequenceAnomaly("index update with unexpected last sequence", map[string]any{
+ 				"prevSeq": prevSequence,
+ 				"lastSeq": lastSequence,
+ 				"batch":   len(fs),
+-				"seenSeq": fs[i].Sequence,
+-				"atIndex": i,
++				"seenSeq": fs[len(fs)-1].Sequence,
+ 			})
+ 		}
+-		if lastSequence > 0 && fs[i].Sequence > lastSequence {
+-			s.logSequenceAnomaly("file with sequence after lastSequence", map[string]any{
+-				"prevSeq": prevSequence,
+-				"lastSeq": lastSequence,
+-				"batch":   len(fs),
+-				"seenSeq": fs[i].Sequence,
+-				"atIndex": i,
+-			})
++
++		if !frameValid {
++			return false, nil
+ 		}
+-		if i > 0 && fs[i].Sequence <= fs[i-1].Sequence {
+-			s.logSequenceAnomaly("index update with non-increasing sequence", map[string]any{
+-				"prevSeq":      prevSequence,
+-				"lastSeq":      lastSequence,
+-				"batch":        len(fs),
+-				"seenSeq":      fs[i].Sequence,
+-				"atIndex":      i,
+-				"precedingSeq": fs[i-1].Sequence,
+-			})
++		if !update {
++			if err := s.sdb.DropAllFiles(s.folder, deviceID); err != nil {
++				return false, err
++			}
+ 		}
+-	}
+-
+-	// Verify the claimed last sequence number
+-	if lastSequence > 0 && len(fs) > 0 && lastSequence != fs[len(fs)-1].Sequence {
+-		s.logSequenceAnomaly("index update with unexpected last sequence", map[string]any{
+-			"prevSeq": prevSequence,
+-			"lastSeq": lastSequence,
+-			"batch":   len(fs),
+-			"seenSeq": fs[len(fs)-1].Sequence,
+-		})
+-	}
+-
+-	if err := s.sdb.Update(s.folder, deviceID, fs); err != nil {
+-		return err
+-	}
+-	seq, err := s.sdb.GetDeviceSequence(s.folder, deviceID)
++		if err := s.sdb.Update(s.folder, deviceID, fs); err != nil {
++			return false, err
++		}
++		return frameValid, nil
++	})
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -493,14 +529,18 @@ func (s *indexHandler) String() string {
+ }
+ 
+ type indexHandlerRegistry struct {
+-	evLogger      events.Logger
+-	conn          protocol.Connection
+-	sdb           db.DB
+-	downloads     *deviceDownloadState
+-	indexHandlers *serviceMap[string, *indexHandler]
+-	startInfos    map[string]*clusterConfigDeviceInfo
+-	folderStates  map[string]*indexHandlerFolderState
+-	mut           sync.Mutex
++	evLogger        events.Logger
++	conn            protocol.Connection
++	sdb             db.DB
++	downloads       *deviceDownloadState
++	indexHandlers   *serviceMap[string, *indexHandler]
++	startInfos      map[string]*clusterConfigDeviceInfo
++	folderStates    map[string]*indexHandlerFolderState
++	mut             sync.Mutex
++	proofs          *remoteIndexProofState
++	epoch           remoteIndexEpoch
++	lifecycleKnown  map[string]bool
++	lifecycleActive map[string]bool
+ }
+ 
+ type indexHandlerFolderState struct {
+@@ -508,16 +548,20 @@ type indexHandlerFolderState struct {
+ 	runner service
+ }
+ 
+-func newIndexHandlerRegistry(conn protocol.Connection, sdb db.DB, downloads *deviceDownloadState, evLogger events.Logger) *indexHandlerRegistry {
++func newIndexHandlerRegistry(conn protocol.Connection, sdb db.DB, downloads *deviceDownloadState, evLogger events.Logger, proofs *remoteIndexProofState, epoch remoteIndexEpoch) *indexHandlerRegistry {
+ 	r := &indexHandlerRegistry{
+-		evLogger:      evLogger,
+-		conn:          conn,
+-		sdb:           sdb,
+-		downloads:     downloads,
+-		indexHandlers: newServiceMap[string, *indexHandler](evLogger),
+-		startInfos:    make(map[string]*clusterConfigDeviceInfo),
+-		folderStates:  make(map[string]*indexHandlerFolderState),
+-		mut:           sync.Mutex{},
++		evLogger:        evLogger,
++		conn:            conn,
++		sdb:             sdb,
++		downloads:       downloads,
++		indexHandlers:   newServiceMap[string, *indexHandler](evLogger),
++		startInfos:      make(map[string]*clusterConfigDeviceInfo),
++		folderStates:    make(map[string]*indexHandlerFolderState),
++		mut:             sync.Mutex{},
++		proofs:          proofs,
++		epoch:           epoch,
++		lifecycleKnown:  make(map[string]bool),
++		lifecycleActive: make(map[string]bool),
+ 	}
+ 	return r
+ }
+@@ -532,11 +576,62 @@ func (r *indexHandlerRegistry) Serve(ctx context.Context) error {
+ 	return r.indexHandlers.Serve(ctx)
+ }
+ 
++func (r *indexHandlerRegistry) rotateEpoch() (remoteIndexEpoch, bool) {
++	r.mut.Lock()
++	defer r.mut.Unlock()
++	epoch, ok := r.proofs.rotate(r.epoch)
++	if !ok {
++		return remoteIndexEpoch{}, false
++	}
++	r.epoch = epoch
++	clear(r.startInfos)
++	return epoch, true
++}
++
++func (r *indexHandlerRegistry) invalidateEpoch() {
++	r.mut.Lock()
++	defer r.mut.Unlock()
++	r.proofs.invalidate(r.epoch)
++}
++
++func (r *indexHandlerRegistry) remoteIndexReadiness(folder string) (RemoteIndexReadiness, error) {
++	r.mut.Lock()
++	defer r.mut.Unlock()
++	if !r.hasActiveHandlerLocked(r.epoch, folder) {
++		return RemoteIndexReadiness{State: RemoteIndexProofMissing}, nil
++	}
++	return r.proofs.readiness(r.epoch, folder)
++}
++
++func (r *indexHandlerRegistry) remoteIndexEpochCurrent(device protocol.DeviceID, connectionID string, generation uint64) bool {
++	r.mut.Lock()
++	defer r.mut.Unlock()
++	if r.conn.DeviceID() != device || r.conn.ConnectionID() != connectionID || r.epoch.device != device || r.epoch.connectionID != connectionID || r.epoch.generation != generation {
++		return false
++	}
++	return r.proofs.epochCurrent(r.epoch)
++}
++
++func (r *indexHandlerRegistry) hasActiveHandler(epoch remoteIndexEpoch, folder string) bool {
++	r.mut.Lock()
++	defer r.mut.Unlock()
++	return r.hasActiveHandlerLocked(epoch, folder)
++}
++
++func (r *indexHandlerRegistry) hasActiveHandlerLocked(epoch remoteIndexEpoch, folder string) bool {
++	if r.epoch != epoch {
++		return false
++	}
++	state, stateOK := r.folderStates[folder]
++	handler, handlerOK := r.indexHandlers.Get(folder)
++	return stateOK && !state.cfg.Paused && state.runner != nil && handlerOK && handler.epoch == epoch
++}
++
+ func (r *indexHandlerRegistry) startLocked(folder config.FolderConfiguration, runner service, startInfo *clusterConfigDeviceInfo) error {
+ 	r.indexHandlers.RemoveAndWait(folder.ID, 0)
+ 	delete(r.startInfos, folder.ID)
+ 
+-	is, err := newIndexHandler(r.conn, r.downloads, folder, r.sdb, runner, startInfo, r.evLogger)
++	is, err := newIndexHandler(r.conn, r.downloads, folder, r.sdb, runner, startInfo, r.evLogger, r.proofs, r.epoch)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -547,13 +642,18 @@ func (r *indexHandlerRegistry) startLocked(folder config.FolderConfiguration, ru
+ 	return nil
+ }
+ 
+-// AddIndexInfo starts an index handler for given folder, unless it is paused.
++// addIndexInfoForEpoch starts an index handler for the ClusterConfig epoch,
++// unless the folder is paused. It fails closed when a newer ClusterConfig or
++// connection has already retired the caller's epoch.
+ // If it is paused, the given startInfo is stored to start the sender once the
+ // folder is resumed.
+ // If an index handler is already running, it will be stopped first.
+-func (r *indexHandlerRegistry) AddIndexInfo(folder string, startInfo *clusterConfigDeviceInfo) {
++func (r *indexHandlerRegistry) addIndexInfoForEpoch(epoch remoteIndexEpoch, folder string, startInfo *clusterConfigDeviceInfo) error {
+ 	r.mut.Lock()
+ 	defer r.mut.Unlock()
++	if r.epoch != epoch {
++		return errStaleRemoteIndexEpoch
++	}
+ 
+ 	if r.indexHandlers.RemoveAndWait(folder, 0) == nil {
+ 		l.Debugf("Removed index sender for device %v and folder %v due to added pending", r.conn.DeviceID().Short(), folder)
+@@ -562,9 +662,9 @@ func (r *indexHandlerRegistry) AddIndexInfo(folder string, startInfo *clusterCon
+ 	if !ok {
+ 		l.Debugf("Pending index handler for device %v and folder %v", r.conn.DeviceID().Short(), folder)
+ 		r.startInfos[folder] = startInfo
+-		return
++		return nil
+ 	}
+-	_ = r.startLocked(folderState.cfg, folderState.runner, startInfo) // XXX error handling...
++	return r.startLocked(folderState.cfg, folderState.runner, startInfo)
+ }
+ 
+ // Remove stops a running index handler or removes one pending to be started.
+@@ -573,21 +673,41 @@ func (r *indexHandlerRegistry) Remove(folder string) {
+ 	r.mut.Lock()
+ 	defer r.mut.Unlock()
+ 
++	r.proofs.blockFolder(r.epoch, folder)
++	r.lifecycleKnown[folder] = true
++	r.lifecycleActive[folder] = false
+ 	l.Debugf("Removing index handler for device %v and folder %v", r.conn.DeviceID().Short(), folder)
+ 	r.indexHandlers.RemoveAndWait(folder, 0)
+ 	delete(r.startInfos, folder)
++	delete(r.folderStates, folder)
+ 	l.Debugf("Removed index handler for device %v and folder %v", r.conn.DeviceID().Short(), folder)
+ }
+ 
++func (r *indexHandlerRegistry) removeForEpoch(epoch remoteIndexEpoch, folder string) error {
++	r.mut.Lock()
++	defer r.mut.Unlock()
++	if r.epoch != epoch {
++		return errStaleRemoteIndexEpoch
++	}
++	r.proofs.clearFolder(epoch, folder)
++	r.indexHandlers.RemoveAndWait(folder, 0)
++	delete(r.startInfos, folder)
++	return nil
++}
++
+ // RemoveAllExcept stops all running index handlers and removes those pending to be started,
+ // except mentioned ones.
+ // It is a noop if the folder isn't known.
+-func (r *indexHandlerRegistry) RemoveAllExcept(except map[string]remoteFolderState) {
++func (r *indexHandlerRegistry) removeAllExceptForEpoch(epoch remoteIndexEpoch, except map[string]remoteFolderState) error {
+ 	r.mut.Lock()
+ 	defer r.mut.Unlock()
++	if r.epoch != epoch {
++		return errStaleRemoteIndexEpoch
++	}
+ 
+ 	r.indexHandlers.Each(func(folder string, is *indexHandler) error {
+ 		if _, ok := except[folder]; !ok {
++			r.proofs.clearFolder(epoch, folder)
+ 			r.indexHandlers.RemoveAndWait(folder, 0)
+ 			l.Debugf("Removed index handler for device %v and folder %v (removeAllExcept)", r.conn.DeviceID().Short(), folder)
+ 		}
+@@ -595,28 +715,68 @@ func (r *indexHandlerRegistry) RemoveAllExcept(except map[string]remoteFolderSta
+ 	})
+ 	for folder := range r.startInfos {
+ 		if _, ok := except[folder]; !ok {
++			r.proofs.clearFolder(epoch, folder)
+ 			delete(r.startInfos, folder)
+ 			l.Debugf("Removed pending index handler for device %v and folder %v (removeAllExcept)", r.conn.DeviceID().Short(), folder)
+ 		}
+ 	}
++	return nil
+ }
+ 
+ // RegisterFolderState must be called whenever something about the folder
+ // changes. The exception being if the folder is removed entirely, then call
+ // Remove. The fset and runner arguments may be nil, if given folder is paused.
+ func (r *indexHandlerRegistry) RegisterFolderState(folder config.FolderConfiguration, runner service) {
+-	if !folder.SharedWith(r.conn.DeviceID()) {
+-		r.Remove(folder.ID)
+-		return
+-	}
++	r.mut.Lock()
++	r.registerFolderStateLocked(folder, runner, false)
++	r.mut.Unlock()
++}
+ 
++func (r *indexHandlerRegistry) registerInitialFolderState(folder config.FolderConfiguration, runner service) {
+ 	r.mut.Lock()
++	r.registerFolderOperationalStateLocked(folder, runner)
++	r.mut.Unlock()
++}
++
++func (r *indexHandlerRegistry) initializeFolderLifecycle(folder config.FolderConfiguration) {
++	r.mut.Lock()
++	defer r.mut.Unlock()
++	active := folder.SharedWith(r.conn.DeviceID()) && !folder.Paused
++	r.lifecycleKnown[folder.ID] = true
++	r.lifecycleActive[folder.ID] = active
++	if !active {
++		r.proofs.blockFolder(r.epoch, folder.ID)
++	}
++}
++
++func (r *indexHandlerRegistry) registerFolderStateLocked(folder config.FolderConfiguration, runner service, initial bool) {
++	shared := folder.SharedWith(r.conn.DeviceID())
++	// Lifecycle eligibility is configuration state. A runner may be nil
++	// transiently during startup and is checked separately by the active
++	// handler/readiness gate.
++	active := shared && !folder.Paused
++	known := r.lifecycleKnown[folder.ID]
++	if (initial && !active) || (!initial && ((!known && !active) || (known && r.lifecycleActive[folder.ID] != active))) {
++		r.proofs.blockFolder(r.epoch, folder.ID)
++	}
++	r.lifecycleKnown[folder.ID] = true
++	r.lifecycleActive[folder.ID] = active
++	r.registerFolderOperationalStateLocked(folder, runner)
++}
++
++func (r *indexHandlerRegistry) registerFolderOperationalStateLocked(folder config.FolderConfiguration, runner service) {
++	shared := folder.SharedWith(r.conn.DeviceID())
++	if !shared {
++		r.indexHandlers.RemoveAndWait(folder.ID, 0)
++		delete(r.startInfos, folder.ID)
++		delete(r.folderStates, folder.ID)
++		return
++	}
+ 	if folder.Paused {
+ 		r.folderPausedLocked(folder.ID)
+ 	} else {
+ 		r.folderRunningLocked(folder, runner)
+ 	}
+-	r.mut.Unlock()
+ }
+ 
+ // folderPausedLocked stops a running index handler.
+diff --git a/lib/model/model.go b/lib/model/model.go
+index 3b35a4a..428b174 100644
+--- a/lib/model/model.go
++++ b/lib/model/model.go
+@@ -150,12 +150,13 @@ type model struct {
+ 	globalRequestLimiter *semaphore.Semaphore
+ 	// folderIOLimiter limits the number of concurrent I/O heavy operations,
+ 	// such as scans and pulls.
+-	folderIOLimiter *semaphore.Semaphore
+-	fatalChan       chan error
+-	started         chan struct{}
+-	keyGen          *protocol.KeyGenerator
+-	promotionTimer  *time.Timer
+-	observed        *db.ObservedDB
++	folderIOLimiter   *semaphore.Semaphore
++	fatalChan         chan error
++	started           chan struct{}
++	keyGen            *protocol.KeyGenerator
++	promotionTimer    *time.Timer
++	observed          *db.ObservedDB
++	remoteIndexProofs *remoteIndexProofState
+ 
+ 	// fields protected by mut
+ 	mut                            sync.RWMutex
+@@ -167,6 +168,7 @@ type model struct {
+ 	folderVersioners               map[string]versioner.Versioner                         // folder -> versioner (may be nil)
+ 	folderEncryptionPasswordTokens map[string][]byte                                      // folder -> encryption token (may be missing, and only for encryption type folders)
+ 	folderEncryptionFailures       map[string]map[protocol.DeviceID]error                 // folder -> device -> error regarding encryption consistency (may be missing)
++	folderTransferDirections       map[string]FolderTransferDirections                    // folder -> embedding payload gates (missing means both directions allowed)
+ 	connections                    map[string]protocol.Connection                         // connection ID -> connection
+ 	deviceConnIDs                  map[protocol.DeviceID][]string                         // device -> connection IDs (invariant: if the key exists, the value is len >= 1, with the primary connection at the start of the slice)
+ 	promotedConnID                 map[protocol.DeviceID]string                           // device -> latest promoted connection ID
+@@ -181,6 +183,173 @@ type model struct {
+ 	foldersRunning atomic.Int32
+ }
+ 
++// GlobalFileAvailability returns the non-local configured devices whose
++// persisted index contains the exact current global version of path. Unlike
++// block availability this deliberately does not require a live connection;
++// embedding applications use it to retain version-bound upload evidence while
++// offline.
++func (m *model) GlobalFileAvailability(folder, path string) ([]protocol.DeviceID, error) {
++	m.mut.RLock()
++	defer m.mut.RUnlock()
++
++	cfg, ok := m.folderCfgs[folder]
++	if !ok {
++		return nil, ErrFolderMissing
++	}
++	configured := make(map[protocol.DeviceID]struct{}, len(cfg.Devices))
++	for _, device := range cfg.Devices {
++		if device.DeviceID != protocol.LocalDeviceID {
++			configured[device.DeviceID] = struct{}{}
++		}
++	}
++	devices, err := m.sdb.GetGlobalAvailability(folder, path)
++	if err != nil {
++		return nil, err
++	}
++	result := make([]protocol.DeviceID, 0, len(devices))
++	for _, deviceID := range devices {
++		if _, ok := configured[deviceID]; ok {
++			result = append(result, deviceID)
++		}
++	}
++	return result, nil
++}
++
++// SetLocalContentUnavailable atomically removes local source authority for the
++// exact current global version while retaining its global-index metadata.
++func (m *model) SetLocalContentUnavailable(folder, path, expectedVersion string) error {
++	return m.setLocalContentUnavailable(folder, path, expectedVersion, true)
++}
++
++// SetLocalContentUnavailableAfterSystemEviction withdraws source authority
++// after File Provider has already removed the local bytes. The exact
++// local/global version fences still apply, but a remote-replica precondition
++// would be too late: the local payload is already absent.
++func (m *model) SetLocalContentUnavailableAfterSystemEviction(folder, path, expectedVersion string) error {
++	return m.setLocalContentUnavailable(folder, path, expectedVersion, false)
++}
++
++func (m *model) setLocalContentUnavailable(folder, path, expectedVersion string, requireRemote bool) error {
++	m.mut.RLock()
++	_, ok := m.folderCfgs[folder]
++	m.mut.RUnlock()
++	if !ok {
++		return ErrFolderMissing
++	}
++	global, ok, err := m.sdb.GetGlobalFile(folder, path)
++	if err != nil {
++		return err
++	}
++	if !ok || global.IsDeleted() || global.IsInvalid() || global.IsDirectory() || global.IsSymlink() {
++		return errors.New("global file is not an eligible regular version")
++	}
++	if global.Version.String() != expectedVersion {
++		return errors.New("global file version changed")
++	}
++	if requireRemote {
++		holders, err := m.GlobalFileAvailability(folder, path)
++		if err != nil {
++			return err
++		}
++		hasRemote := false
++		for range holders {
++			hasRemote = true
++			break
++		}
++		if !hasRemote {
++			return errors.New("no exact remote replica")
++		}
++	}
++	local, ok, err := m.sdb.GetDeviceFile(folder, protocol.LocalDeviceID, path)
++	if err != nil {
++		return err
++	}
++	if !ok || local.Version.String() != expectedVersion || local.IsDeleted() {
++		return errors.New("local file version changed")
++	}
++	local.LocalFlags |= protocol.FlagLocalDataless
++	if err := m.sdb.Update(folder, protocol.LocalDeviceID, []protocol.FileInfo{local}); err != nil {
++		return err
++	}
++	sequence, err := m.sdb.GetDeviceSequence(folder, protocol.LocalDeviceID)
++	if err != nil {
++		return err
++	}
++	m.evLogger.Log(events.LocalIndexUpdated, map[string]interface{}{
++		"folder":    folder,
++		"items":     1,
++		"filenames": []string{path},
++		"sequence":  sequence,
++		"version":   sequence,
++	})
++	return nil
++}
++
++// SetLocalContentAvailable publishes source authority only after the exact
++// global version is present as a stable, fully hashed regular file in the
++// configured folder. On-demand copies remain distinguishable from retained
++// copies so a later global version is not pulled implicitly.
++func (m *model) SetLocalContentAvailable(folder, path, expectedVersion string, onDemand bool) error {
++	m.mut.RLock()
++	cfg, ok := m.folderCfgs[folder]
++	m.mut.RUnlock()
++	if !ok {
++		return ErrFolderMissing
++	}
++	global, ok, err := m.sdb.GetGlobalFile(folder, path)
++	if err != nil {
++		return err
++	}
++	if !ok || global.IsDeleted() || global.IsInvalid() || global.IsDirectory() || global.IsSymlink() {
++		return errors.New("global file is not an eligible regular version")
++	}
++	if global.Version.String() != expectedVersion {
++		return errors.New("global file version changed")
++	}
++	filesystem := cfg.Filesystem()
++	info, err := filesystem.Lstat(path)
++	if err != nil || !info.IsRegular() || info.Size() != global.Size {
++		return errors.New("local content is missing or has the wrong size")
++	}
++	blocks, err := scanner.HashFile(
++		context.Background(),
++		folder,
++		filesystem,
++		path,
++		global.BlockSize(),
++		nil,
++	)
++	if err != nil {
++		return err
++	}
++	verified := global
++	verified.Blocks = blocks
++	verified.BlocksHash = nil
++	if !global.BlocksEqual(verified) {
++		return errors.New("local content blocks do not match the global version")
++	}
++	local := global
++	local.LocalFlags = 0
++	if onDemand {
++		local.LocalFlags = protocol.FlagLocalOnDemand
++	}
++	if err := m.sdb.Update(folder, protocol.LocalDeviceID, []protocol.FileInfo{local}); err != nil {
++		return err
++	}
++	sequence, err := m.sdb.GetDeviceSequence(folder, protocol.LocalDeviceID)
++	if err != nil {
++		return err
++	}
++	m.evLogger.Log(events.LocalIndexUpdated, map[string]interface{}{
++		"folder":    folder,
++		"items":     1,
++		"filenames": []string{path},
++		"sequence":  sequence,
++		"version":   sequence,
++	})
++	return nil
++}
++
+ var _ config.Verifier = &model{}
+ 
+ type folderFactory func(*model, *ignore.Matcher, config.FolderConfiguration, versioner.Versioner, events.Logger, *semaphore.Semaphore) service
+@@ -207,8 +376,32 @@ var (
+ 	errEncryptionTokenWrite               = errors.New("failed to write encryption token")
+ 	errMissingRemoteInClusterConfig       = errors.New("remote device missing in cluster config")
+ 	errMissingLocalInClusterConfig        = errors.New("local device missing in cluster config")
++	ErrTransferDirectionDisabled          = errors.New("folder transfer direction is disabled")
+ )
+ 
++// FolderTransferDirections is an embedding-only hard gate for provider payload
++// I/O. Index exchange remains enabled regardless of these values.
++type FolderTransferDirections struct {
++	Upload   bool
++	Download bool
++}
++
++// SetFolderTransferDirections installs a per-folder payload gate before the
++// Syncthing app starts. A missing entry preserves upstream behavior.
++func SetFolderTransferDirections(value Model, folderID string, directions FolderTransferDirections) error {
++	m, ok := value.(*model)
++	if !ok {
++		return errors.New("model does not support folder transfer direction gates")
++	}
++	if folderID == "" {
++		return errors.New("folder ID must not be empty")
++	}
++	m.mut.Lock()
++	m.folderTransferDirections[folderID] = directions
++	m.mut.Unlock()
++	return nil
++}
++
+ // NewModel creates and starts a new model. The model starts in read-only mode,
+ // where it sends index information to connected peers and responds to requests
+ // for file data without altering the local folder in any way.
+@@ -234,6 +427,7 @@ func NewModel(cfg config.Wrapper, id protocol.DeviceID, sdb db.DB, protectedFile
+ 		keyGen:               keyGen,
+ 		promotionTimer:       time.NewTimer(0),
+ 		observed:             db.NewObservedDB(sdb),
++		remoteIndexProofs:    newRemoteIndexProofState(sdb),
+ 
+ 		// fields protected by mut
+ 		folderCfgs:                     make(map[string]config.FolderConfiguration),
+@@ -243,6 +437,7 @@ func NewModel(cfg config.Wrapper, id protocol.DeviceID, sdb db.DB, protectedFile
+ 		folderVersioners:               make(map[string]versioner.Versioner),
+ 		folderEncryptionPasswordTokens: make(map[string][]byte),
+ 		folderEncryptionFailures:       make(map[string]map[protocol.DeviceID]error),
++		folderTransferDirections:       make(map[string]FolderTransferDirections),
+ 		connections:                    make(map[string]protocol.Connection),
+ 		deviceConnIDs:                  make(map[protocol.DeviceID][]string),
+ 		promotedConnID:                 make(map[protocol.DeviceID]string),
+@@ -911,6 +1106,44 @@ func (m *model) Completion(device protocol.DeviceID, folder string) (FolderCompl
+ 	return comp, nil
+ }
+ 
++func (m *model) RemoteIndexReadiness(device protocol.DeviceID, folder string) (RemoteIndexReadiness, error) {
++	m.mut.RLock()
++	defer m.mut.RUnlock()
++	folderCfg, ok := m.folderCfgs[folder]
++	if !ok || folderCfg.Paused || !folderCfg.SharedWith(device) {
++		return RemoteIndexReadiness{State: RemoteIndexProofMissing}, nil
++	}
++	registry, ok := m.indexHandlers.Get(device)
++	if !ok {
++		return RemoteIndexReadiness{State: RemoteIndexProofMissing}, nil
++	}
++	registered, ok := m.connections[registry.conn.ConnectionID()]
++	if !ok || registered.DeviceID() != device || registered.ConnectionID() != registry.conn.ConnectionID() {
++		return RemoteIndexReadiness{State: RemoteIndexProofMissing}, nil
++	}
++	return registry.remoteIndexReadiness(folder)
++}
++
++// RemoteIndexEpochCurrent validates the exact current receive-owner epoch.
++// Lock order is model -> registry -> proof state; callers must supply the raw
++// in-memory connection identity and no connection data is logged or returned.
++func (m *model) RemoteIndexEpochCurrent(device protocol.DeviceID, connectionID string, generation uint64) bool {
++	if device == protocol.EmptyDeviceID || connectionID == "" || generation == 0 {
++		return false
++	}
++	m.mut.RLock()
++	defer m.mut.RUnlock()
++	registry, ok := m.indexHandlers.Get(device)
++	if !ok || registry.conn.DeviceID() != device || registry.conn.ConnectionID() != connectionID {
++		return false
++	}
++	registered, ok := m.connections[connectionID]
++	if !ok || registered.DeviceID() != device || registered.ConnectionID() != connectionID {
++		return false
++	}
++	return registry.remoteIndexEpochCurrent(device, connectionID, generation)
++}
++
+ func (m *model) folderCompletion(device protocol.DeviceID, folder string) (FolderCompletion, error) {
+ 	m.mut.RLock()
+ 	err := m.checkFolderRunningRLocked(folder)
+@@ -1197,7 +1430,22 @@ type clusterConfigDeviceInfo struct {
+ }
+ 
+ type ClusterConfigReceivedEventData struct {
+-	Device protocol.DeviceID `json:"device"`
++	Device          protocol.DeviceID          `json:"device"`
++	ConnectionID    string                     `json:"-"`
++	ConnectionEpoch uint64                     `json:"-"`
++	PendingFolders  []PendingFolderObservation `json:"-"`
++}
++
++// PendingFolderObservation is private, in-process evidence captured from the
++// same authoritative ClusterConfig epoch that was accepted by the model. The
++// fields are deliberately excluded from event JSON: connection identity and
++// observation evidence must never escape through Syncthing's public event API.
++type PendingFolderObservation struct {
++	FolderID         string    `json:"-"`
++	Label            string    `json:"-"`
++	LastSeen         time.Time `json:"-"`
++	ReceiveEncrypted bool      `json:"-"`
++	RemoteEncrypted  bool      `json:"-"`
+ }
+ 
+ func (m *model) ClusterConfig(conn protocol.Connection, cm *protocol.ClusterConfig) error {
+@@ -1216,7 +1464,10 @@ func (m *model) ClusterConfig(conn protocol.Connection, cm *protocol.ClusterConf
+ 	// temporary indexes, subscribe the connection.
+ 
+ 	l.Debugf("Handling ClusterConfig from %v at %s", deviceID.Short(), conn)
+-	indexHandlerRegistry := m.ensureIndexHandler(conn)
++	indexHandlerRegistry, epoch, err := m.ensureIndexHandler(conn)
++	if err != nil {
++		return err
++	}
+ 
+ 	deviceCfg, ok := m.cfg.Device(deviceID)
+ 	if !ok {
+@@ -1289,7 +1540,8 @@ func (m *model) ClusterConfig(conn protocol.Connection, cm *protocol.ClusterConf
+ 		w.Wait()
+ 	}
+ 
+-	tempIndexFolders, states, err := m.ccHandleFolders(cm.Folders, deviceCfg, ccDeviceInfos, indexHandlerRegistry)
++	observedAt := time.Now().Truncate(time.Second)
++	tempIndexFolders, states, err := m.ccHandleFolders(cm.Folders, deviceCfg, ccDeviceInfos, indexHandlerRegistry, epoch, observedAt)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -1298,9 +1550,38 @@ func (m *model) ClusterConfig(conn protocol.Connection, cm *protocol.ClusterConf
+ 	m.remoteFolderStates[deviceID] = states
+ 	m.mut.Unlock()
+ 
+-	m.evLogger.Log(events.ClusterConfigReceived, ClusterConfigReceivedEventData{
+-		Device: deviceID,
+-	})
++	proofPairs := make(map[string]remoteIndexProofPair, len(cm.Folders))
++	for _, folder := range cm.Folders {
++		configured, ok := m.cfg.Folder(folder.ID)
++		if !ok || configured.Paused || !configured.SharedWith(deviceID) || states[folder.ID] != remoteFolderValid || !indexHandlerRegistry.hasActiveHandler(epoch, folder.ID) {
++			continue
++		}
++		remote := ccDeviceInfos[folder.ID].remote
++		proofPairs[folder.ID] = remoteIndexProofPair{indexID: remote.IndexID, maxSequence: remote.MaxSequence}
++	}
++	pendingFolders := make([]PendingFolderObservation, 0, len(cm.Folders))
++	for _, folder := range cm.Folders {
++		if _, configured := m.cfg.Folder(folder.ID); configured || deviceCfg.IgnoredFolder(folder.ID) {
++			continue
++		}
++		pendingFolders = append(pendingFolders, PendingFolderObservation{
++			FolderID:         folder.ID,
++			Label:            folder.Label,
++			LastSeen:         observedAt,
++			ReceiveEncrypted: len(ccDeviceInfos[folder.ID].local.EncryptionPasswordToken) > 0,
++			RemoteEncrypted:  len(ccDeviceInfos[folder.ID].remote.EncryptionPasswordToken) > 0,
++		})
++	}
++	if !m.remoteIndexProofs.publishAndDo(epoch, proofPairs, func() {
++		m.evLogger.Log(events.ClusterConfigReceived, ClusterConfigReceivedEventData{
++			Device:          deviceID,
++			ConnectionID:    epoch.connectionID,
++			ConnectionEpoch: epoch.generation,
++			PendingFolders:  pendingFolders,
++		})
++	}) {
++		return errStaleRemoteIndexEpoch
++	}
+ 
+ 	if len(tempIndexFolders) > 0 {
+ 		var connOK bool
+@@ -1338,17 +1619,31 @@ func (m *model) ClusterConfig(conn protocol.Connection, cm *protocol.ClusterConf
+ 	return nil
+ }
+ 
+-func (m *model) ensureIndexHandler(conn protocol.Connection) *indexHandlerRegistry {
++func (m *model) ensureIndexHandler(conn protocol.Connection) (*indexHandlerRegistry, remoteIndexEpoch, error) {
+ 	deviceID := conn.DeviceID()
+ 	connID := conn.ConnectionID()
+ 
+ 	m.mut.Lock()
+ 	defer m.mut.Unlock()
+ 
++	registered, connected := m.connections[connID]
++	if !connected || registered.DeviceID() != deviceID || registered.ConnectionID() != connID {
++		return nil, remoteIndexEpoch{}, errors.New("cluster config received on a connection that is no longer current")
++	}
++
+ 	indexHandlerRegistry, ok := m.indexHandlers.Get(deviceID)
+ 	if ok && indexHandlerRegistry.conn.ConnectionID() == connID {
+-		// This is an existing and proper index handler for this connection.
+-		return indexHandlerRegistry
++		// Every authoritative ClusterConfig starts a new receive epoch, even on
++		// the same connection. Old handlers retain the retired token and cannot
++		// publish or accept readiness evidence while this config is processed.
++		epoch, rotated := indexHandlerRegistry.rotateEpoch()
++		if !rotated {
++			return nil, remoteIndexEpoch{}, errStaleRemoteIndexEpoch
++		}
++		for _, fcfg := range m.cfg.Folders() {
++			indexHandlerRegistry.initializeFolderLifecycle(fcfg)
++		}
++		return indexHandlerRegistry, epoch, nil
+ 	}
+ 
+ 	if ok {
+@@ -1357,20 +1652,25 @@ func (m *model) ensureIndexHandler(conn protocol.Connection) *indexHandlerRegist
+ 		// the other side has decided to start using a new primary
+ 		// connection but we haven't seen it close yet. Ideally it will
+ 		// close shortly by itself...
+-		slog.Warn("Abandoning old index handler in favour of new connection", deviceID.LogAttr(), slog.String("old", indexHandlerRegistry.conn.ConnectionID()), slog.String("new", connID))
++		slog.Warn("Abandoning old index handler in favour of new connection", deviceID.LogAttr())
++		indexHandlerRegistry.invalidateEpoch()
+ 		m.indexHandlers.RemoveAndWait(deviceID, 0)
+ 	}
+ 
+ 	// Create a new index handler for this device.
+-	indexHandlerRegistry = newIndexHandlerRegistry(conn, m.sdb, m.deviceDownloads[deviceID], m.evLogger)
++	epoch := m.remoteIndexProofs.begin(deviceID, connID)
++	indexHandlerRegistry = newIndexHandlerRegistry(conn, m.sdb, m.deviceDownloads[deviceID], m.evLogger, m.remoteIndexProofs, epoch)
++	for _, fcfg := range m.cfg.Folders() {
++		indexHandlerRegistry.initializeFolderLifecycle(fcfg)
++	}
+ 	for id, fcfg := range m.folderCfgs {
+ 		l.Debugln("Registering folder", id, "for", deviceID.Short())
+ 		runner, _ := m.folderRunners.Get(id)
+-		indexHandlerRegistry.RegisterFolderState(fcfg, runner)
++		indexHandlerRegistry.registerInitialFolderState(fcfg, runner)
+ 	}
+ 	m.indexHandlers.Add(deviceID, indexHandlerRegistry)
+ 
+-	return indexHandlerRegistry
++	return indexHandlerRegistry, epoch, nil
+ }
+ 
+ func (m *model) getIndexHandlerRLocked(conn protocol.Connection) (*indexHandlerRegistry, bool) {
+@@ -1389,7 +1689,7 @@ func (m *model) getIndexHandlerRLocked(conn protocol.Connection) (*indexHandlerR
+ 	return nil, false
+ }
+ 
+-func (m *model) ccHandleFolders(folders []protocol.Folder, deviceCfg config.DeviceConfiguration, ccDeviceInfos map[string]*clusterConfigDeviceInfo, indexHandlers *indexHandlerRegistry) ([]string, map[string]remoteFolderState, error) {
++func (m *model) ccHandleFolders(folders []protocol.Folder, deviceCfg config.DeviceConfiguration, ccDeviceInfos map[string]*clusterConfigDeviceInfo, indexHandlers *indexHandlerRegistry, epoch remoteIndexEpoch, observedAt time.Time) ([]string, map[string]remoteFolderState, error) {
+ 	var folderDevice config.FolderDeviceConfiguration
+ 	tempIndexFolders := make([]string, 0, len(folders))
+ 	seenFolders := make(map[string]remoteFolderState, len(folders))
+@@ -1399,7 +1699,7 @@ func (m *model) ccHandleFolders(folders []protocol.Folder, deviceCfg config.Devi
+ 	if err != nil {
+ 		slog.Warn("Failed to list pending folders for cleanup", slogutil.Error(err))
+ 	}
+-	of := db.ObservedFolder{Time: time.Now().Truncate(time.Second)}
++	of := db.ObservedFolder{Time: observedAt}
+ 	for _, folder := range folders {
+ 		seenFolders[folder.ID] = remoteFolderValid
+ 
+@@ -1408,7 +1708,9 @@ func (m *model) ccHandleFolders(folders []protocol.Folder, deviceCfg config.Devi
+ 			folderDevice, ok = cfg.Device(deviceID)
+ 		}
+ 		if !ok {
+-			indexHandlers.Remove(folder.ID)
++			if err := indexHandlers.removeForEpoch(epoch, folder.ID); err != nil {
++				return tempIndexFolders, seenFolders, err
++			}
+ 			if deviceCfg.IgnoredFolder(folder.ID) {
+ 				slog.Info("Ignoring announced folder", folder.LogAttr(), deviceID.LogAttr())
+ 				continue
+@@ -1421,7 +1723,9 @@ func (m *model) ccHandleFolders(folders []protocol.Folder, deviceCfg config.Devi
+ 				slog.Warn("Failed to persist pending folder entry to database", slogutil.Error(err))
+ 			}
+ 			if folder.IsRunning() {
+-				indexHandlers.AddIndexInfo(folder.ID, ccDeviceInfos[folder.ID])
++				if err := indexHandlers.addIndexInfoForEpoch(epoch, folder.ID, ccDeviceInfos[folder.ID]); err != nil {
++					return tempIndexFolders, seenFolders, err
++				}
+ 			}
+ 			updatedPending = append(updatedPending, updatedPendingFolder{
+ 				FolderID:         folder.ID,
+@@ -1441,13 +1745,17 @@ func (m *model) ccHandleFolders(folders []protocol.Folder, deviceCfg config.Devi
+ 		}
+ 
+ 		if !folder.IsRunning() {
+-			indexHandlers.Remove(folder.ID)
++			if err := indexHandlers.removeForEpoch(epoch, folder.ID); err != nil {
++				return tempIndexFolders, seenFolders, err
++			}
+ 			seenFolders[cfg.ID] = remoteFolderPaused
+ 			continue
+ 		}
+ 
+ 		if cfg.Paused {
+-			indexHandlers.AddIndexInfo(folder.ID, ccDeviceInfos[folder.ID])
++			if err := indexHandlers.addIndexInfoForEpoch(epoch, folder.ID, ccDeviceInfos[folder.ID]); err != nil {
++				return tempIndexFolders, seenFolders, err
++			}
+ 			continue
+ 		}
+ 
+@@ -1489,10 +1797,14 @@ func (m *model) ccHandleFolders(folders []protocol.Folder, deviceCfg config.Devi
+ 		if folder.Type != protocol.FolderTypeReceiveEncrypted {
+ 			tempIndexFolders = append(tempIndexFolders, folder.ID)
+ 		}
+-		indexHandlers.AddIndexInfo(folder.ID, ccDeviceInfos[folder.ID])
++		if err := indexHandlers.addIndexInfoForEpoch(epoch, folder.ID, ccDeviceInfos[folder.ID]); err != nil {
++			return tempIndexFolders, seenFolders, err
++		}
+ 	}
+ 
+-	indexHandlers.RemoveAllExcept(seenFolders)
++	if err := indexHandlers.removeAllExceptForEpoch(epoch, seenFolders); err != nil {
++		return tempIndexFolders, seenFolders, err
++	}
+ 
+ 	// Explicitly mark folders we offer, but the remote has not accepted
+ 	for folderID, cfg := range m.cfg.Folders() {
+@@ -1890,11 +2202,15 @@ func (m *model) Closed(conn protocol.Connection, err error) {
+ 	var wait <-chan error
+ 	if removedIsPrimary {
+ 		m.progressEmitter.temporaryIndexUnsubscribe(conn)
+-		if idxh, ok := m.indexHandlers.Get(deviceID); ok && idxh.conn.ConnectionID() == connID {
+-			wait = m.indexHandlers.RemoveAndWaitChan(deviceID, 0)
+-		}
+ 		m.scheduleConnectionPromotion()
+ 	}
++	// Receive-primary ownership is chosen by the peer and may differ from our
++	// outbound promoted connection. Always retire the handler whose inbound
++	// connection closed, even when another outbound primary remains.
++	if idxh, ok := m.indexHandlers.Get(deviceID); ok && idxh.conn.ConnectionID() == connID {
++		idxh.invalidateEpoch()
++		wait = m.indexHandlers.RemoveAndWaitChan(deviceID, 0)
++	}
+ 	if len(remainingConns) == 0 {
+ 		// All device connections closed
+ 		delete(m.deviceConnIDs, deviceID)
+@@ -1971,7 +2287,11 @@ func (m *model) Request(conn protocol.Connection, req *protocol.Request) (out pr
+ 	m.mut.RLock()
+ 	folderCfg, ok := m.folderCfgs[req.Folder]
+ 	folderIgnores := m.folderIgnores[req.Folder]
++	directions, hasDirections := m.folderTransferDirections[req.Folder]
+ 	m.mut.RUnlock()
++	if hasDirections && !directions.Upload {
++		return nil, ErrTransferDirectionDisabled
++	}
+ 	if !ok {
+ 		// The folder might be already unpaused in the config, but not yet
+ 		// in the model.
+@@ -2452,6 +2772,12 @@ func (m *model) deviceDidCloseRLocked(deviceID protocol.DeviceID, duration time.
+ }
+ 
+ func (m *model) RequestGlobal(ctx context.Context, deviceID protocol.DeviceID, folder, name string, blockNo int, offset int64, size int, hash []byte, fromTemporary bool) ([]byte, error) {
++	m.mut.RLock()
++	directions, hasDirections := m.folderTransferDirections[folder]
++	m.mut.RUnlock()
++	if hasDirections && !directions.Download {
++		return nil, ErrTransferDirectionDisabled
++	}
+ 	conn, connOK := m.requestConnectionForDevice(deviceID)
+ 	if !connOK {
+ 		return nil, fmt.Errorf("requestGlobal: no connection to device: %s", deviceID.Short())
+@@ -2970,6 +3296,12 @@ func (m *model) CommitConfiguration(from, to config.Configuration) bool {
+ 			// A folder was added.
+ 			if cfg.Paused {
+ 				slog.Info("Paused folder", cfg.LogAttr())
++				m.mut.Lock()
++				m.indexHandlers.Each(func(_ protocol.DeviceID, registry *indexHandlerRegistry) error {
++					registry.RegisterFolderState(cfg, nil)
++					return nil
++				})
++				m.mut.Unlock()
+ 			} else {
+ 				slog.Info("Adding folder", cfg.LogAttr())
+ 				if err := m.newFolder(cfg); err != nil {
+diff --git a/lib/model/model_test.go b/lib/model/model_test.go
+index 8cac582..2fae5da 100644
+--- a/lib/model/model_test.go
++++ b/lib/model/model_test.go
+@@ -148,6 +148,26 @@ func TestRequest(t *testing.T) {
+ 	}
+ }
+ 
++func TestFolderTransferDirectionsRejectPayloadBeforeIO(t *testing.T) {
++	wrapper, _ := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	if err := SetFolderTransferDirections(m.model, "default", FolderTransferDirections{Download: true}); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := m.Request(device1Conn, &protocol.Request{Folder: "default", Name: "unread", Size: 1}); !errors.Is(err, ErrTransferDirectionDisabled) {
++		t.Fatalf("upload gate returned %v", err)
++	}
++
++	if err := SetFolderTransferDirections(m.model, "default", FolderTransferDirections{Upload: true}); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := m.RequestGlobal(t.Context(), device1, "default", "unrequested", 0, 0, 1, nil, false); !errors.Is(err, ErrTransferDirectionDisabled) {
++		t.Fatalf("download gate returned %v", err)
++	}
++}
++
+ func genFiles(n int) []protocol.FileInfo {
+ 	files := make([]protocol.FileInfo, n)
+ 	t := time.Now().Unix()
+@@ -177,11 +197,11 @@ func benchmarkIndex(b *testing.B, nfiles int) {
+ 	defer cleanupModelAndRemoveDir(m, fcfg.Filesystem().URI())
+ 
+ 	files := genFiles(nfiles)
+-	must(b, m.Index(device1Conn, &protocol.Index{Folder: fcfg.ID, Files: files}))
++	must(b, m.Index(device1Conn, fullIndexForTest(fcfg.ID, files)))
+ 
+ 	b.ResetTimer()
+ 	for i := 0; i < b.N; i++ {
+-		must(b, m.Index(device1Conn, &protocol.Index{Folder: fcfg.ID, Files: files}))
++		must(b, m.Index(device1Conn, fullIndexForTest(fcfg.ID, files)))
+ 	}
+ 	b.ReportAllocs()
+ }
+@@ -205,11 +225,11 @@ func benchmarkIndexUpdate(b *testing.B, nfiles, nufiles int) {
+ 	files := genFiles(nfiles)
+ 	ufiles := genFiles(nufiles)
+ 
+-	must(b, m.Index(device1Conn, &protocol.Index{Folder: fcfg.ID, Files: files}))
++	must(b, m.Index(device1Conn, fullIndexForTest(fcfg.ID, files)))
+ 
+ 	b.ResetTimer()
+ 	for i := 0; i < b.N; i++ {
+-		must(b, m.IndexUpdate(device1Conn, &protocol.IndexUpdate{Folder: fcfg.ID, Files: ufiles}))
++		must(b, m.IndexUpdate(device1Conn, indexUpdateForTest(b, m, device1Conn, fcfg.ID, ufiles)))
+ 	}
+ 	b.ReportAllocs()
+ }
+@@ -226,7 +246,7 @@ func BenchmarkRequestOut(b *testing.B) {
+ 		fc.addFile(f.Name, 0o644, protocol.FileInfoTypeFile, []byte("some data to return"))
+ 	}
+ 	m.AddConnection(fc, protocol.Hello{})
+-	must(b, m.Index(device1Conn, &protocol.Index{Folder: "default", Files: files}))
++	must(b, m.Index(device1Conn, fullIndexForTest("default", files)))
+ 
+ 	b.ResetTimer()
+ 	for i := 0; i < b.N; i++ {
+@@ -614,7 +634,7 @@ func TestIntroducer(t *testing.T) {
+ 		SkipIntroductionRemovals: true,
+ 		EncryptionPasswordToken:  []byte("faketoken"),
+ 	})
+-	m.ClusterConfig(device1Conn, cc)
++	clusterConfigForTest(t, m, device1, cc)
+ 
+ 	if newDev, ok := m.cfg.Device(device2); !ok || !newDev.Introducer || !newDev.SkipIntroductionRemovals {
+ 		t.Error("device 2 missing or wrong flags")
+@@ -670,7 +690,7 @@ func TestIntroducer(t *testing.T) {
+ 		Introducer:               true,
+ 		SkipIntroductionRemovals: true,
+ 	})
+-	m.ClusterConfig(device1Conn, cc)
++	clusterConfigForTest(t, m, device1, cc)
+ 
+ 	// Should not get introducer, as it's already unset, and it's an existing device.
+ 	if newDev, ok := m.cfg.Device(device2); !ok || newDev.Introducer || newDev.SkipIntroductionRemovals {
+@@ -720,7 +740,7 @@ func TestIntroducer(t *testing.T) {
+ 			},
+ 		},
+ 	})
+-	m.ClusterConfig(device1Conn, &protocol.ClusterConfig{})
++	clusterConfigForTest(t, m, device1, &protocol.ClusterConfig{})
+ 
+ 	if _, ok := m.cfg.Device(device2); ok {
+ 		t.Error("device 2 should have been removed")
+@@ -772,7 +792,7 @@ func TestIntroducer(t *testing.T) {
+ 			},
+ 		},
+ 	})
+-	m.ClusterConfig(device1Conn, &protocol.ClusterConfig{})
++	clusterConfigForTest(t, m, device1, &protocol.ClusterConfig{})
+ 
+ 	if _, ok := m.cfg.Device(device2); !ok {
+ 		t.Error("device 2 should not have been removed")
+@@ -829,7 +849,7 @@ func TestIntroducer(t *testing.T) {
+ 		Introducer:               true,
+ 		SkipIntroductionRemovals: true,
+ 	})
+-	m.ClusterConfig(device1Conn, cc)
++	clusterConfigForTest(t, m, device1, cc)
+ 
+ 	if _, ok := m.cfg.Device(device2); !ok {
+ 		t.Error("device 2 should not have been removed")
+@@ -880,7 +900,7 @@ func TestIntroducer(t *testing.T) {
+ 			},
+ 		},
+ 	})
+-	m.ClusterConfig(device1Conn, &protocol.ClusterConfig{})
++	clusterConfigForTest(t, m, device1, &protocol.ClusterConfig{})
+ 
+ 	if _, ok := m.cfg.Device(device2); !ok {
+ 		t.Error("device 2 should not have been removed")
+@@ -933,7 +953,7 @@ func TestIntroducer(t *testing.T) {
+ 	})
+ 	defer cleanupModel(m)
+ 	defer cancel()
+-	m.ClusterConfig(device1Conn, &protocol.ClusterConfig{})
++	clusterConfigForTest(t, m, device1, &protocol.ClusterConfig{})
+ 
+ 	if _, ok := m.cfg.Device(device2); !ok {
+ 		t.Error("device 2 should not have been removed")
+@@ -998,8 +1018,11 @@ func TestIssue5063(t *testing.T) {
+ 
+ 	wg := sync.WaitGroup{}
+ 
++	var clusterConfigMu sync.Mutex
+ 	addAndVerify := func(id string) {
+-		m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++		clusterConfigMu.Lock()
++		defer clusterConfigMu.Unlock()
++		clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 		if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) {
+ 			t.Error("expected shared", id)
+ 		}
+@@ -1035,7 +1058,7 @@ func TestAutoAcceptRejected(t *testing.T) {
+ 	// defer cleanupModel(m)
+ 	defer cancel()
+ 	id := srand.String(8)
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 
+ 	if cfg, ok := m.cfg.Folder(id); ok && cfg.SharedWith(device1) {
+ 		t.Error("unexpected shared", id)
+@@ -1048,7 +1071,7 @@ func TestAutoAcceptNewFolder(t *testing.T) {
+ 	defer cleanupModel(m)
+ 	defer cancel()
+ 	id := srand.String(8)
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) {
+ 		t.Error("expected shared", id)
+ 	}
+@@ -1060,14 +1083,14 @@ func TestAutoAcceptNewFolderFromTwoDevices(t *testing.T) {
+ 	defer cancel()
+ 	id := srand.String(8)
+ 	defer os.RemoveAll(id)
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) {
+ 		t.Error("expected shared", id)
+ 	}
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || fcfg.SharedWith(device2) {
+ 		t.Error("unexpected expected shared", id)
+ 	}
+-	m.ClusterConfig(device2Conn, createClusterConfig(device2, id))
++	clusterConfigForTest(t, m, device2, createClusterConfig(device2, id))
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device2) {
+ 		t.Error("expected shared", id)
+ 	}
+@@ -1081,14 +1104,14 @@ func TestAutoAcceptNewFolderFromOnlyOneDevice(t *testing.T) {
+ 	defer os.RemoveAll(id)
+ 	defer cleanupModel(m)
+ 	defer cancel()
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) {
+ 		t.Error("expected shared", id)
+ 	}
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || fcfg.SharedWith(device2) {
+ 		t.Error("unexpected expected shared", id)
+ 	}
+-	m.ClusterConfig(device2Conn, createClusterConfig(device2, id))
++	clusterConfigForTest(t, m, device2, createClusterConfig(device2, id))
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || fcfg.SharedWith(device2) {
+ 		t.Error("unexpected shared", id)
+ 	}
+@@ -1119,10 +1142,10 @@ func TestAutoAcceptNewFolderPremutationsNoPanic(t *testing.T) {
+ 						cfg.Folders = append(cfg.Folders, fcfg)
+ 					}
+ 					m, cancel := newState(t, cfg)
+-					m.ClusterConfig(device1Conn, &protocol.ClusterConfig{
++					clusterConfigForTest(t, m, device1, &protocol.ClusterConfig{
+ 						Folders: []protocol.Folder{dev1folder},
+ 					})
+-					m.ClusterConfig(device2Conn, &protocol.ClusterConfig{
++					clusterConfigForTest(t, m, device2, &protocol.ClusterConfig{
+ 						Folders: []protocol.Folder{dev2folder},
+ 					})
+ 					cleanupModel(m)
+@@ -1142,7 +1165,7 @@ func TestAutoAcceptMultipleFolders(t *testing.T) {
+ 	m, cancel := newState(t, defaultAutoAcceptCfg)
+ 	defer cleanupModel(m)
+ 	defer cancel()
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id1, id2))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id1, id2))
+ 	if fcfg, ok := m.cfg.Folder(id1); !ok || !fcfg.SharedWith(device1) {
+ 		t.Error("expected shared", id1)
+ 	}
+@@ -1170,7 +1193,7 @@ func TestAutoAcceptExistingFolder(t *testing.T) {
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || fcfg.SharedWith(device1) {
+ 		t.Error("missing folder, or shared", id)
+ 	}
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) || fcfg.Path != idOther {
+ 		t.Error("missing folder, or unshared, or path changed", id)
+@@ -1196,7 +1219,7 @@ func TestAutoAcceptNewAndExistingFolder(t *testing.T) {
+ 	if fcfg, ok := m.cfg.Folder(id1); !ok || fcfg.SharedWith(device1) {
+ 		t.Error("missing folder, or shared", id1)
+ 	}
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id1, id2))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id1, id2))
+ 
+ 	for i, id := range []string{id1, id2} {
+ 		if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) {
+@@ -1227,7 +1250,7 @@ func TestAutoAcceptAlreadyShared(t *testing.T) {
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) {
+ 		t.Error("missing folder, or not shared", id)
+ 	}
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 
+ 	if fcfg, ok := m.cfg.Folder(id); !ok || !fcfg.SharedWith(device1) {
+ 		t.Error("missing folder, or not shared", id)
+@@ -1243,7 +1266,7 @@ func TestAutoAcceptNameConflict(t *testing.T) {
+ 	m, cancel := newState(t, defaultAutoAcceptCfg)
+ 	defer cleanupModel(m)
+ 	defer cancel()
+-	m.ClusterConfig(device1Conn, &protocol.ClusterConfig{
++	clusterConfigForTest(t, m, device1, &protocol.ClusterConfig{
+ 		Folders: []protocol.Folder{
+ 			{
+ 				ID:    id,
+@@ -1263,7 +1286,7 @@ func TestAutoAcceptPrefersLabel(t *testing.T) {
+ 	label := srand.String(8)
+ 	defer cleanupModel(m)
+ 	defer cancel()
+-	m.ClusterConfig(device1Conn, addFolderDevicesToClusterConfig(&protocol.ClusterConfig{
++	clusterConfigForTest(t, m, device1, addFolderDevicesToClusterConfig(&protocol.ClusterConfig{
+ 		Folders: []protocol.Folder{
+ 			{
+ 				ID:    id,
+@@ -1287,7 +1310,7 @@ func TestAutoAcceptFallsBackToID(t *testing.T) {
+ 	}
+ 	defer cleanupModel(m)
+ 	defer cancel()
+-	m.ClusterConfig(device1Conn, addFolderDevicesToClusterConfig(&protocol.ClusterConfig{
++	clusterConfigForTest(t, m, device1, addFolderDevicesToClusterConfig(&protocol.ClusterConfig{
+ 		Folders: []protocol.Folder{
+ 			{
+ 				ID:    id,
+@@ -1329,7 +1352,7 @@ func TestAutoAcceptPausedWhenFolderConfigChanged(t *testing.T) {
+ 		t.Fatal("folder running?")
+ 	}
+ 
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 	m.generateClusterConfig(device1)
+ 
+ 	if fcfg, ok := m.cfg.Folder(id); !ok {
+@@ -1376,7 +1399,7 @@ func TestAutoAcceptPausedWhenFolderConfigNotChanged(t *testing.T) {
+ 		t.Fatal("folder running?")
+ 	}
+ 
+-	m.ClusterConfig(device1Conn, createClusterConfig(device1, id))
++	clusterConfigForTest(t, m, device1, createClusterConfig(device1, id))
+ 	m.generateClusterConfig(device1)
+ 
+ 	if fcfg, ok := m.cfg.Folder(id); !ok {
+@@ -1888,7 +1911,7 @@ func TestGlobalDirectoryTree(t *testing.T) {
+ 		return string(bytes)
+ 	}
+ 
+-	must(t, m.Index(conn, &protocol.Index{Folder: "default", Files: testdata}))
++	must(t, m.Index(conn, fullIndexForTest("default", testdata)))
+ 
+ 	result, _ := m.GlobalDirectoryTree("default", "", -1, false)
+ 
+@@ -2094,7 +2117,7 @@ func benchmarkTree(b *testing.B, n1, n2 int) {
+ 	m.ScanFolder(fcfg.ID)
+ 	files := genDeepFiles(n1, n2)
+ 
+-	must(b, m.Index(device1Conn, &protocol.Index{Folder: fcfg.ID, Files: files}))
++	must(b, m.Index(device1Conn, fullIndexForTest(fcfg.ID, files)))
+ 
+ 	b.ResetTimer()
+ 	for i := 0; i < b.N; i++ {
+@@ -2499,7 +2522,7 @@ func TestRemoveDirWithContent(t *testing.T) {
+ 	file.Deleted = true
+ 	file.Version = file.Version.Update(device1.Short()).Update(device1.Short())
+ 
+-	must(t, m.IndexUpdate(conn, &protocol.IndexUpdate{Folder: fcfg.ID, Files: []protocol.FileInfo{dir, file}}))
++	must(t, m.IndexUpdate(conn, indexUpdateForTest(t, m, conn, fcfg.ID, []protocol.FileInfo{dir, file})))
+ 
+ 	// Is there something we could trigger on instead of just waiting?
+ 	timeout := time.NewTimer(5 * time.Second)
+@@ -3646,7 +3669,7 @@ func TestScanDeletedROChangedOnSR(t *testing.T) {
+ 	// A remote must have the file, otherwise the deletion below is
+ 	// automatically resolved as not a ro-changed item.
+ 	file.LocalFlags = 0 // clear as we're skipping the code path where it would otherwise be cleared naturally
+-	must(t, m.IndexUpdate(conn, &protocol.IndexUpdate{Folder: fcfg.ID, Files: []protocol.FileInfo{file}}))
++	must(t, m.IndexUpdate(conn, indexUpdateForTest(t, m, conn, fcfg.ID, []protocol.FileInfo{file})))
+ 
+ 	must(t, ffs.Remove(name))
+ 	m.ScanFolders()
+@@ -3755,9 +3778,9 @@ func TestIssue6961(t *testing.T) {
+ 	version := protocol.Vector{}.Update(device1.Short())
+ 
+ 	// Remote, valid and existing file
+-	must(t, m.Index(conn1, &protocol.Index{Folder: fcfg.ID, Files: []protocol.FileInfo{{Name: name, Version: version, Sequence: 1}}}))
++	must(t, m.Index(conn1, fullIndexForTest(fcfg.ID, []protocol.FileInfo{{Name: name, Version: version, Sequence: 1}})))
+ 	// Remote, invalid (receive-only) and existing file
+-	must(t, m.Index(conn2, &protocol.Index{Folder: fcfg.ID, Files: []protocol.FileInfo{{Name: name, LocalFlags: protocol.FlagLocalRemoteInvalid, Sequence: 1}}}))
++	must(t, m.Index(conn2, fullIndexForTest(fcfg.ID, []protocol.FileInfo{{Name: name, LocalFlags: protocol.FlagLocalRemoteInvalid, Sequence: 1}})))
+ 	// Create a local file
+ 	if fd, err := tfs.OpenFile(name, fs.OptCreate, 0o666); err != nil {
+ 		t.Fatal(err)
+@@ -3783,7 +3806,7 @@ func TestIssue6961(t *testing.T) {
+ 	m.ScanFolders()
+ 
+ 	// Drop the remote index, add some other file.
+-	must(t, m.Index(conn2, &protocol.Index{Folder: fcfg.ID, Files: []protocol.FileInfo{{Name: "bar", LocalFlags: protocol.FlagLocalRemoteInvalid, Sequence: 1}}}))
++	must(t, m.Index(conn2, fullIndexForTest(fcfg.ID, []protocol.FileInfo{{Name: "bar", LocalFlags: protocol.FlagLocalRemoteInvalid, Sequence: 1}})))
+ 
+ 	// Pause and unpause folder to create new db.FileSet and thus recalculate everything
+ 	pauseFolder(t, wcfg, fcfg.ID, true)
+@@ -3829,26 +3852,26 @@ func TestNeedMetaAfterIndexReset(t *testing.T) {
+ 
+ 	// Start with two remotes having one file, then both deleting it, then
+ 	// only one adding it again.
+-	must(t, m.Index(conn1, &protocol.Index{Folder: fcfg.ID, Files: files}))
+-	must(t, m.Index(conn2, &protocol.Index{Folder: fcfg.ID, Files: files}))
++	must(t, m.Index(conn1, fullIndexForTest(fcfg.ID, files)))
++	must(t, m.Index(conn2, fullIndexForTest(fcfg.ID, files)))
+ 	seq++
+ 	files[0].SetDeleted(device2.Short())
+ 	files[0].Sequence = seq
+-	must(t, m.IndexUpdate(conn1, &protocol.IndexUpdate{Folder: fcfg.ID, Files: files}))
+-	must(t, m.IndexUpdate(conn2, &protocol.IndexUpdate{Folder: fcfg.ID, Files: files}))
++	must(t, m.IndexUpdate(conn1, indexUpdateForTest(t, m, conn1, fcfg.ID, files)))
++	must(t, m.IndexUpdate(conn2, indexUpdateForTest(t, m, conn2, fcfg.ID, files)))
+ 	seq++
+ 	files[0].Deleted = false
+ 	files[0].Size = 20
+ 	files[0].Version = files[0].Version.Update(device1.Short())
+ 	files[0].Sequence = seq
+-	must(t, m.IndexUpdate(conn1, &protocol.IndexUpdate{Folder: fcfg.ID, Files: files}))
++	must(t, m.IndexUpdate(conn1, indexUpdateForTest(t, m, conn1, fcfg.ID, files)))
+ 
+ 	if comp := m.testCompletion(device2, fcfg.ID); comp.NeedItems != 1 {
+ 		t.Error("Expected one needed item for device2, got", comp.NeedItems)
+ 	}
+ 
+ 	// Pretend we had an index reset on device 1
+-	must(t, m.Index(conn1, &protocol.Index{Folder: fcfg.ID, Files: files}))
++	must(t, m.Index(conn1, fullIndexForTest(fcfg.ID, files)))
+ 	if comp := m.testCompletion(device2, fcfg.ID); comp.NeedItems != 1 {
+ 		t.Error("Expected one needed item for device2, got", comp.NeedItems)
+ 	}
+diff --git a/.build/go/syncthing-readiness-v1/lib/model/pending_folder_observation_test.go b/lib/model/pending_folder_observation_test.go
+new file mode 100644
+index 0000000..ee0d84d
+--- /dev/null
++++ b/lib/model/pending_folder_observation_test.go
+@@ -0,0 +1,158 @@
++// Copyright (C) 2026 The Syncthing Authors.
++//
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++package model
++
++import (
++	"bytes"
++	"encoding/json"
++	"errors"
++	"log/slog"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/syncthing/syncthing/lib/protocol"
++)
++
++func TestClusterConfigObservationEvidenceIsPrivateJSON(t *testing.T) {
++	deviceID := protocol.NewDeviceID([]byte("private cluster config observation"))
++	data := ClusterConfigReceivedEventData{
++		Device:          deviceID,
++		ConnectionID:    "raw-connection-identity-must-not-escape",
++		ConnectionEpoch: 42,
++		PendingFolders: []PendingFolderObservation{{
++			FolderID: "private-folder",
++			Label:    "Private offer",
++			LastSeen: time.Now().UTC(),
++		}},
++	}
++	encoded, err := json.Marshal(data)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if strings.Contains(string(encoded), "raw-connection") || strings.Contains(string(encoded), "private-folder") || strings.Contains(string(encoded), "connectionEpoch") {
++		t.Fatalf("private ClusterConfig evidence escaped event JSON: %s", encoded)
++	}
++	var public map[string]any
++	if err := json.Unmarshal(encoded, &public); err != nil {
++		t.Fatal(err)
++	}
++	if len(public) != 1 || public["device"] == nil {
++		t.Fatalf("ClusterConfig public event ABI changed: %#v", public)
++	}
++}
++
++func TestStaleEpochCannotPublishPendingFolderObservationCallback(t *testing.T) {
++	deviceID := protocol.NewDeviceID([]byte("stale observation epoch"))
++	proofs := newRemoteIndexProofState(nil)
++	stale := proofs.begin(deviceID, "connection-one")
++	current, ok := proofs.rotate(stale)
++	if !ok {
++		t.Fatal("could not rotate the current observation epoch")
++	}
++	staleCalled := false
++	if proofs.publishAndDo(stale, nil, func() { staleCalled = true }) || staleCalled {
++		t.Fatal("stale ClusterConfig epoch published observation evidence")
++	}
++	currentCalled := false
++	if !proofs.publishAndDo(current, nil, func() { currentCalled = true }) || !currentCalled {
++		t.Fatal("current ClusterConfig epoch did not publish observation evidence")
++	}
++}
++
++func TestPendingFolderObservationEpochMustRemainCurrentReceiveOwner(t *testing.T) {
++	t.Run("published then closed", func(t *testing.T) {
++		wrapper, folder := newDefaultCfgWrapper(t)
++		m := setupModel(t, wrapper)
++		defer cleanupModel(m)
++
++		connection := newFakeConnection(device1, m)
++		m.AddConnection(connection, protocol.Hello{})
++		m.promoteConnections()
++		mustReceiveProofClusterConfig(t, m, connection, folder.ID, 101, 0)
++		published := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++		if !m.RemoteIndexEpochCurrent(device1, published.ConnectionID, published.ConnectionEpoch) {
++			t.Fatal("freshly published receive-owner epoch was not current")
++		}
++
++		m.Closed(connection, errors.New("closed after publication"))
++		if m.RemoteIndexEpochCurrent(device1, published.ConnectionID, published.ConnectionEpoch) {
++			t.Fatal("closed receive-owner epoch remained current")
++		}
++	})
++
++	t.Run("replacement starts without successful ClusterConfig", func(t *testing.T) {
++		wrapper, folder := newDefaultCfgWrapper(t)
++		m := setupModel(t, wrapper)
++		defer cleanupModel(m)
++
++		first := newFakeConnection(device1, m)
++		m.AddConnection(first, protocol.Hello{})
++		m.promoteConnections()
++		mustReceiveProofClusterConfig(t, m, first, folder.ID, 102, 0)
++		published := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++
++		replacement := newFakeConnection(device1, m)
++		m.AddConnection(replacement, protocol.Hello{})
++		if _, _, err := m.ensureIndexHandler(replacement); err != nil {
++			t.Fatal(err)
++		}
++		if m.RemoteIndexEpochCurrent(device1, published.ConnectionID, published.ConnectionEpoch) {
++			t.Fatal("replaced receive-owner epoch remained current before a new ClusterConfig was published")
++		}
++	})
++
++	t.Run("same connection rotates", func(t *testing.T) {
++		wrapper, folder := newDefaultCfgWrapper(t)
++		m := setupModel(t, wrapper)
++		defer cleanupModel(m)
++
++		connection := newFakeConnection(device1, m)
++		m.AddConnection(connection, protocol.Hello{})
++		m.promoteConnections()
++		mustReceiveProofClusterConfig(t, m, connection, folder.ID, 103, 0)
++		published := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++
++		if _, _, err := m.ensureIndexHandler(connection); err != nil {
++			t.Fatal(err)
++		}
++		if m.RemoteIndexEpochCurrent(device1, published.ConnectionID, published.ConnectionEpoch) {
++			t.Fatal("retired same-connection epoch remained current")
++		}
++	})
++}
++
++func TestReplacementConnectionLogOmitsRawConnectionIDs(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	first := newFakeConnection(device1, m)
++	first.ConnectionIDReturns("raw-old-connection-log-sentinel")
++	m.AddConnection(first, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, first, folder.ID, 104, 0)
++
++	replacement := newFakeConnection(device1, m)
++	replacement.ConnectionIDReturns("raw-new-connection-log-sentinel")
++	m.AddConnection(replacement, protocol.Hello{})
++
++	previous := slog.Default()
++	var output bytes.Buffer
++	slog.SetDefault(slog.New(slog.NewTextHandler(&output, nil)))
++	defer slog.SetDefault(previous)
++	if _, _, err := m.ensureIndexHandler(replacement); err != nil {
++		t.Fatal(err)
++	}
++	rendered := output.String()
++	if !strings.Contains(rendered, "Abandoning old index handler in favour of new connection") {
++		t.Fatalf("replacement logging seam was not exercised: %q", rendered)
++	}
++	if strings.Contains(rendered, "raw-old-connection") || strings.Contains(rendered, "raw-new-connection") {
++		t.Fatalf("replacement log exposed a raw connection ID: %q", rendered)
++	}
++}
+diff --git a/.build/go/syncthing-readiness-v1/lib/model/remote_index_proof.go b/lib/model/remote_index_proof.go
+new file mode 100644
+index 0000000..ebdf545
+--- /dev/null
++++ b/lib/model/remote_index_proof.go
+@@ -0,0 +1,344 @@
++// Copyright (C) 2026 The Syncthing Authors.
++//
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++package model
++
++import (
++	"errors"
++	"sync"
++
++	"github.com/syncthing/syncthing/internal/db"
++	"github.com/syncthing/syncthing/lib/protocol"
++)
++
++type RemoteIndexReadinessState uint8
++
++const (
++	RemoteIndexProofMissing RemoteIndexReadinessState = iota
++	RemoteIndexProofPending
++	RemoteIndexProofCurrent
++)
++
++// RemoteIndexReadiness is an in-process snapshot. Connection identity and
++// index metadata are deliberately not JSON API fields.
++type RemoteIndexReadiness struct {
++	State             RemoteIndexReadinessState `json:"-"`
++	ConnectionID      string                    `json:"-"`
++	ConnectionEpoch   uint64                    `json:"-"`
++	AnnouncedIndexID  protocol.IndexID          `json:"-"`
++	AnnouncedSequence int64                     `json:"-"`
++	StoredIndexID     protocol.IndexID          `json:"-"`
++	StoredSequence    int64                     `json:"-"`
++}
++
++type RemoteIndexReadinessProvider interface {
++	RemoteIndexReadiness(device protocol.DeviceID, folder string) (RemoteIndexReadiness, error)
++}
++
++type RemoteIndexEpochProvider interface {
++	RemoteIndexEpochCurrent(device protocol.DeviceID, connectionID string, generation uint64) bool
++}
++
++var (
++	errStaleRemoteIndexEpoch   = errors.New("stale remote index connection epoch")
++	errInvalidRemoteIndexEpoch = errors.New("remote index proof is invalid for this connection epoch")
++)
++
++type remoteIndexEpoch struct {
++	device       protocol.DeviceID
++	connectionID string
++	generation   uint64
++}
++
++type remoteIndexProofKey struct {
++	device protocol.DeviceID
++	folder string
++}
++
++type remoteIndexProofPair struct {
++	indexID           protocol.IndexID
++	maxSequence       int64
++	fullIndexRequired bool
++	fullIndexReceived bool
++	valid             bool
++}
++
++// remoteIndexProofState serializes current receive-primary proof changes with
++// the corresponding remote-index database mutations. Readers therefore never
++// combine a proof epoch with a database pair from another epoch.
++type remoteIndexProofState struct {
++	mu      sync.RWMutex
++	db      db.DB
++	next    uint64
++	current map[protocol.DeviceID]remoteIndexEpoch
++	proofs  map[remoteIndexProofKey]remoteIndexProofPair
++	// requireFull records a durable reset performed in the current epoch.
++	// It is consumed by publish, after ClusterConfig handling has created the
++	// replacement index handler.
++	requireFull map[remoteIndexProofKey]bool
++	// blocked is a conservative folder lifecycle fence. It survives every
++	// same-connection ClusterConfig rotation and is cleared only by a fresh
++	// connection epoch.
++	blocked map[remoteIndexProofKey]bool
++	// poisoned records a malformed or failed receive frame. It also survives
++	// same-connection ClusterConfig rotation: only a fresh connection may
++	// establish a new trustworthy receive stream for this folder.
++	poisoned map[remoteIndexProofKey]bool
++}
++
++func newRemoteIndexProofState(database db.DB) *remoteIndexProofState {
++	return &remoteIndexProofState{
++		db:          database,
++		current:     make(map[protocol.DeviceID]remoteIndexEpoch),
++		proofs:      make(map[remoteIndexProofKey]remoteIndexProofPair),
++		requireFull: make(map[remoteIndexProofKey]bool),
++		blocked:     make(map[remoteIndexProofKey]bool),
++		poisoned:    make(map[remoteIndexProofKey]bool),
++	}
++}
++
++func (s *remoteIndexProofState) begin(device protocol.DeviceID, connectionID string) remoteIndexEpoch {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.next++
++	epoch := remoteIndexEpoch{device: device, connectionID: connectionID, generation: s.next}
++	s.current[device] = epoch
++	s.clearDeviceLocked(device)
++	return epoch
++}
++
++func (s *remoteIndexProofState) rotate(epoch remoteIndexEpoch) (remoteIndexEpoch, bool) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return remoteIndexEpoch{}, false
++	}
++	s.next++
++	replacement := remoteIndexEpoch{device: epoch.device, connectionID: epoch.connectionID, generation: s.next}
++	s.current[epoch.device] = replacement
++	s.clearEpochLocked(epoch.device)
++	return replacement, true
++}
++
++func (s *remoteIndexProofState) invalidate(epoch remoteIndexEpoch) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return
++	}
++	delete(s.current, epoch.device)
++	s.clearDeviceLocked(epoch.device)
++}
++
++func (s *remoteIndexProofState) withEpoch(epoch remoteIndexEpoch, operation func() error) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return errStaleRemoteIndexEpoch
++	}
++	return operation()
++}
++
++func (s *remoteIndexProofState) reset(epoch remoteIndexEpoch, folder string, requireFull bool, operation func() error) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return errStaleRemoteIndexEpoch
++	}
++	key := remoteIndexProofKey{device: epoch.device, folder: folder}
++	if s.poisoned[key] {
++		return errInvalidRemoteIndexEpoch
++	}
++	delete(s.proofs, key)
++	if err := operation(); err != nil {
++		s.poisoned[key] = true
++		return err
++	}
++	if requireFull {
++		s.requireFull[key] = true
++	} else {
++		delete(s.requireFull, key)
++	}
++	return nil
++}
++
++func (s *remoteIndexProofState) clearFolder(epoch remoteIndexEpoch, folder string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return
++	}
++	key := remoteIndexProofKey{device: epoch.device, folder: folder}
++	delete(s.proofs, key)
++	delete(s.requireFull, key)
++}
++
++func (s *remoteIndexProofState) blockFolder(epoch remoteIndexEpoch, folder string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return
++	}
++	key := remoteIndexProofKey{device: epoch.device, folder: folder}
++	delete(s.proofs, key)
++	delete(s.requireFull, key)
++	s.blocked[key] = true
++}
++
++func (s *remoteIndexProofState) publish(epoch remoteIndexEpoch, pairs map[string]remoteIndexProofPair) bool {
++	return s.publishAndDo(epoch, pairs, nil)
++}
++
++// publishAndDo validates and publishes one authoritative ClusterConfig epoch,
++// then invokes operation while the epoch lock is still held. This lets callers
++// enqueue private observation evidence before a newer epoch can overtake it.
++func (s *remoteIndexProofState) publishAndDo(epoch remoteIndexEpoch, pairs map[string]remoteIndexProofPair, operation func()) bool {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return false
++	}
++	s.clearProofsLocked(epoch.device)
++	for folder, pair := range pairs {
++		if folder == "" || pair.maxSequence < 0 {
++			s.clearProofsLocked(epoch.device)
++			return false
++		}
++		key := remoteIndexProofKey{device: epoch.device, folder: folder}
++		if s.blocked[key] {
++			continue
++		}
++		pair.fullIndexRequired = s.requireFull[key]
++		pair.valid = !s.poisoned[key]
++		s.proofs[key] = pair
++	}
++	if operation != nil {
++		operation()
++	}
++	return true
++}
++
++func (s *remoteIndexProofState) accept(epoch remoteIndexEpoch, folder string, fullIndex bool, frameSequence int64, operation func() (bool, error)) (int64, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.current[epoch.device] != epoch {
++		return 0, errStaleRemoteIndexEpoch
++	}
++	key := remoteIndexProofKey{device: epoch.device, folder: folder}
++	pair, pairOK := s.proofs[key]
++	if s.poisoned[key] || !pairOK || !pair.valid {
++		// A malformed or failed frame makes every later frame in this
++		// folder/connection epoch untrustworthy. Reject before invoking the
++		// database operation so a later batch cannot manufacture a durable
++		// cursor that a future ClusterConfig would accept.
++		if !pairOK {
++			s.poisoned[key] = true
++		}
++		return 0, errInvalidRemoteIndexEpoch
++	}
++	frameValid, err := operation()
++	if !frameValid {
++		s.poisonLocked(key, pair, pairOK)
++	}
++	if err != nil {
++		s.poisonLocked(key, pair, pairOK)
++		return 0, err
++	}
++	if !frameValid {
++		return 0, errInvalidRemoteIndexEpoch
++	}
++	storedIndexID, storedSequence, err := s.db.GetIndexIDAndSequence(folder, epoch.device)
++	if err != nil {
++		s.poisonLocked(key, pair, pairOK)
++		return 0, err
++	}
++	if storedSequence != frameSequence {
++		s.poisonLocked(key, pair, pairOK)
++		return storedSequence, errInvalidRemoteIndexEpoch
++	}
++	if fullIndex {
++		pair.fullIndexReceived = true
++	}
++	if pair.valid && (pair.indexID == 0 || pair.indexID == storedIndexID) && storedSequence >= pair.maxSequence {
++		pair.maxSequence = storedSequence
++	}
++	s.proofs[key] = pair
++	return storedSequence, nil
++}
++
++func (s *remoteIndexProofState) readiness(epoch remoteIndexEpoch, folder string) (RemoteIndexReadiness, error) {
++	s.mu.RLock()
++	defer s.mu.RUnlock()
++	if s.current[epoch.device] != epoch {
++		return RemoteIndexReadiness{State: RemoteIndexProofMissing}, nil
++	}
++	pair, pairOK := s.proofs[remoteIndexProofKey{device: epoch.device, folder: folder}]
++	if !pairOK {
++		return RemoteIndexReadiness{State: RemoteIndexProofMissing}, nil
++	}
++	storedIndexID, storedSequence, err := s.db.GetIndexIDAndSequence(folder, epoch.device)
++	if err != nil {
++		return RemoteIndexReadiness{}, err
++	}
++	result := RemoteIndexReadiness{
++		State:             RemoteIndexProofPending,
++		ConnectionID:      epoch.connectionID,
++		ConnectionEpoch:   epoch.generation,
++		AnnouncedIndexID:  pair.indexID,
++		AnnouncedSequence: pair.maxSequence,
++		StoredIndexID:     storedIndexID,
++		StoredSequence:    storedSequence,
++	}
++	if pair.valid && (!pair.fullIndexRequired || pair.fullIndexReceived) && storedSequence == pair.maxSequence && (pair.indexID == 0 || storedIndexID == pair.indexID) {
++		result.State = RemoteIndexProofCurrent
++	}
++	return result, nil
++}
++
++func (s *remoteIndexProofState) epochCurrent(epoch remoteIndexEpoch) bool {
++	s.mu.RLock()
++	defer s.mu.RUnlock()
++	return s.current[epoch.device] == epoch
++}
++
++func (s *remoteIndexProofState) clearDeviceLocked(device protocol.DeviceID) {
++	s.clearEpochLocked(device)
++	for key := range s.blocked {
++		if key.device == device {
++			delete(s.blocked, key)
++		}
++	}
++	for key := range s.poisoned {
++		if key.device == device {
++			delete(s.poisoned, key)
++		}
++	}
++}
++
++func (s *remoteIndexProofState) poisonLocked(key remoteIndexProofKey, pair remoteIndexProofPair, pairOK bool) {
++	s.poisoned[key] = true
++	if pairOK {
++		pair.valid = false
++		s.proofs[key] = pair
++	}
++}
++
++func (s *remoteIndexProofState) clearEpochLocked(device protocol.DeviceID) {
++	s.clearProofsLocked(device)
++	for key := range s.requireFull {
++		if key.device == device {
++			delete(s.requireFull, key)
++		}
++	}
++}
++
++func (s *remoteIndexProofState) clearProofsLocked(device protocol.DeviceID) {
++	for key := range s.proofs {
++		if key.device == device {
++			delete(s.proofs, key)
++		}
++	}
++}
+diff --git a/.build/go/syncthing-readiness-v1/lib/model/remote_index_proof_test.go b/lib/model/remote_index_proof_test.go
+new file mode 100644
+index 0000000..97136a1
+--- /dev/null
++++ b/lib/model/remote_index_proof_test.go
+@@ -0,0 +1,948 @@
++// Copyright (C) 2026 The Syncthing Authors.
++//
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++package model
++
++import (
++	"errors"
++	"fmt"
++	"testing"
++
++	"github.com/syncthing/syncthing/lib/protocol"
++)
++
++func TestRemoteIndexProofInvalidatesLostPrimaryWithSecondaryConnected(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	primary := newFakeConnection(device1, m)
++	m.AddConnection(primary, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, primary, folder.ID, 71, 0)
++	initial := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if initial.State != RemoteIndexProofCurrent {
++		t.Fatalf("initial primary proof state = %v, want current", initial.State)
++	}
++
++	secondary := newFakeConnection(device1, m)
++	m.AddConnection(secondary, protocol.Hello{})
++	m.Closed(primary, errors.New("primary lost"))
++	missing := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if missing.State != RemoteIndexProofMissing {
++		t.Fatalf("proof survived primary loss with a secondary connected: %+v", missing)
++	}
++
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, secondary, folder.ID, 71, 0)
++	promoted := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if promoted.State != RemoteIndexProofCurrent || promoted.ConnectionID != secondary.ConnectionID() || promoted.ConnectionEpoch <= initial.ConnectionEpoch {
++		t.Fatalf("promoted connection did not publish a newer current proof: old=%+v new=%+v", initial, promoted)
++	}
++}
++
++func TestRemoteIndexProofOverlapKeepsNewPrimaryWhenOldConnectionCloses(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	oldPrimary := newFakeConnection(device1, m)
++	m.AddConnection(oldPrimary, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, oldPrimary, folder.ID, 73, 0)
++	oldProof := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++
++	newPrimary := newFakeConnection(device1, m)
++	m.AddConnection(newPrimary, protocol.Hello{})
++	mustReceiveProofClusterConfig(t, m, newPrimary, folder.ID, 73, 0)
++	newProof := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if newProof.ConnectionID != newPrimary.ConnectionID() || newProof.ConnectionEpoch <= oldProof.ConnectionEpoch {
++		t.Fatalf("overlapping primary did not replace the old epoch: old=%+v new=%+v", oldProof, newProof)
++	}
++
++	m.Closed(oldPrimary, errors.New("old primary closed after replacement"))
++	afterClose := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if afterClose.State != RemoteIndexProofCurrent || afterClose.ConnectionID != newPrimary.ConnectionID() || afterClose.ConnectionEpoch != newProof.ConnectionEpoch {
++		t.Fatalf("closing old connection invalidated the replacement proof: before=%+v after=%+v", newProof, afterClose)
++	}
++}
++
++func TestRemoteIndexProofInvalidatesClosedInboundOwnerWhenOutboundPrimaryDiffers(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	outboundPrimary := newFakeConnection(device1, m)
++	m.AddConnection(outboundPrimary, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, outboundPrimary, folder.ID, 73, 0)
++
++	inboundOwner := newFakeConnection(device1, m)
++	m.AddConnection(inboundOwner, protocol.Hello{})
++	mustReceiveProofClusterConfig(t, m, inboundOwner, folder.ID, 73, 0)
++	owned := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if owned.State != RemoteIndexProofCurrent || owned.ConnectionID != inboundOwner.ConnectionID() {
++		t.Fatalf("new inbound owner did not own current proof: %+v", owned)
++	}
++	if m.promotedConnID[device1] != outboundPrimary.ConnectionID() {
++		t.Fatal("test setup unexpectedly promoted the inbound proof owner")
++	}
++
++	m.Closed(inboundOwner, errors.New("inbound proof owner closed"))
++	missing := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if missing.State != RemoteIndexProofMissing {
++		t.Fatalf("proof survived closure of its inbound owner: %+v", missing)
++	}
++}
++
++func TestRemoteIndexProofRotatesOnEveryAuthoritativeClusterConfig(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 83, 0)
++	first := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if first.State != RemoteIndexProofCurrent {
++		t.Fatalf("initial proof state = %v, want current", first.State)
++	}
++
++	// ensureIndexHandler is the first state-changing step of an authoritative
++	// ClusterConfig. It must retire the previous proof before parsing or
++	// applying the new announcement.
++	_, secondEpoch, err := m.ensureIndexHandler(connection)
++	if err != nil {
++		t.Fatal(err)
++	}
++	during := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if during.State != RemoteIndexProofMissing || secondEpoch.generation <= first.ConnectionEpoch {
++		t.Fatalf("same-connection ClusterConfig start reused old proof: first=%+v during=%+v epoch=%+v", first, during, secondEpoch)
++	}
++
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 83, 0)
++	second := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if second.State != RemoteIndexProofCurrent || second.ConnectionEpoch <= secondEpoch.generation {
++		t.Fatalf("successful replacement ClusterConfig did not publish a newer proof: %+v", second)
++	}
++
++	malformed := &protocol.ClusterConfig{Folders: []protocol.Folder{{
++		ID: folder.ID,
++		Devices: []protocol.Device{
++			{ID: myID},
++			// Missing the remote device entry must fail after rotation.
++		},
++	}}}
++	if err := m.ClusterConfig(connection, malformed); err == nil {
++		t.Fatal("malformed replacement ClusterConfig unexpectedly succeeded")
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("malformed replacement ClusterConfig retained old proof: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofTracksFolderLifecycle(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 89, 0)
++	registry, ok := m.indexHandlers.Get(device1)
++	if !ok {
++		t.Fatal("missing index handler registry")
++	}
++
++	paused := folder
++	paused.Paused = true
++	registry.RegisterFolderState(paused, nil)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("paused folder retained proof: %+v", got)
++	}
++
++	runner, _ := m.folderRunners.Get(folder.ID)
++	registry.RegisterFolderState(folder, runner)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("resumed folder reused proof before a new ClusterConfig: %+v", got)
++	}
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 89, 0)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("same-connection ClusterConfig cleared lifecycle block: %+v", got)
++	}
++
++	replacement := newFakeConnection(device1, m)
++	m.AddConnection(replacement, protocol.Hello{})
++	mustReceiveProofClusterConfig(t, m, replacement, folder.ID, 89, 0)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofCurrent || got.ConnectionID != replacement.ConnectionID() {
++		t.Fatalf("fresh connection did not clear lifecycle block: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofDoesNotTreatRunnerStartupAsLifecycleChange(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 90, 0)
++	registry, ok := m.indexHandlers.Get(device1)
++	if !ok {
++		t.Fatal("missing index handler registry")
++	}
++	registry.RegisterFolderState(folder, nil)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("nil runner passed active handler gate: %+v", got)
++	}
++	runner, _ := m.folderRunners.Get(folder.ID)
++	registry.RegisterFolderState(folder, runner)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofCurrent {
++		t.Fatalf("runner startup incorrectly created a persistent lifecycle block: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofAllowsClusterConfigBeforeNewFolderStarts(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 92, 0)
++	registry, ok := m.indexHandlers.Get(device1)
++	if !ok {
++		t.Fatal("missing index handler registry")
++	}
++	epoch := registry.epoch
++	late := folder
++	late.ID = "late-start"
++	info := &clusterConfigDeviceInfo{
++		local:  protocol.Device{ID: myID},
++		remote: protocol.Device{ID: device1, IndexID: 94},
++	}
++	if err := registry.addIndexInfoForEpoch(epoch, late.ID, info); err != nil {
++		t.Fatal(err)
++	}
++	runner, _ := m.folderRunners.Get(folder.ID)
++	registry.RegisterFolderState(late, runner)
++	if !m.remoteIndexProofs.publish(epoch, map[string]remoteIndexProofPair{
++		late.ID: {indexID: 94, maxSequence: 0},
++	}) {
++		t.Fatal("late-start folder proof publish failed")
++	}
++	got, err := m.remoteIndexProofs.readiness(epoch, late.ID)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if got.State != RemoteIndexProofCurrent {
++		t.Fatalf("CC-before-folder-start was treated as a lifecycle reuse: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofAuthoritativeLifecycleSurvivesStaleOperationalState(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 98, 0)
++	registry, ok := m.indexHandlers.Get(device1)
++	if !ok {
++		t.Fatal("missing index handler registry")
++	}
++	epoch := registry.epoch
++	registry.initializeFolderLifecycle(folder)
++	staleUnshared := folder
++	staleUnshared.Devices = nil
++	registry.registerInitialFolderState(staleUnshared, nil)
++	runner, _ := m.folderRunners.Get(folder.ID)
++	registry.RegisterFolderState(folder, runner)
++	info := &clusterConfigDeviceInfo{
++		local:  protocol.Device{ID: myID},
++		remote: protocol.Device{ID: device1, IndexID: 98},
++	}
++	if err := registry.addIndexInfoForEpoch(epoch, folder.ID, info); err != nil {
++		t.Fatal(err)
++	}
++	if !m.remoteIndexProofs.publish(epoch, map[string]remoteIndexProofPair{
++		folder.ID: {indexID: 98, maxSequence: 0},
++	}) {
++		t.Fatal("proof publish failed")
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofCurrent {
++		t.Fatalf("stale operational state overwrote authoritative lifecycle eligibility: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofDoesNotRepublishAcrossFolderLifecycleBarrier(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 91, 0)
++	registry, epoch, err := m.ensureIndexHandler(connection)
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	paused := folder
++	paused.Paused = true
++	registry.RegisterFolderState(paused, nil)
++	runner, _ := m.folderRunners.Get(folder.ID)
++	registry.RegisterFolderState(folder, runner)
++	info := &clusterConfigDeviceInfo{
++		local:  protocol.Device{ID: myID},
++		remote: protocol.Device{ID: device1, IndexID: 91},
++	}
++	if err := registry.addIndexInfoForEpoch(epoch, folder.ID, info); err != nil {
++		t.Fatal(err)
++	}
++	if !m.remoteIndexProofs.publish(epoch, map[string]remoteIndexProofPair{
++		folder.ID: {indexID: 91, maxSequence: 0},
++	}) {
++		t.Fatal("in-flight ClusterConfig epoch unexpectedly became stale")
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("in-flight ClusterConfig republished proof across pause/resume barrier: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofDoesNotPublishClusterConfigReceivedWhilePaused(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 93, 0)
++	registry, ok := m.indexHandlers.Get(device1)
++	if !ok {
++		t.Fatal("missing index handler registry")
++	}
++	paused := folder
++	paused.Paused = true
++	registry.RegisterFolderState(paused, nil)
++	_, epoch, err := m.ensureIndexHandler(connection)
++	if err != nil {
++		t.Fatal(err)
++	}
++	info := &clusterConfigDeviceInfo{
++		local:  protocol.Device{ID: myID},
++		remote: protocol.Device{ID: device1, IndexID: 93},
++	}
++	if err := registry.addIndexInfoForEpoch(epoch, folder.ID, info); err != nil {
++		t.Fatal(err)
++	}
++	runner, _ := m.folderRunners.Get(folder.ID)
++	registry.RegisterFolderState(folder, runner)
++	if !m.remoteIndexProofs.publish(epoch, map[string]remoteIndexProofPair{
++		folder.ID: {indexID: 93, maxSequence: 0},
++	}) {
++		t.Fatal("paused ClusterConfig epoch unexpectedly became stale")
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("ClusterConfig received while paused published after resume: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofNewConnectionWhilePausedRemainsBlockedAfterResume(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	owner := newFakeConnection(device1, m)
++	m.AddConnection(owner, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, owner, folder.ID, 96, 0)
++
++	pausedConfig := wrapper.RawCopy()
++	pausedConfig.Folders[0].Paused = true
++	replace(t, wrapper, pausedConfig)
++	if _, ok := m.folderCfgs[folder.ID]; ok {
++		t.Fatal("paused folder unexpectedly remained operational")
++	}
++
++	replacement := newFakeConnection(device1, m)
++	m.AddConnection(replacement, protocol.Hello{})
++	registry, epoch, err := m.ensureIndexHandler(replacement)
++	if err != nil {
++		t.Fatal(err)
++	}
++	info := &clusterConfigDeviceInfo{
++		local:  protocol.Device{ID: myID},
++		remote: protocol.Device{ID: device1, IndexID: 96},
++	}
++	if err := registry.addIndexInfoForEpoch(epoch, folder.ID, info); err != nil {
++		t.Fatal(err)
++	}
++
++	resumedConfig := pausedConfig.Copy()
++	resumedConfig.Folders[0].Paused = false
++	replace(t, wrapper, resumedConfig)
++	if !m.remoteIndexProofs.publish(epoch, map[string]remoteIndexProofPair{
++		folder.ID: {indexID: 96, maxSequence: 0},
++	}) {
++		t.Fatal("replacement connection epoch unexpectedly became stale")
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("new connection created while paused reused its CC after resume: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofNewPausedFolderOnExistingConnectionIsBlocked(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 99, 0)
++
++	const addedFolderID = "added-paused"
++	pausedFolder := folder
++	pausedFolder.ID = addedFolderID
++	pausedFolder.Path = addedFolderID
++	pausedFolder.Paused = true
++	pausedConfig := wrapper.RawCopy()
++	pausedConfig.Folders = append(pausedConfig.Folders, pausedFolder)
++	replace(t, wrapper, pausedConfig)
++
++	registry, epoch, err := m.ensureIndexHandler(connection)
++	if err != nil {
++		t.Fatal(err)
++	}
++	info := &clusterConfigDeviceInfo{
++		local:  protocol.Device{ID: myID},
++		remote: protocol.Device{ID: device1, IndexID: 100},
++	}
++	if err := registry.addIndexInfoForEpoch(epoch, addedFolderID, info); err != nil {
++		t.Fatal(err)
++	}
++
++	resumedConfig := pausedConfig.Copy()
++	for i := range resumedConfig.Folders {
++		if resumedConfig.Folders[i].ID == addedFolderID {
++			resumedConfig.Folders[i].Paused = false
++		}
++	}
++	replace(t, wrapper, resumedConfig)
++	if !m.remoteIndexProofs.publish(epoch, map[string]remoteIndexProofPair{
++		addedFolderID: {indexID: 100, maxSequence: 0},
++	}) {
++		t.Fatal("existing connection epoch unexpectedly became stale")
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, addedFolderID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("paused-folder CC published after resume: %+v", got)
++	}
++
++	mustReceiveProofClusterConfig(t, m, connection, addedFolderID, 100, 0)
++	if got := mustRemoteIndexReadiness(t, m, device1, addedFolderID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("same-connection CC cleared paused-folder lifecycle block: %+v", got)
++	}
++
++	replacement := newFakeConnection(device1, m)
++	m.AddConnection(replacement, protocol.Hello{})
++	mustReceiveProofClusterConfig(t, m, replacement, addedFolderID, 100, 0)
++	if got := mustRemoteIndexReadiness(t, m, device1, addedFolderID); got.State != RemoteIndexProofCurrent || got.ConnectionID != replacement.ConnectionID() {
++		t.Fatalf("fresh connection did not recover added folder: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofPausedFolderRegistrationConcurrentConnectionReplacement(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	base := newFakeConnection(device1, m)
++	m.AddConnection(base, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, base, folder.ID, 101, 0)
++
++	const count = 256
++	pausedConfig := wrapper.RawCopy()
++	for i := 0; i < count; i++ {
++		pausedFolder := folder
++		pausedFolder.ID = fmt.Sprintf("concurrent-paused-%03d", i)
++		pausedFolder.Path = pausedFolder.ID
++		pausedFolder.Paused = true
++		pausedConfig.Folders = append(pausedConfig.Folders, pausedFolder)
++	}
++
++	started := make(chan struct{})
++	result := make(chan error, 1)
++	go func() {
++		close(started)
++		for i := 0; i < count; i++ {
++			connection := newFakeConnection(device1, m)
++			m.AddConnection(connection, protocol.Hello{})
++			if _, _, err := m.ensureIndexHandler(connection); err != nil {
++				result <- err
++				return
++			}
++			m.Closed(connection, errors.New("connection replacement race test"))
++		}
++		result <- nil
++	}()
++
++	<-started
++	replace(t, wrapper, pausedConfig)
++	if err := <-result; err != nil {
++		t.Fatal(err)
++	}
++}
++
++func TestRemoteIndexProofRejectsLateClusterConfigAfterConnectionClose(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	owner := newFakeConnection(device1, m)
++	m.AddConnection(owner, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, owner, folder.ID, 95, 0)
++	survivor := newFakeConnection(device1, m)
++	m.AddConnection(survivor, protocol.Hello{})
++	m.Closed(owner, errors.New("owner closed"))
++	if err := m.ClusterConfig(owner, &protocol.ClusterConfig{Folders: []protocol.Folder{{
++		ID: folder.ID,
++		Devices: []protocol.Device{
++			{ID: myID},
++			{ID: device1, IndexID: 95},
++		},
++	}}}); err == nil {
++		t.Fatal("late ClusterConfig on a closed connection unexpectedly succeeded")
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofMissing {
++		t.Fatalf("late ClusterConfig resurrected closed-owner proof: %+v", got)
++	}
++	if len(m.deviceConnIDs[device1]) != 1 || m.deviceConnIDs[device1][0] != survivor.ConnectionID() {
++		t.Fatal("late ClusterConfig changed the surviving connection set")
++	}
++}
++
++func TestRemoteIndexProofAcceptsZeroIndexIDOnlyAtExactSequence(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	const oldStoredIndexID = protocol.IndexID(79)
++	if err := m.sdb.SetIndexID(folder.ID, device1, oldStoredIndexID); err != nil {
++		t.Fatal(err)
++	}
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 0, 16)
++	pending := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if pending.State != RemoteIndexProofPending || pending.StoredSequence != 0 {
++		t.Fatalf("zero-ID proof became current before the full index: %+v", pending)
++	}
++
++	file := protocol.FileInfo{Name: "current", Sequence: 16, Version: protocol.Vector{}.Update(device1.Short())}
++	if err := m.sdb.Update(folder.ID, device1, []protocol.FileInfo{file}); err != nil {
++		t.Fatal(err)
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending {
++		t.Fatalf("zero-ID proof accepted matching stale DB data without a current-generation full Index: %+v", got)
++	}
++	if err := m.Index(connection, &protocol.Index{Folder: folder.ID, Files: []protocol.FileInfo{file}, LastSequence: 16}); err != nil {
++		t.Fatal(err)
++	}
++	current := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++	if current.State != RemoteIndexProofCurrent || current.StoredSequence != 16 || current.StoredIndexID != oldStoredIndexID {
++		t.Fatalf("zero-ID exact sequence was not current without rewriting stored ID: %+v", current)
++	}
++}
++
++func TestRemoteIndexProofZeroIndexIDEmptyFolderNeedsCurrentFullFrame(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 0, 0)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending {
++		t.Fatalf("zero-ID empty announcement became current before an empty full Index: %+v", got)
++	}
++	if err := m.Index(connection, &protocol.Index{Folder: folder.ID}); err != nil {
++		t.Fatal(err)
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofCurrent {
++		t.Fatalf("current-generation empty full Index did not complete zero-ID proof: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofFreshNonzeroEmptyFolderNeedsNoSyntheticFrame(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 101, 0)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofCurrent || got.StoredIndexID != 101 || got.StoredSequence != 0 {
++		t.Fatalf("fresh nonzero empty announcement required a synthetic empty Index: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofRejectsMalformedSequenceFrames(t *testing.T) {
++	tests := []struct {
++		name         string
++		prevSequence int64
++		lastSequence int64
++		files        []protocol.FileInfo
++	}{
++		{
++			name:         "previous sequence mismatch",
++			prevSequence: 5,
++			lastSequence: 11,
++			files:        []protocol.FileInfo{{Name: "prev", Sequence: 11}},
++		},
++		{
++			name:         "last sequence mismatch",
++			prevSequence: 0,
++			lastSequence: 10,
++			files:        []protocol.FileInfo{{Name: "last", Sequence: 11}},
++		},
++		{
++			name:         "non increasing sequence",
++			prevSequence: 0,
++			lastSequence: 11,
++			files: []protocol.FileInfo{
++				{Name: "first", Sequence: 11},
++				{Name: "second", Sequence: 11},
++			},
++		},
++		{
++			name:         "empty update terminal jump",
++			prevSequence: 0,
++			lastSequence: 11,
++		},
++	}
++	for _, tc := range tests {
++		t.Run(tc.name, func(t *testing.T) {
++			wrapper, folder := newDefaultCfgWrapper(t)
++			m := setupModel(t, wrapper)
++			defer cleanupModel(m)
++
++			const indexID = protocol.IndexID(97)
++			if err := m.sdb.SetIndexID(folder.ID, device1, indexID); err != nil {
++				t.Fatal(err)
++			}
++			connection := newFakeConnection(device1, m)
++			m.AddConnection(connection, protocol.Hello{})
++			m.promoteConnections()
++			mustReceiveProofClusterConfig(t, m, connection, folder.ID, indexID, 11)
++			for i := range tc.files {
++				tc.files[i].Version = protocol.Vector{}.Update(device1.Short())
++			}
++			if err := m.IndexUpdate(connection, &protocol.IndexUpdate{
++				Folder:       folder.ID,
++				Files:        tc.files,
++				PrevSequence: tc.prevSequence,
++				LastSequence: tc.lastSequence,
++			}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++				t.Fatalf("malformed frame error = %v, want invalid-epoch sentinel", err)
++			}
++			got := mustRemoteIndexReadiness(t, m, device1, folder.ID)
++			if got.State != RemoteIndexProofPending || got.StoredSequence != 0 {
++				t.Fatalf("malformed frame mutated the durable cursor: %+v", got)
++			}
++
++			valid := protocol.FileInfo{Name: "recovery", Sequence: 12, Version: protocol.Vector{}.Update(device1.Short())}
++			if err := m.IndexUpdate(connection, &protocol.IndexUpdate{
++				Folder:       folder.ID,
++				Files:        []protocol.FileInfo{valid},
++				PrevSequence: 0,
++				LastSequence: 12,
++			}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++				t.Fatalf("later frame error = %v, want invalid-epoch sentinel", err)
++			}
++			if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending || got.StoredSequence != 0 {
++				t.Fatalf("later valid frame repaired a permanently invalid epoch: %+v", got)
++			}
++		})
++	}
++}
++
++func TestRemoteIndexProofPrePublishPoisonIsConnectionScopedAndFolderIsolated(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	const (
++		otherFolder = "proof-isolation"
++		indexID     = protocol.IndexID(113)
++	)
++	for _, folderID := range []string{folder.ID, otherFolder} {
++		if err := m.sdb.SetIndexID(folderID, device1, indexID); err != nil {
++			t.Fatal(err)
++		}
++	}
++
++	proofs := m.remoteIndexProofs
++	epoch := proofs.begin(device1, "prepublish")
++	operationCalled := false
++	if _, err := proofs.accept(epoch, folder.ID, false, 10, func() (bool, error) {
++		operationCalled = true
++		return true, nil
++	}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++		t.Fatalf("pre-publish frame error = %v, want invalid-epoch sentinel", err)
++	}
++	if operationCalled {
++		t.Fatal("pre-publish frame reached its database operation")
++	}
++
++	pairs := map[string]remoteIndexProofPair{
++		folder.ID:   {indexID: indexID, maxSequence: 10},
++		otherFolder: {indexID: indexID, maxSequence: 0},
++	}
++	if !proofs.publish(epoch, pairs) {
++		t.Fatal("publish unexpectedly rejected current epoch")
++	}
++	if got, err := proofs.readiness(epoch, folder.ID); err != nil || got.State != RemoteIndexProofPending || got.StoredSequence != 0 {
++		t.Fatalf("pre-publish poison did not hold the folder pending: readiness=%+v err=%v", got, err)
++	}
++	if got, err := proofs.readiness(epoch, otherFolder); err != nil || got.State != RemoteIndexProofCurrent {
++		t.Fatalf("folder poison leaked to an unrelated folder: readiness=%+v err=%v", got, err)
++	}
++
++	rotated, ok := proofs.rotate(epoch)
++	if !ok || !proofs.publish(rotated, pairs) {
++		t.Fatal("same-connection rotation unexpectedly failed")
++	}
++	if got, err := proofs.readiness(rotated, folder.ID); err != nil || got.State != RemoteIndexProofPending {
++		t.Fatalf("same-connection rotation cleared pre-publish poison: readiness=%+v err=%v", got, err)
++	}
++	operationCalled = false
++	if err := proofs.reset(rotated, folder.ID, false, func() error {
++		operationCalled = true
++		return nil
++	}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++		t.Fatalf("poisoned reset error = %v, want invalid-epoch sentinel", err)
++	}
++	if operationCalled {
++		t.Fatal("poisoned reset reached its database operation")
++	}
++
++	fresh := proofs.begin(device1, "fresh")
++	if !proofs.publish(fresh, pairs) {
++		t.Fatal("fresh connection publish unexpectedly failed")
++	}
++	operationCalled = false
++	if _, err := proofs.accept(rotated, folder.ID, false, 10, func() (bool, error) {
++		operationCalled = true
++		return false, nil
++	}); !errors.Is(err, errStaleRemoteIndexEpoch) {
++		t.Fatalf("retired epoch error = %v, want stale-epoch sentinel", err)
++	}
++	if operationCalled {
++		t.Fatal("retired epoch reached its database operation")
++	}
++
++	file := protocol.FileInfo{Name: "fresh", Sequence: 10, Version: protocol.Vector{}.Update(device1.Short())}
++	if _, err := proofs.accept(fresh, folder.ID, false, 10, func() (bool, error) {
++		return true, m.sdb.Update(folder.ID, device1, []protocol.FileInfo{file})
++	}); err != nil {
++		t.Fatal(err)
++	}
++	if got, err := proofs.readiness(fresh, folder.ID); err != nil || got.State != RemoteIndexProofCurrent || got.StoredSequence != 10 {
++		t.Fatalf("fresh connection did not recover poisoned folder: readiness=%+v err=%v", got, err)
++	}
++}
++
++func TestRemoteIndexProofMalformedFrameCannotManufactureDurableCursor(t *testing.T) {
++	tests := []struct {
++		name string
++		send func(*testModel, protocol.Connection, string, protocol.FileInfo) error
++	}{
++		{
++			name: "update previous sequence mismatch",
++			send: func(m *testModel, connection protocol.Connection, folder string, file protocol.FileInfo) error {
++				return m.IndexUpdate(connection, &protocol.IndexUpdate{
++					Folder:       folder,
++					Files:        []protocol.FileInfo{file},
++					PrevSequence: 0,
++					LastSequence: file.Sequence,
++				})
++			},
++		},
++		{
++			name: "full last sequence mismatch",
++			send: func(m *testModel, connection protocol.Connection, folder string, file protocol.FileInfo) error {
++				return m.Index(connection, &protocol.Index{
++					Folder:       folder,
++					Files:        []protocol.FileInfo{file},
++					LastSequence: file.Sequence + 1,
++				})
++			},
++		},
++	}
++
++	for _, tc := range tests {
++		t.Run(tc.name, func(t *testing.T) {
++			wrapper, folder := newDefaultCfgWrapper(t)
++			m := setupModel(t, wrapper)
++			defer cleanupModel(m)
++
++			const indexID = protocol.IndexID(109)
++			if err := m.sdb.SetIndexID(folder.ID, device1, indexID); err != nil {
++				t.Fatal(err)
++			}
++			seed := protocol.FileInfo{Name: "stored", Sequence: 5, Version: protocol.Vector{}.Update(device1.Short())}
++			if err := m.sdb.Update(folder.ID, device1, []protocol.FileInfo{seed}); err != nil {
++				t.Fatal(err)
++			}
++
++			connection := newFakeConnection(device1, m)
++			m.AddConnection(connection, protocol.Hello{})
++			m.promoteConnections()
++			mustReceiveProofClusterConfig(t, m, connection, folder.ID, indexID, 10)
++			incoming := protocol.FileInfo{Name: "untrusted", Sequence: 10, Version: protocol.Vector{}.Update(device1.Short())}
++			if err := tc.send(m, connection, folder.ID, incoming); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++				t.Fatalf("malformed frame error = %v, want invalid-epoch sentinel", err)
++			}
++
++			if got, err := m.sdb.GetDeviceSequence(folder.ID, device1); err != nil || got != 5 {
++				t.Fatalf("malformed frame changed durable cursor: sequence=%d err=%v", got, err)
++			}
++			if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending || got.StoredSequence != 5 {
++				t.Fatalf("malformed frame did not leave the current epoch pending at the old cursor: %+v", got)
++			}
++
++			later := protocol.FileInfo{Name: "later", Sequence: 11, Version: protocol.Vector{}.Update(device1.Short())}
++			if err := m.IndexUpdate(connection, &protocol.IndexUpdate{
++				Folder:       folder.ID,
++				Files:        []protocol.FileInfo{later},
++				PrevSequence: 5,
++				LastSequence: 11,
++			}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++				t.Fatalf("later frame error = %v, want invalid-epoch sentinel", err)
++			}
++			if got, err := m.sdb.GetDeviceSequence(folder.ID, device1); err != nil || got != 5 {
++				t.Fatalf("later frame changed poisoned durable cursor: sequence=%d err=%v", got, err)
++			}
++
++			mustReceiveProofClusterConfig(t, m, connection, folder.ID, indexID, 11)
++			if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending || got.StoredSequence != 5 {
++				t.Fatalf("same-connection epoch trusted a cursor from a malformed frame: %+v", got)
++			}
++
++			replacement := newFakeConnection(device1, m)
++			m.AddConnection(replacement, protocol.Hello{})
++			mustReceiveProofClusterConfig(t, m, replacement, folder.ID, indexID, 11)
++			if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending || got.StoredSequence != 5 || got.ConnectionID != replacement.ConnectionID() {
++				t.Fatalf("fresh connection trusted a cursor from a malformed frame: %+v", got)
++			}
++			if err := m.IndexUpdate(replacement, &protocol.IndexUpdate{
++				Folder:       folder.ID,
++				Files:        []protocol.FileInfo{later},
++				PrevSequence: 5,
++				LastSequence: 11,
++			}); err != nil {
++				t.Fatal(err)
++			}
++			if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofCurrent || got.StoredSequence != 11 {
++				t.Fatalf("fresh connection did not recover from the poisoned epoch: %+v", got)
++			}
++		})
++	}
++}
++
++func TestRemoteIndexProofRejectsEqualityReplay(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	const indexID = protocol.IndexID(103)
++	if err := m.sdb.SetIndexID(folder.ID, device1, indexID); err != nil {
++		t.Fatal(err)
++	}
++	seed := protocol.FileInfo{Name: "original", Sequence: 11, Version: protocol.Vector{}.Update(device1.Short())}
++	if err := m.sdb.Update(folder.ID, device1, []protocol.FileInfo{seed}); err != nil {
++		t.Fatal(err)
++	}
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, indexID, 11)
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofCurrent {
++		t.Fatalf("test setup did not establish current proof: %+v", got)
++	}
++
++	replay := protocol.FileInfo{Name: "replacement", Sequence: 11, Version: protocol.Vector{}.Update(device1.Short())}
++	if err := m.IndexUpdate(connection, &protocol.IndexUpdate{
++		Folder:       folder.ID,
++		Files:        []protocol.FileInfo{replay},
++		PrevSequence: 11,
++		LastSequence: 11,
++	}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++		t.Fatalf("replay error = %v, want invalid-epoch sentinel", err)
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending {
++		t.Fatalf("equal-sequence replay preserved a current proof: %+v", got)
++	}
++}
++
++func TestRemoteIndexProofRejectsZeroSequenceFullFrame(t *testing.T) {
++	wrapper, folder := newDefaultCfgWrapper(t)
++	m := setupModel(t, wrapper)
++	defer cleanupModel(m)
++
++	connection := newFakeConnection(device1, m)
++	m.AddConnection(connection, protocol.Hello{})
++	m.promoteConnections()
++	mustReceiveProofClusterConfig(t, m, connection, folder.ID, 0, 0)
++	zero := protocol.FileInfo{Name: "zero", Sequence: 0, Version: protocol.Vector{}.Update(device1.Short())}
++	if err := m.Index(connection, &protocol.Index{Folder: folder.ID, Files: []protocol.FileInfo{zero}}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++		t.Fatalf("zero-sequence error = %v, want invalid-epoch sentinel", err)
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending {
++		t.Fatalf("zero-sequence full frame completed proof: %+v", got)
++	}
++	if err := m.Index(connection, &protocol.Index{Folder: folder.ID}); !errors.Is(err, errInvalidRemoteIndexEpoch) {
++		t.Fatalf("later frame error = %v, want invalid-epoch sentinel", err)
++	}
++	if got := mustRemoteIndexReadiness(t, m, device1, folder.ID); got.State != RemoteIndexProofPending {
++		t.Fatalf("later valid frame repaired zero-sequence epoch: %+v", got)
++	}
++}
++
++func mustReceiveProofClusterConfig(t *testing.T, m *testModel, connection protocol.Connection, folder string, indexID protocol.IndexID, maxSequence int64) {
++	t.Helper()
++	if err := m.ClusterConfig(connection, &protocol.ClusterConfig{Folders: []protocol.Folder{{
++		ID: folder,
++		Devices: []protocol.Device{
++			{ID: myID},
++			{ID: device1, IndexID: indexID, MaxSequence: maxSequence},
++		},
++	}}}); err != nil {
++		t.Fatal(err)
++	}
++}
++
++func mustRemoteIndexReadiness(t *testing.T, m *testModel, device protocol.DeviceID, folder string) RemoteIndexReadiness {
++	t.Helper()
++	readiness, err := m.RemoteIndexReadiness(device, folder)
++	if err != nil {
++		t.Fatal(err)
++	}
++	return readiness
++}
+diff --git a/lib/model/requests_test.go b/lib/model/requests_test.go
+index 2881407..a3cfa0b 100644
+--- a/lib/model/requests_test.go
++++ b/lib/model/requests_test.go
+@@ -1392,7 +1392,7 @@ func TestRequestGlobalInvalidToValid(t *testing.T) {
+ 	file := fc.files[0]
+ 	fc.mut.Unlock()
+ 	file.SetIgnored()
+-	m.IndexUpdate(conn, &protocol.IndexUpdate{Folder: fcfg.ID, Files: []protocol.FileInfo{prepareFileInfoForIndex(file)}})
++	m.IndexUpdate(conn, indexUpdateForTest(t, m, conn, fcfg.ID, []protocol.FileInfo{prepareFileInfoForIndex(file)}))
+ 
+ 	// Wait for the ignored file to be received and possibly pulled
+ 	timeout := time.After(10 * time.Second)
+diff --git a/lib/protocol/bep_fileinfo.go b/lib/protocol/bep_fileinfo.go
+index ad3d17e..d1abe92 100644
+--- a/lib/protocol/bep_fileinfo.go
++++ b/lib/protocol/bep_fileinfo.go
+@@ -31,16 +31,23 @@ const (
+ 	FlagLocalGlobal        FlagLocal = 1 << 4 // 16: This is the global file version
+ 	FlagLocalNeeded        FlagLocal = 1 << 5 // 32: We need this file
+ 	FlagLocalRemoteInvalid FlagLocal = 1 << 6 // 64: The remote marked this as invalid
++	// The global metadata is known, but this device intentionally has no
++	// materialized content and must not advertise or serve the blocks.
++	FlagLocalDataless FlagLocal = 1 << 7
++	// The exact content is materialized for an on-demand read but is not a
++	// keep-downloaded replica. A later remote version remains dataless until an
++	// explicit materialize or retention request installs that exact version.
++	FlagLocalOnDemand FlagLocal = 1 << 8
+ 
+ 	// Flags that should result in the Invalid bit on outgoing updates (or had it on ingoing ones)
+-	LocalInvalidFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalRemoteInvalid
++	LocalInvalidFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalRemoteInvalid | FlagLocalDataless
+ 
+ 	// Flags that should result in a file being in conflict with its
+ 	// successor, due to us not having an up to date picture of its state on
+ 	// disk.
+ 	LocalConflictFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalReceiveOnly
+ 
+-	LocalAllFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalGlobal | FlagLocalNeeded | FlagLocalRemoteInvalid
++	LocalAllFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalGlobal | FlagLocalNeeded | FlagLocalRemoteInvalid | FlagLocalDataless | FlagLocalOnDemand
+ )
+ 
+ // localFlagBitNames maps flag values to characters which can be used to
+@@ -53,6 +60,8 @@ var localFlagBitNames = map[FlagLocal]string{
+ 	FlagLocalGlobal:        "G",
+ 	FlagLocalNeeded:        "n",
+ 	FlagLocalRemoteInvalid: "v",
++	FlagLocalDataless:      "d",
++	FlagLocalOnDemand:      "o",
+ }
+ 
+ func (f FlagLocal) IsInvalid() bool {
+@@ -355,6 +364,14 @@ func (f FileInfo) IsInvalid() bool {
+ 	return f.LocalFlags.IsInvalid()
+ }
+ 
++func (f FileInfo) IsDataless() bool {
++	return f.LocalFlags&FlagLocalDataless != 0
++}
++
++func (f FileInfo) IsOnDemand() bool {
++	return f.LocalFlags&FlagLocalOnDemand != 0
++}
++
+ func (f FileInfo) IsUnsupported() bool {
+ 	return f.LocalFlags&FlagLocalUnsupported != 0
+ }
+diff --git a/lib/protocol/counting.go b/lib/protocol/counting.go
+index 646a78a..0bed112 100644
+--- a/lib/protocol/counting.go
++++ b/lib/protocol/counting.go
+@@ -7,17 +7,206 @@
+ package protocol
+ 
+ import (
++	"errors"
+ 	"io"
++	"sync"
+ 	"sync/atomic"
+ 	"time"
+ )
+ 
++var (
++	// ErrNetworkByteLimitReached is returned before lower-level I/O whenever
++	// the active aggregate protocol-byte budget cannot admit the operation.
++	ErrNetworkByteLimitReached = errors.New("aggregate protocol byte limit reached")
++	ErrNetworkByteBudgetActive = errors.New("an aggregate protocol byte budget is already active")
++	ErrNetworkByteBudgetOwner  = errors.New("aggregate protocol byte budget owner mismatch")
++)
++
++// NetworkByteBudgetToken identifies the sole owner allowed to inspect and
++// clear one process-global aggregate protocol-byte budget.
++type NetworkByteBudgetToken uint64
++
++// NetworkByteBudgetSnapshot is a stable projection of actual protocol bytes
++// completed by the counting readers and writers owned by a budget.
++type NetworkByteBudgetSnapshot struct {
++	Limited    bool
++	LimitBytes int64
++	UsedBytes  int64
++	Exhausted  bool
++}
++
++type networkByteBudget struct {
++	owner NetworkByteBudgetToken
++
++	// gate permits concurrent I/O but makes ClearNetworkByteBudget a real
++	// drain boundary. Once closed, a stale connection cannot reach lower I/O.
++	gate   sync.RWMutex
++	closed bool
++
++	limited   bool
++	limit     int64
++	reserved  atomic.Int64
++	used      atomic.Int64
++	exhausted atomic.Bool
++}
++
++var (
++	activeNetworkByteBudget atomic.Pointer[networkByteBudget]
++	nextNetworkBudgetOwner  atomic.Uint64
++)
++
++// InstallNetworkByteBudget installs the one active aggregate budget. A limit
++// of -1 is unlimited but still session-scoped and counted; nonnegative values
++// are hard sent-plus-received byte limits.
++func InstallNetworkByteBudget(limit int64) (NetworkByteBudgetToken, error) {
++	if limit < -1 {
++		return 0, errors.New("aggregate protocol byte limit must be -1 or nonnegative")
++	}
++	owner := NetworkByteBudgetToken(nextNetworkBudgetOwner.Add(1))
++	if owner == 0 {
++		owner = NetworkByteBudgetToken(nextNetworkBudgetOwner.Add(1))
++	}
++	budget := &networkByteBudget{
++		owner:   owner,
++		limited: limit >= 0,
++		limit:   max(limit, 0),
++	}
++	if !activeNetworkByteBudget.CompareAndSwap(nil, budget) {
++		return 0, ErrNetworkByteBudgetActive
++	}
++	return owner, nil
++}
++
++// NetworkByteBudgetStatus returns the active owner's actual completed byte
++// count. In-flight reservations may make Exhausted true before UsedBytes
++// reaches LimitBytes, but after runtime drain UsedBytes is exact.
++func NetworkByteBudgetStatus(owner NetworkByteBudgetToken) (NetworkByteBudgetSnapshot, error) {
++	budget := activeNetworkByteBudget.Load()
++	if budget == nil || owner == 0 || budget.owner != owner {
++		return NetworkByteBudgetSnapshot{}, ErrNetworkByteBudgetOwner
++	}
++	budget.gate.RLock()
++	defer budget.gate.RUnlock()
++	if budget.closed || activeNetworkByteBudget.Load() != budget {
++		return NetworkByteBudgetSnapshot{}, ErrNetworkByteBudgetOwner
++	}
++	return budget.snapshot(), nil
++}
++
++// ClearNetworkByteBudget waits for all budgeted lower I/O to return, prevents
++// stale connections from issuing any later I/O, and clears only the matching
++// owner. A stale token can never clear a newer budget.
++func ClearNetworkByteBudget(owner NetworkByteBudgetToken) (NetworkByteBudgetSnapshot, error) {
++	budget := activeNetworkByteBudget.Load()
++	if budget == nil || owner == 0 || budget.owner != owner {
++		return NetworkByteBudgetSnapshot{}, ErrNetworkByteBudgetOwner
++	}
++	budget.gate.Lock()
++	defer budget.gate.Unlock()
++	if budget.closed || budget.owner != owner || activeNetworkByteBudget.Load() != budget {
++		return NetworkByteBudgetSnapshot{}, ErrNetworkByteBudgetOwner
++	}
++	budget.closed = true
++	if !activeNetworkByteBudget.CompareAndSwap(budget, nil) {
++		return NetworkByteBudgetSnapshot{}, ErrNetworkByteBudgetOwner
++	}
++	return budget.snapshot(), nil
++}
++
++func (b *networkByteBudget) snapshot() NetworkByteBudgetSnapshot {
++	exhausted := false
++	if b.limited {
++		exhausted = b.exhausted.Load() || b.reserved.Load() >= b.limit
++	}
++	return NetworkByteBudgetSnapshot{
++		Limited:    b.limited,
++		LimitBytes: b.limit,
++		UsedBytes:  b.used.Load(),
++		Exhausted:  exhausted,
++	}
++}
++
++func (b *networkByteBudget) begin() error {
++	b.gate.RLock()
++	if b.closed {
++		b.gate.RUnlock()
++		return ErrNetworkByteLimitReached
++	}
++	return nil
++}
++
++func (b *networkByteBudget) end() {
++	b.gate.RUnlock()
++}
++
++func (b *networkByteBudget) reserveWriter(bytes int64) error {
++	if bytes == 0 || !b.limited {
++		return nil
++	}
++	if b.exhausted.Load() {
++		return ErrNetworkByteLimitReached
++	}
++	for {
++		reserved := b.reserved.Load()
++		if bytes > b.limit-reserved {
++			b.exhausted.Store(true)
++			return ErrNetworkByteLimitReached
++		}
++		if b.reserved.CompareAndSwap(reserved, reserved+bytes) {
++			if b.exhausted.Load() {
++				b.reserved.Add(-bytes)
++				return ErrNetworkByteLimitReached
++			}
++			return nil
++		}
++	}
++}
++
++func (b *networkByteBudget) reserveReader(requested int64) (int64, error) {
++	if requested == 0 || !b.limited {
++		return requested, nil
++	}
++	if b.exhausted.Load() {
++		return 0, ErrNetworkByteLimitReached
++	}
++	for {
++		reserved := b.reserved.Load()
++		remaining := b.limit - reserved
++		if remaining <= 0 {
++			b.exhausted.Store(true)
++			return 0, ErrNetworkByteLimitReached
++		}
++		reservation := min(requested, remaining)
++		if b.reserved.CompareAndSwap(reserved, reserved+reservation) {
++			if b.exhausted.Load() {
++				b.reserved.Add(-reservation)
++				return 0, ErrNetworkByteLimitReached
++			}
++			return reservation, nil
++		}
++	}
++}
++
++func (b *networkByteBudget) finish(reserved, actual int64) {
++	if actual < 0 {
++		actual = 0
++	}
++	if actual > reserved {
++		actual = reserved
++	}
++	if b.limited {
++		b.reserved.Add(-(reserved - actual))
++	}
++	b.used.Add(actual)
++}
++
+ type countingReader struct {
+ 	io.Reader
+ 
+ 	idString string
+ 	tot      atomic.Int64 // bytes
+ 	last     atomic.Int64 // unix nanos
++	budget   *networkByteBudget
+ }
+ 
+ var (
+@@ -26,7 +215,23 @@ var (
+ )
+ 
+ func (c *countingReader) Read(bs []byte) (int, error) {
++	reserved := int64(len(bs))
++	if c.budget != nil {
++		if err := c.budget.begin(); err != nil {
++			return 0, err
++		}
++		defer c.budget.end()
++		var err error
++		reserved, err = c.budget.reserveReader(reserved)
++		if err != nil {
++			return 0, err
++		}
++		bs = bs[:reserved]
++	}
+ 	n, err := c.Reader.Read(bs)
++	if c.budget != nil {
++		c.budget.finish(reserved, int64(n))
++	}
+ 	c.tot.Add(int64(n))
+ 	totalIncoming.Add(int64(n))
+ 	c.last.Store(time.Now().UnixNano())
+@@ -46,10 +251,24 @@ type countingWriter struct {
+ 	idString string
+ 	tot      atomic.Int64 // bytes
+ 	last     atomic.Int64 // unix nanos
++	budget   *networkByteBudget
+ }
+ 
+ func (c *countingWriter) Write(bs []byte) (int, error) {
++	reserved := int64(len(bs))
++	if c.budget != nil {
++		if err := c.budget.begin(); err != nil {
++			return 0, err
++		}
++		defer c.budget.end()
++		if err := c.budget.reserveWriter(reserved); err != nil {
++			return 0, err
++		}
++	}
+ 	n, err := c.Writer.Write(bs)
++	if c.budget != nil {
++		c.budget.finish(reserved, int64(n))
++	}
+ 	c.tot.Add(int64(n))
+ 	totalOutgoing.Add(int64(n))
+ 	c.last.Store(time.Now().UnixNano())
+diff --git a/.build/go/syncthing-readiness-v1/lib/protocol/counting_budget_test.go b/lib/protocol/counting_budget_test.go
+new file mode 100644
+index 0000000..fac8279
+--- /dev/null
++++ b/lib/protocol/counting_budget_test.go
+@@ -0,0 +1,242 @@
++// Copyright (C) 2026 The Syncthing Authors.
++//
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++package protocol
++
++import (
++	"bytes"
++	"errors"
++	"io"
++	"sync"
++	"testing"
++)
++
++func TestNetworkByteBudgetWriterHardLimitAndRefund(t *testing.T) {
++	t.Run("zero", func(t *testing.T) {
++		owner := installNetworkByteBudgetForTest(t, 0)
++		var destination bytes.Buffer
++		writer := &countingWriter{Writer: &destination, budget: activeNetworkByteBudget.Load()}
++		if written, err := writer.Write([]byte("x")); written != 0 || !errors.Is(err, ErrNetworkByteLimitReached) {
++			t.Fatalf("zero-limit write = (%d, %v), want (0, limit)", written, err)
++		}
++		if destination.Len() != 0 {
++			t.Fatal("zero-limit writer reached lower I/O")
++		}
++		status := clearNetworkByteBudgetForTest(t, owner)
++		if !status.Limited || status.LimitBytes != 0 || status.UsedBytes != 0 || !status.Exhausted {
++			t.Fatalf("zero-limit status = %+v", status)
++		}
++	})
++
++	t.Run("exact boundary", func(t *testing.T) {
++		owner := installNetworkByteBudgetForTest(t, 5)
++		var destination bytes.Buffer
++		writer := &countingWriter{Writer: &destination, budget: activeNetworkByteBudget.Load()}
++		for _, data := range [][]byte{[]byte("abc"), []byte("de")} {
++			if written, err := writer.Write(data); written != len(data) || err != nil {
++				t.Fatalf("boundary write = (%d, %v), want (%d, nil)", written, err, len(data))
++			}
++		}
++		if written, err := writer.Write([]byte("f")); written != 0 || !errors.Is(err, ErrNetworkByteLimitReached) {
++			t.Fatalf("post-boundary write = (%d, %v), want (0, limit)", written, err)
++		}
++		status := clearNetworkByteBudgetForTest(t, owner)
++		if status.UsedBytes != 5 || !status.Exhausted || destination.String() != "abcde" {
++			t.Fatalf("boundary result status=%+v destination=%q", status, destination.String())
++		}
++	})
++
++	t.Run("whole write and sticky exhaustion", func(t *testing.T) {
++		owner := installNetworkByteBudgetForTest(t, 10)
++		var destination bytes.Buffer
++		writer := &countingWriter{Writer: &destination, budget: activeNetworkByteBudget.Load()}
++		if written, err := writer.Write([]byte("123456")); written != 6 || err != nil {
++			t.Fatalf("initial write = (%d, %v)", written, err)
++		}
++		if written, err := writer.Write([]byte("12345")); written != 0 || !errors.Is(err, ErrNetworkByteLimitReached) {
++			t.Fatalf("overlarge write = (%d, %v), want hard rejection", written, err)
++		}
++		if written, err := writer.Write([]byte("1234")); written != 0 || !errors.Is(err, ErrNetworkByteLimitReached) {
++			t.Fatalf("post-exhaustion fitting write = (%d, %v), want sticky rejection", written, err)
++		}
++		status := clearNetworkByteBudgetForTest(t, owner)
++		if status.UsedBytes != 6 || !status.Exhausted || destination.String() != "123456" {
++			t.Fatalf("sticky result status=%+v destination=%q", status, destination.String())
++		}
++	})
++
++	t.Run("partial and error refund", func(t *testing.T) {
++		owner := installNetworkByteBudgetForTest(t, 6)
++		destination := &boundedTestWriter{maximum: 2, err: io.ErrUnexpectedEOF}
++		writer := &countingWriter{Writer: destination, budget: activeNetworkByteBudget.Load()}
++		if written, err := writer.Write([]byte("abcd")); written != 2 || !errors.Is(err, io.ErrUnexpectedEOF) {
++			t.Fatalf("partial write = (%d, %v)", written, err)
++		}
++		destination.maximum = 4
++		destination.err = nil
++		if written, err := writer.Write([]byte("cdef")); written != 4 || err != nil {
++			t.Fatalf("refunded write = (%d, %v)", written, err)
++		}
++		status := clearNetworkByteBudgetForTest(t, owner)
++		if status.UsedBytes != 6 || destination.buffer.String() != "abcdef" {
++			t.Fatalf("refund result status=%+v destination=%q", status, destination.buffer.String())
++		}
++	})
++}
++
++func TestNetworkByteBudgetReaderCapsAndRefunds(t *testing.T) {
++	owner := installNetworkByteBudgetForTest(t, 4)
++	source := &boundedTestReader{reader: bytes.NewReader([]byte("abcdef")), maximum: 1}
++	reader := &countingReader{Reader: source, budget: activeNetworkByteBudget.Load()}
++	buffer := make([]byte, 6)
++	if read, err := reader.Read(buffer); read != 1 || err != nil {
++		t.Fatalf("partial read = (%d, %v)", read, err)
++	}
++	source.maximum = 8
++	if read, err := reader.Read(buffer[1:]); read != 3 || err != nil {
++		t.Fatalf("remaining read = (%d, %v), want (3, nil)", read, err)
++	}
++	if read, err := reader.Read(buffer); read != 0 || !errors.Is(err, ErrNetworkByteLimitReached) {
++		t.Fatalf("post-limit read = (%d, %v), want (0, limit)", read, err)
++	}
++	status := clearNetworkByteBudgetForTest(t, owner)
++	if status.UsedBytes != 4 || !status.Exhausted || string(buffer[:4]) != "abcd" {
++		t.Fatalf("reader result status=%+v data=%q", status, buffer[:4])
++	}
++
++	owner = installNetworkByteBudgetForTest(t, 4)
++	budget := activeNetworkByteBudget.Load()
++	eofSource := &boundedTestReader{reader: bytes.NewReader([]byte("z")), maximum: 4, err: io.EOF}
++	eofReader := &countingReader{Reader: eofSource, budget: budget}
++	if read, err := eofReader.Read(buffer[:4]); read != 1 || !errors.Is(err, io.EOF) {
++		t.Fatalf("EOF read = (%d, %v), want (1, EOF)", read, err)
++	}
++	writer := &countingWriter{Writer: io.Discard, budget: budget}
++	if written, err := writer.Write([]byte("123")); written != 3 || err != nil {
++		t.Fatalf("write after EOF refund = (%d, %v), want (3, nil)", written, err)
++	}
++	status = clearNetworkByteBudgetForTest(t, owner)
++	if status.UsedBytes != 4 {
++		t.Fatalf("EOF refund status = %+v", status)
++	}
++}
++
++func TestNetworkByteBudgetConcurrentAggregateNeverOvershoots(t *testing.T) {
++	const limit = int64(4096)
++	owner := installNetworkByteBudgetForTest(t, limit)
++	budget := activeNetworkByteBudget.Load()
++	start := make(chan struct{})
++	var group sync.WaitGroup
++	for index := 0; index < 24; index++ {
++		group.Add(1)
++		go func(reader bool) {
++			defer group.Done()
++			<-start
++			if reader {
++				wrapped := &countingReader{Reader: bytes.NewReader(make([]byte, 8192)), budget: budget}
++				buffer := make([]byte, 37)
++				for {
++					if _, err := wrapped.Read(buffer); err != nil {
++						return
++					}
++				}
++			}
++			wrapped := &countingWriter{Writer: io.Discard, budget: budget}
++			for {
++				if _, err := wrapped.Write(make([]byte, 31)); err != nil {
++					return
++				}
++			}
++		}(index%2 == 0)
++	}
++	close(start)
++	group.Wait()
++	status := clearNetworkByteBudgetForTest(t, owner)
++	if status.UsedBytes > limit {
++		t.Fatalf("concurrent aggregate overshot: %+v", status)
++	}
++	if !status.Exhausted {
++		t.Fatalf("concurrent aggregate did not reach sticky exhaustion: %+v", status)
++	}
++}
++
++func TestNetworkByteBudgetOwnerTokenAndUnlimitedAccounting(t *testing.T) {
++	first := installNetworkByteBudgetForTest(t, -1)
++	if _, err := InstallNetworkByteBudget(1); !errors.Is(err, ErrNetworkByteBudgetActive) {
++		t.Fatalf("second install error = %v, want active", err)
++	}
++	budget := activeNetworkByteBudget.Load()
++	writer := &countingWriter{Writer: io.Discard, budget: budget}
++	reader := &countingReader{Reader: bytes.NewReader([]byte("world")), budget: budget}
++	if _, err := writer.Write([]byte("hello")); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := reader.Read(make([]byte, 5)); err != nil {
++		t.Fatal(err)
++	}
++	firstStatus := clearNetworkByteBudgetForTest(t, first)
++	if firstStatus.Limited || firstStatus.LimitBytes != 0 || firstStatus.UsedBytes != 10 || firstStatus.Exhausted {
++		t.Fatalf("unlimited status = %+v", firstStatus)
++	}
++
++	second := installNetworkByteBudgetForTest(t, 1)
++	if _, err := ClearNetworkByteBudget(first); !errors.Is(err, ErrNetworkByteBudgetOwner) {
++		t.Fatalf("stale clear error = %v, want owner mismatch", err)
++	}
++	if _, err := NetworkByteBudgetStatus(first); !errors.Is(err, ErrNetworkByteBudgetOwner) {
++		t.Fatalf("stale status error = %v, want owner mismatch", err)
++	}
++	clearNetworkByteBudgetForTest(t, second)
++}
++
++type boundedTestWriter struct {
++	buffer  bytes.Buffer
++	maximum int
++	err     error
++}
++
++func (w *boundedTestWriter) Write(data []byte) (int, error) {
++	if len(data) > w.maximum {
++		data = data[:w.maximum]
++	}
++	written, _ := w.buffer.Write(data)
++	return written, w.err
++}
++
++type boundedTestReader struct {
++	reader  *bytes.Reader
++	maximum int
++	err     error
++}
++
++func (r *boundedTestReader) Read(buffer []byte) (int, error) {
++	if len(buffer) > r.maximum {
++		buffer = buffer[:r.maximum]
++	}
++	read, err := r.reader.Read(buffer)
++	if r.err != nil {
++		err = r.err
++	}
++	return read, err
++}
++
++func installNetworkByteBudgetForTest(t *testing.T, limit int64) NetworkByteBudgetToken {
++	t.Helper()
++	owner, err := InstallNetworkByteBudget(limit)
++	if err != nil {
++		t.Fatal(err)
++	}
++	return owner
++}
++
++func clearNetworkByteBudgetForTest(t *testing.T, owner NetworkByteBudgetToken) NetworkByteBudgetSnapshot {
++	t.Helper()
++	status, err := ClearNetworkByteBudget(owner)
++	if err != nil {
++		t.Fatal(err)
++	}
++	return status
++}
+diff --git a/lib/protocol/protocol.go b/lib/protocol/protocol.go
+index c28d7d5..0242718 100644
+--- a/lib/protocol/protocol.go
++++ b/lib/protocol/protocol.go
+@@ -243,8 +243,9 @@ func NewConnection(deviceID DeviceID, reader io.Reader, writer io.Writer, closer
+ 
+ func newRawConnection(deviceID DeviceID, reader io.Reader, writer io.Writer, closer io.Closer, receiver rawModel, connInfo ConnectionInfo, compress Compression) *rawConnection {
+ 	idString := deviceID.String()
+-	cr := &countingReader{Reader: reader, idString: idString}
+-	cw := &countingWriter{Writer: writer, idString: idString}
++	budget := activeNetworkByteBudget.Load()
++	cr := &countingReader{Reader: reader, idString: idString, budget: budget}
++	cw := &countingWriter{Writer: writer, idString: idString, budget: budget}
+ 	registerDeviceMetrics(idString)
+ 
+ 	return &rawConnection{
+diff --git a/lib/syncthing/internals.go b/lib/syncthing/internals.go
+index 2700487..e635726 100644
+--- a/lib/syncthing/internals.go
++++ b/lib/syncthing/internals.go
+@@ -8,6 +8,7 @@ package syncthing
+ 
+ import (
+ 	"context"
++	"errors"
+ 	"iter"
+ 	"time"
+ 
+@@ -26,6 +27,17 @@ type Internals struct {
+ 
+ type Counts = db.Counts
+ 
++// DeviceConnectionStatistics is the privacy-minimized subset of live
++// connection counters exposed to embedding applications. It intentionally
++// omits addresses, connection identifiers, transport and crypto metadata.
++type DeviceConnectionStatistics struct {
++	At            time.Time
++	StartedAt     time.Time
++	InBytesTotal  int64
++	OutBytesTotal int64
++	Connections   int
++}
++
+ func newInternals(model model.Model) *Internals {
+ 	return &Internals{
+ 		model: model,
+@@ -44,6 +56,13 @@ func (m *Internals) SetIgnores(folderID string, content []string) error {
+ 	return m.model.SetIgnores(folderID, content)
+ }
+ 
++func (m *Internals) SetFolderTransferDirections(folderID string, upload, download bool) error {
++	return model.SetFolderTransferDirections(m.model, folderID, model.FolderTransferDirections{
++		Upload:   upload,
++		Download: download,
++	})
++}
++
+ func (m *Internals) DownloadBlock(ctx context.Context, deviceID protocol.DeviceID, folderID string, path string, blockNumber int, blockInfo protocol.BlockInfo, allowFromTemporary bool) ([]byte, error) {
+ 	return m.model.RequestGlobal(ctx, deviceID, folderID, path, blockNumber, blockInfo.Offset, blockInfo.Size, blockInfo.Hash, allowFromTemporary)
+ }
+@@ -56,6 +75,49 @@ func (m *Internals) GlobalFileInfo(folderID, path string) (protocol.FileInfo, bo
+ 	return m.model.CurrentGlobalFile(folderID, path)
+ }
+ 
++// GlobalFileAvailability returns persisted exact-version holders, including
++// offline configured peers. It intentionally excludes temporary block
++// availability and the local device.
++func (m *Internals) GlobalFileAvailability(folderID, path string) ([]protocol.DeviceID, error) {
++	provider, ok := m.model.(interface {
++		GlobalFileAvailability(string, string) ([]protocol.DeviceID, error)
++	})
++	if !ok {
++		return nil, errors.New("global file availability unavailable")
++	}
++	return provider.GlobalFileAvailability(folderID, path)
++}
++
++func (m *Internals) SetLocalContentUnavailable(folderID, path, expectedVersion string) error {
++	provider, ok := m.model.(interface {
++		SetLocalContentUnavailable(string, string, string) error
++	})
++	if !ok {
++		return errors.New("local dataless state unavailable")
++	}
++	return provider.SetLocalContentUnavailable(folderID, path, expectedVersion)
++}
++
++func (m *Internals) SetLocalContentUnavailableAfterSystemEviction(folderID, path, expectedVersion string) error {
++	provider, ok := m.model.(interface {
++		SetLocalContentUnavailableAfterSystemEviction(string, string, string) error
++	})
++	if !ok {
++		return errors.New("local dataless state unavailable")
++	}
++	return provider.SetLocalContentUnavailableAfterSystemEviction(folderID, path, expectedVersion)
++}
++
++func (m *Internals) SetLocalContentAvailable(folderID, path, expectedVersion string, onDemand bool) error {
++	provider, ok := m.model.(interface {
++		SetLocalContentAvailable(string, string, string, bool) error
++	})
++	if !ok {
++		return errors.New("local materialized state unavailable")
++	}
++	return provider.SetLocalContentAvailable(folderID, path, expectedVersion, onDemand)
++}
++
+ func (m *Internals) GlobalTree(folderID string, prefix string, levels int, returnOnlyDirectories bool) ([]*model.TreeEntry, error) {
+ 	return m.model.GlobalDirectoryTree(folderID, prefix, levels, returnOnlyDirectories)
+ }
+@@ -64,6 +126,28 @@ func (m *Internals) IsConnectedTo(deviceID protocol.DeviceID) bool {
+ 	return m.model.ConnectedTo(deviceID)
+ }
+ 
++func (m *Internals) ConnectionStatistics() map[protocol.DeviceID]DeviceConnectionStatistics {
++	result := make(map[protocol.DeviceID]DeviceConnectionStatistics)
++	statistics, ok := m.model.ConnectionStats()["connections"].(map[string]model.ConnectionStats)
++	if !ok {
++		return result
++	}
++	for rawDeviceID, entry := range statistics {
++		deviceID, err := protocol.DeviceIDFromString(rawDeviceID)
++		if err != nil || !entry.Connected {
++			continue
++		}
++		result[deviceID] = DeviceConnectionStatistics{
++			At:            entry.At,
++			StartedAt:     entry.StartedAt,
++			InBytesTotal:  entry.InBytesTotal,
++			OutBytesTotal: entry.OutBytesTotal,
++			Connections:   1 + len(entry.Secondary),
++		}
++	}
++	return result
++}
++
+ func (m *Internals) ScanFolders() map[string]error {
+ 	return m.model.ScanFolders()
+ }
+@@ -72,6 +156,22 @@ func (m *Internals) Completion(deviceID protocol.DeviceID, folderID string) (mod
+ 	return m.model.Completion(deviceID, folderID)
+ }
+ 
++func (m *Internals) RemoteIndexReadiness(deviceID protocol.DeviceID, folderID string) (model.RemoteIndexReadiness, error) {
++	provider, ok := m.model.(model.RemoteIndexReadinessProvider)
++	if !ok {
++		return model.RemoteIndexReadiness{State: model.RemoteIndexProofMissing}, nil
++	}
++	return provider.RemoteIndexReadiness(deviceID, folderID)
++}
++
++func (m *Internals) RemoteIndexEpochCurrent(deviceID protocol.DeviceID, connectionID string, generation uint64) bool {
++	provider, ok := m.model.(model.RemoteIndexEpochProvider)
++	if !ok {
++		return false
++	}
++	return provider.RemoteIndexEpochCurrent(deviceID, connectionID, generation)
++}
++
+ func (m *Internals) DeviceStatistics() (map[protocol.DeviceID]stats.DeviceStatistics, error) {
+ 	return m.model.DeviceStatistics()
+ }
+diff --git a/.build/go/syncthing-readiness-v1/lib/syncthing/internals_connection_statistics_test.go b/lib/syncthing/internals_connection_statistics_test.go
+new file mode 100644
+index 0000000..b4416df
+--- /dev/null
++++ b/lib/syncthing/internals_connection_statistics_test.go
+@@ -0,0 +1,53 @@
++// Copyright (C) 2026 The Syncthing Authors.
++//
++// This Source Code Form is subject to the terms of the Mozilla Public
++// License, v. 2.0. If a copy of the MPL was not distributed with this file,
++// You can obtain one at https://mozilla.org/MPL/2.0/.
++
++package syncthing
++
++import (
++	"testing"
++	"time"
++
++	"github.com/syncthing/syncthing/lib/model"
++	modelmocks "github.com/syncthing/syncthing/lib/model/mocks"
++	"github.com/syncthing/syncthing/lib/protocol"
++)
++
++func TestInternalsConnectionStatisticsProjectsOnlyConnectedCounters(t *testing.T) {
++	connectedID := protocol.NewDeviceID([]byte("connected statistics peer"))
++	disconnectedID := protocol.NewDeviceID([]byte("disconnected statistics peer"))
++	startedAt := time.Unix(1_700_000_000, 0).UTC()
++	at := startedAt.Add(10 * time.Second)
++
++	fakeModel := new(modelmocks.Model)
++	fakeModel.ConnectionStatsReturns(map[string]interface{}{
++		"connections": map[string]model.ConnectionStats{
++			connectedID.String(): {
++				Connected: true,
++				Statistics: protocol.Statistics{
++					At:            at,
++					StartedAt:     startedAt,
++					InBytesTotal:  123,
++					OutBytesTotal: 456,
++				},
++				Secondary: []model.ConnectionInfo{{}},
++			},
++			disconnectedID.String(): {Connected: false},
++			"not-a-device-id":       {Connected: true},
++		},
++	})
++
++	statistics := newInternals(fakeModel).ConnectionStatistics()
++	if len(statistics) != 1 {
++		t.Fatalf("projected statistics = %+v, want exactly one connected peer", statistics)
++	}
++	got, ok := statistics[connectedID]
++	if !ok {
++		t.Fatalf("connected peer is missing: %+v", statistics)
++	}
++	if got.At != at || got.StartedAt != startedAt || got.InBytesTotal != 123 || got.OutBytesTotal != 456 || got.Connections != 2 {
++		t.Fatalf("projected counters = %+v", got)
++	}
++}
+diff --git a/lib/syncthing/syncthing.go b/lib/syncthing/syncthing.go
+index 1f36642..c834d56 100644
+--- a/lib/syncthing/syncthing.go
++++ b/lib/syncthing/syncthing.go
+@@ -52,11 +52,12 @@ const (
+ )
+ 
+ type Options struct {
+-	AuditWriter           io.Writer
+-	NoUpgrade             bool
+-	ProfilerAddr          string
+-	ResetDeltaIdxs        bool
+-	DBMaintenanceInterval time.Duration
++	AuditWriter              io.Writer
++	NoUpgrade                bool
++	ProfilerAddr             string
++	ResetDeltaIdxs           bool
++	DBMaintenanceInterval    time.Duration
++	FolderTransferDirections map[string]model.FolderTransferDirections
+ }
+ 
+ type App struct {
+@@ -253,6 +254,11 @@ func (a *App) startup() error {
+ 
+ 	keyGen := protocol.NewKeyGenerator()
+ 	m := model.NewModel(a.cfg, a.myID, a.sdb, protectedFiles, a.evLogger, keyGen)
++	for folderID, directions := range a.opts.FolderTransferDirections {
++		if err := model.SetFolderTransferDirections(m, folderID, directions); err != nil {
++			return err
++		}
++	}
+ 	a.Internals = newInternals(m)
+ 
+ 	a.mainService.Add(m)

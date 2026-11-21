@@ -30,6 +30,19 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+build/
+DerivedData/
+
+# Local signing and identifiers
+Config/Local.xcconfig
+
+# Generated Go/Xcode artifacts
+Artifacts/
+.tools/
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
 
 # CocoaPods
 #
@@ -60,3 +73,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Local Claude instructions
+CLAUDE.local.md

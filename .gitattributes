@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Patch payload preserves upstream whitespace and is validated by the dedicated
+# source apply/verify gates instead of Git's outer-diff whitespace heuristic.
+*.patch -whitespace

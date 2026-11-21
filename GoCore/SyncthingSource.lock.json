@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "modulePath": "github.com/syncthing/syncthing",
+  "moduleVersion": "v1.30.0-rc.1.0.20260803213605-946e2b83a1f6",
+  "moduleCommit": "946e2b83a1f6c6ae119427c09e0a5802940b82ff",
+  "moduleSum": "h1:oVMlcznG5M2ueQq7LUkPPDgJ5w/usFpJ2sQj/OfCuA0=",
+  "localReplaceOldVersion": "",
+  "localReplacePath": "../.build/go/syncthing-readiness-v1",
+  "patchPath": "Patches/syncthing-cluster-index-readiness.patch",
+  "patchSHA256": "35020f4d9348ae14b16533df4902bc40f8fb67ef037436475d586074e569924b",
+  "patchedTreeSHA256": "f98acbde22b8e84f575567950f92b9d66ed4cf021ad363f17e7df9c13565fafd"
+}

@@ -1,0 +1,5 @@
+// Copy to Local.xcconfig. Replace the example identifiers before device builds.
+DEVELOPMENT_TEAM =
+APP_BUNDLE_IDENTIFIER = com.example.Psynguechthyngue
+FILE_PROVIDER_BUNDLE_IDENTIFIER = com.example.Psynguechthyngue.FileProvider
+APP_GROUP_IDENTIFIER = group.com.example.Psynguechthyngue

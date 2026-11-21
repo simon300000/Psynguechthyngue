@@ -1,0 +1,39 @@
+Psynguechthyngue
+
+Psynguechthyngue is an independent, unofficial client. It is not affiliated
+with, endorsed by, or sponsored by the Syncthing project. The name
+"Syncthing" is used only to identify the software and intended protocol
+compatibility. This project does not use the Syncthing logo.
+
+The embedded Go core is built from Syncthing source code fixed at commit:
+946e2b83a1f6c6ae119427c09e0a5802940b82ff
+
+Syncthing source:
+https://github.com/syncthing/syncthing/tree/946e2b83a1f6c6ae119427c09e0a5802940b82ff
+
+Syncthing license (Mozilla Public License 2.0):
+https://github.com/syncthing/syncthing/blob/946e2b83a1f6c6ae119427c09e0a5802940b82ff/LICENSE
+
+The production dependency graph also contains the MPL-2.0 module
+github.com/hashicorp/golang-lru/v2 at v2.0.7. Exact production dependencies,
+license expressions, replacement modules, license/notice file hashes and
+versioned source locations are recorded in Docs/DEPENDENCY_LICENSE_MAP.json,
+Docs/SBOM.spdx.json and THIRD_PARTY_NOTICES.md.
+
+`make source-bundle` prepares deterministic recipient materials containing
+all mapped LICENSE/NOTICE/PATENTS files and the complete corresponding source
+trees for both MPL-covered modules.
+
+The durable, release-specific source location required for a distributed
+binary has not yet been published. Binary distribution is blocked until the
+published-source and release-owner review gates in Docs/LICENSE_AND_SOURCE.md
+are complete. `make release-licenses SOURCE_OFFER=...` verifies the published
+archive and notices against the release checkout.
+
+The Psynguechthyngue AppIcon and project visual assets are original project
+artwork, not Syncthing artwork.
+
+Original Psynguechthyngue Swift, Go bridge, scripts, tests, documentation and
+project artwork are provided under the repository's root MIT LICENSE unless a
+file says otherwise. That MIT grant does not relicense Syncthing or any other
+third-party component.

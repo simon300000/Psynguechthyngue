@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>$(APP_BUNDLE_IDENTIFIER).refresh</string>
+        <string>$(APP_BUNDLE_IDENTIFIER).processing</string>
+    </array>
+    <key>PsyRefreshTaskIdentifier</key>
+    <string>$(APP_BUNDLE_IDENTIFIER).refresh</string>
+    <key>PsyProcessingTaskIdentifier</key>
+    <string>$(APP_BUNDLE_IDENTIFIER).processing</string>
+    <key>PsyAppGroupIdentifier</key>
+    <string>$(APP_GROUP_IDENTIFIER)</string>
+    <key>PsyKeychainAccessGroup</key>
+    <string>$(KEYCHAIN_ACCESS_GROUP)</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Connect to Syncthing devices that you explicitly add on your local network.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Scan a Syncthing device ID QR code when you choose to pair a device.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_syncthing._tcp</string>
+    </array>
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
+</dict>
+</plist>
