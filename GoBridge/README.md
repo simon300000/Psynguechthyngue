@@ -28,7 +28,9 @@ generated GUI assets). The scripts set it.
   `already_running`.
 - `FetchFile` reads config.xml into memory (never writes it), pauses every
   folder, pauses devices that do not share the target folder, uses one
-  connection per device, keeps discovery/relays as configured.
+  connection per device. Dial-only: no listen addresses (no 22000 bind), no
+  local discovery, global discovery lookup-only (`?noannounce`), relay
+  dialing kept.
 - `FetchFile` gives the staged file the global nanosecond mtime and
   permissions. `RecordFetchedFile` (call it after the file has been moved into
   the folder, with the lock still held) writes the global FileInfo as the

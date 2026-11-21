@@ -7,7 +7,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -271,6 +273,18 @@ func restrictConfig(c *config.Configuration, myID protocol.DeviceID, folderID st
 		d.RawNumConnections = 1
 	}
 	c.GUI.Enabled = false
+	// Dial-only: no listeners (no TCP/QUIC/relay listen, so no 22000 bind
+	// conflict with the App or another Syncthing), no local discovery
+	// (broadcast/multicast announce and its UDP listener), global discovery
+	// for lookups only so we never overwrite the App's announcement with an
+	// empty address list. Relay *dialing* depends only on RelaysEnabled and
+	// stays as configured.
+	c.Options.RawListenAddresses = []string{}
+	c.Options.LocalAnnEnabled = false
+	c.Options.RawGlobalAnnServers = lookupOnlyServers(c.Options.GlobalDiscoveryServers())
+	if len(c.Options.RawGlobalAnnServers) == 0 {
+		c.Options.GlobalAnnEnabled = false
+	}
 	c.Options.NATEnabled = false
 	c.Options.URAccepted = -1
 	c.Options.URUniqueID = ""
@@ -558,4 +572,28 @@ func fetchLogSink() (LogSink, string) {
 		level = "warn"
 	}
 	return fetchSink, level
+}
+
+// lookupOnlyServers turns global discovery server URLs into lookup-only ones:
+// announce-only servers (?nolookup) are dropped, the rest get ?noannounce.
+func lookupOnlyServers(servers []string) []string {
+	var out []string
+	for _, srv := range servers {
+		u, err := url.Parse(srv)
+		if err != nil {
+			continue
+		}
+		q := u.Query()
+		if q.Has("nolookup") {
+			continue
+		}
+		if !q.Has("noannounce") {
+			q.Set("noannounce", "")
+			u.RawQuery = strings.Replace(q.Encode(), "noannounce=", "noannounce", 1)
+		}
+		if s := u.String(); !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
