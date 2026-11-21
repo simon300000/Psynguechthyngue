@@ -133,10 +133,3 @@ final class SingleItemEnumerator: BaseEnumerator {
         reportChanges(observer, from: anchor, workingSet: false) { $0.itemID == id }
     }
 }
-
-/// Always-empty container (the trash; we do not sync it).
-final class EmptyEnumerator: BaseEnumerator {
-    func enumerateChanges(for observer: NSFileProviderChangeObserver, from anchor: NSFileProviderSyncAnchor) {
-        observer.finishEnumeratingChanges(upTo: anchor, moreComing: false)
-    }
-}
