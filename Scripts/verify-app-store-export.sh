@@ -122,8 +122,9 @@ assert_plist_value "${app_info}" CFBundleShortVersionString "${expected_version}
 assert_plist_value "${app_info}" CFBundleVersion "${expected_build}" "app build"
 assert_plist_value "${provider_info}" CFBundleShortVersionString "${expected_version}" "extension version"
 assert_plist_value "${provider_info}" CFBundleVersion "${expected_build}" "extension build"
-assert_plist_value "${app_info}" MinimumOSVersion "17.0" "app minimum OS"
-assert_plist_value "${provider_info}" MinimumOSVersion "17.0" "extension minimum OS"
+expected_min_os="$(sed -n 's/^IPHONEOS_DEPLOYMENT_TARGET *= *//p' "${ROOT_DIR}/Config/Base.xcconfig" | head -1)"
+assert_plist_value "${app_info}" MinimumOSVersion "${expected_min_os}" "app minimum OS"
+assert_plist_value "${provider_info}" MinimumOSVersion "${expected_min_os}" "extension minimum OS"
 assert_plist_value \
     "${provider_info}" NSExtension.NSExtensionPointIdentifier \
     com.apple.fileprovider-nonui "File Provider extension point"
