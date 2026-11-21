@@ -362,7 +362,11 @@ public final class FilesStore: @unchecked Sendable {
                 [.text(info.folderID.rawValue), .text(info.label), .bool(info.isReadOnly), .text(info.contentMode.rawValue)])
             let rootID = Self.rootItemID(info.folderID)
             let existing = try Self.fetchRecord(ctx.db, id: rootID)
-            let metadata = Self.digest("root|" + info.label + "|" + String(info.isReadOnly))
+            // The content mode is part of the root's version: it drives the root's
+            // namespace policy (FilesItemPolicy), which the system re-reads only
+            // when the version changes.
+            let metadata = Self.digest(
+                "root|" + info.label + "|" + String(info.isReadOnly) + "|" + info.contentMode.rawValue)
             if existing == nil {
                 try Self.insert(
                     ctx,

@@ -735,6 +735,33 @@ public actor LiveSyncEngine: SyncEngine {
         try Data(IgnoreRulesGenerator.fileContents(present: present).utf8).write(to: dir.appending(path: ".stignore"), options: .atomic)
     }
 
+    /// Reduced-load mode: one folder at a time and limits on LAN too; the
+    /// previous values are saved once and restored when the mode ends.
+    private func reconcileLoad(_ decision: PolicyDecision, _ options: OptionsDTO) async throws {
+        let client = try requireClient()
+        let current = LiveEngineAppState.SavedLoadOptions(
+            maxFolderConcurrency: options.maxFolderConcurrency ?? 0,
+            limitBandwidthInLan: options.limitBandwidthInLan ?? false)
+        let target: LiveEngineAppState.SavedLoadOptions?
+        if decision.reducedResourceUsage && decision.hold == nil {
+            if appState.savedLoadOptions == nil {
+                appState.savedLoadOptions = current
+                try saveAppState()
+            }
+            target = .init(maxFolderConcurrency: 1, limitBandwidthInLan: true)
+        } else {
+            target = appState.savedLoadOptions
+        }
+        if let target, target != current {
+            try await client.send("PATCH", "rest/config/options", json: LoadOptionsDTO(
+                maxFolderConcurrency: target.maxFolderConcurrency, limitBandwidthInLan: target.limitBandwidthInLan))
+        }
+        if !(decision.reducedResourceUsage && decision.hold == nil), appState.savedLoadOptions != nil {
+            appState.savedLoadOptions = nil
+            try saveAppState()
+        }
+    }
+
     // MARK: Settings
 
     public func options() async throws -> EngineOptions {
@@ -851,6 +878,7 @@ public actor LiveSyncEngine: SyncEngine {
         if options.maxSendKbps != send || options.maxRecvKbps != recv {
             try await client.send("PATCH", "rest/config/options", json: OptionsDTO(maxSendKbps: send, maxRecvKbps: recv))
         }
+        try await reconcileLoad(decision, options)
         scheduleRefresh(nil)
     }
 

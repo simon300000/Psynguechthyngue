@@ -38,7 +38,9 @@ final class ExtensionContext: @unchecked Sendable {
     var folderInfo: FilesFolderInfo? { try? store.folderInfo(folder) }
 
     func item(for record: FileItemRecord) -> FileProviderItem {
-        FileProviderItem(record: record, rootID: rootID, folderLabel: folderInfo?.label ?? folder.rawValue)
+        let info = folderInfo
+        return FileProviderItem(
+            record: record, rootID: rootID, folderLabel: info?.label ?? folder.rawValue, contentMode: info?.contentMode)
     }
 
     func storeID(_ identifier: NSFileProviderItemIdentifier) -> ItemIdentifier {
