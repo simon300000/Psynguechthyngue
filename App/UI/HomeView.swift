@@ -43,7 +43,7 @@ struct HomeView: View {
                         .accessibilityIdentifier("home.syncnow")
                 }
             }
-            .sheet(item: $acceptingFolder) { AcceptFolderSheet(pending: $0) }
+            .sheet(item: $acceptingFolder) { AcceptFolderSheet(pending: $0).bannerOverlay() }
             .sheet(item: $detailIssue) { IssueDetailView(issue: $0) }
         }
     }

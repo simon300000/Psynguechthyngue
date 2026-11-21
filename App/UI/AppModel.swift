@@ -285,6 +285,12 @@ final class AppModel {
                 ? String(localized: "Could not talk to the sync engine.")
                 : String(localized: "The sync engine rejected the request.")
         case let .invalidArgument(detail):
+            // LiveSyncEngine wraps ExternalLocationError as "external location: <case>".
+            if detail.hasPrefix("external location:") {
+                return detail.contains("cloudBacked")
+                    ? String(localized: "iCloud Drive and other cloud folders can’t be synced in place. Choose a folder on this device.")
+                    : String(localized: "That folder could not be opened.")
+            }
             return detail.isEmpty ? String(localized: "That value is not valid.") : detail
         }
     }

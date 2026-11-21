@@ -13,40 +13,22 @@ enum ExternalDirectoryError: Error {
     case bookmark(String)
 }
 
-/// Document picker limited to folders. Creates a security-scoped bookmark and
-/// rejects File Provider backed locations such as iCloud Drive (DESIGN.md §6.7).
-/// (WP-B's `ExternalLocation` will take over bookmark handling for the engine.)
-struct ExternalDirectoryPicker: UIViewControllerRepresentable {
-    let onResult: (Result<ExternalSelection, ExternalDirectoryError>) -> Void
-
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
-        picker.allowsMultipleSelection = false
-        picker.delegate = context.coordinator
-        return picker
-    }
-    func updateUIViewController(_ vc: UIDocumentPickerViewController, context: Context) {}
-    func makeCoordinator() -> Coordinator { Coordinator(onResult) }
-
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let onResult: (Result<ExternalSelection, ExternalDirectoryError>) -> Void
-        init(_ onResult: @escaping (Result<ExternalSelection, ExternalDirectoryError>) -> Void) { self.onResult = onResult }
-
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey])
-            if values?.isUbiquitousItem == true || url.path.contains("/Mobile Documents/") || url.path.contains("/CloudStorage/") {
-                onResult(.failure(.cloudLocation))
-                return
-            }
-            do {
-                let data = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
-                onResult(.success(ExternalSelection(bookmark: data, displayPath: url.path(percentEncoded: false))))
-            } catch {
-                onResult(.failure(.bookmark(error.localizedDescription)))
-            }
+/// Turns a folder the user picked (`.fileImporter`, security-scoped URL) into
+/// a bookmark, rejecting File Provider backed locations such as iCloud Drive
+/// (DESIGN.md §6.7). (WP-B's `ExternalLocation` resolves the bookmark.)
+enum ExternalDirectorySelection {
+    static func make(from url: URL) -> Result<ExternalSelection, ExternalDirectoryError> {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey])
+        if values?.isUbiquitousItem == true || url.path.contains("/Mobile Documents/") || url.path.contains("/CloudStorage/") {
+            return .failure(.cloudLocation)
+        }
+        do {
+            let data = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+            return .success(ExternalSelection(bookmark: data, displayPath: url.path(percentEncoded: false)))
+        } catch {
+            return .failure(.bookmark(error.localizedDescription))
         }
     }
 }
@@ -86,6 +68,25 @@ struct FolderOptionsSection: View {
                  ? "Files are synced in place. Downloading on demand is not available for these folders."
                  : "Files are stored by this app and appear in the Files app under Psynguechthyngue.")
         }
+        // `.fileImporter` on a rendered view: the former `.sheet` on
+        // `EmptyView()` never presented (and a UIDocumentPicker sheet inside
+        // this sheet dismissed the whole form), so "A folder I choose" silently
+        // created the folder inside the app.
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
+            switch result.map(ExternalDirectorySelection.make(from:)) {
+            case .success(.success(let sel)): external = sel
+            case .success(.failure(.cloudLocation)):
+                useExternal = external != nil
+                model.show(error: String(localized: "iCloud Drive and other cloud folders can’t be synced in place. Choose a folder on this device."))
+            case .success(.failure), .failure:
+                useExternal = external != nil
+                model.show(error: String(localized: "That folder could not be opened."))
+            }
+        }
+        .onChange(of: picking) { _, open in
+            // Importer closed without a choice: fall back to "In this app".
+            if !open, external == nil { useExternal = false }
+        }
         if !useExternal {
             Section {
                 Picker("Download", selection: $mode) {
@@ -101,20 +102,5 @@ struct FolderOptionsSection: View {
                      : "Files appear in the Files app and are downloaded when you open them.")
             }
         }
-        EmptyView()
-            .sheet(isPresented: $picking) {
-                ExternalDirectoryPicker { result in
-                    picking = false
-                    switch result {
-                    case let .success(sel): external = sel
-                    case .failure(.cloudLocation):
-                        useExternal = external != nil
-                        model.show(error: String(localized: "iCloud Drive and other cloud folders can’t be synced in place. Choose a folder on this device."))
-                    case .failure:
-                        useExternal = external != nil
-                        model.show(error: String(localized: "That folder could not be opened."))
-                    }
-                }
-            }
     }
 }
