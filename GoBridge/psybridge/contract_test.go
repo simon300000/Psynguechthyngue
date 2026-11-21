@@ -110,7 +110,12 @@ func TestIdentity(t *testing.T) {
 	if err != nil || canon != id.DeviceID {
 		t.Fatalf("ValidateDeviceID normalised = %q, %v", canon, err)
 	}
-	for _, bad := range []string{"", "abc", id.DeviceID[:len(id.DeviceID)-1] + "A", protocol.LocalDeviceID.String()} {
+	// Flip the final check character; pick a replacement that differs from it.
+	flip := "A"
+	if strings.HasSuffix(id.DeviceID, "A") {
+		flip = "B"
+	}
+	for _, bad := range []string{"", "abc", id.DeviceID[:len(id.DeviceID)-1] + flip, protocol.LocalDeviceID.String()} {
 		if _, err := ValidateDeviceID(bad); codeOf(err) != CodeInvalidArgument {
 			t.Errorf("ValidateDeviceID(%q) = %v", bad, err)
 		}
