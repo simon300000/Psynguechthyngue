@@ -95,6 +95,16 @@ struct HomeView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("transfer.\(folder.id.rawValue)")
             }
+            if model.isContinuingInBackground {
+                Label("Syncing continues in the background", systemImage: "arrow.down.app")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("home.continuing")
+            } else if model.canContinueInBackground && !model.syncingFolders.isEmpty {
+                Button { model.continueInBackground() } label: {
+                    Label("Keep Syncing in Background", systemImage: "arrow.down.app")
+                }
+                .accessibilityIdentifier("home.continueinbg")
+            }
             ForEach(model.transfers.values.sorted { $0.id < $1.id }) { t in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(t.path.lastComponent).lineLimit(1)

@@ -21,8 +21,9 @@ final class LiveEngineHost: EngineHosting {
     private(set) var decision: PolicyDecision = .run
     /// Set when the engine failed to start/stop; the UI surfaces it.
     private(set) var lastFailure: String?
-    /// `Stop` timed out → the process must not try to start again (DESIGN §4.3).
-    private(set) var restartRequired = false
+    /// A user-initiated BGContinuedProcessingTask (iOS 26+) is running: the
+    /// engine keeps going when the app is backgrounded (DESIGN §4.1/§4.2).
+    private(set) var continuedProcessing = false
     var preferences = PolicyPreferences() {
         didSet { if preferences != oldValue { Task { await self.enqueue { await self.applyPolicy(force: false) } } } }
     }
@@ -41,6 +42,8 @@ final class LiveEngineHost: EngineHosting {
     /// beginBackgroundTask token taken synchronously in the didEnterBackground
     /// callback, before any queued work (see `prepareForBackground`).
     @ObservationIgnored private var pendingBackgroundToken: Int?
+    /// Tracks foreground state independently of `phase` (signals are queued).
+    @ObservationIgnored private var appActive = false
     @ObservationIgnored var onFailure: (@MainActor (Error) -> Void)?
     /// After every successful start (foreground or BG): Files projector + request server.
     @ObservationIgnored var onEngineStarted: (@MainActor () async -> Void)?
@@ -70,6 +73,10 @@ final class LiveEngineHost: EngineHosting {
             log.record("bg-expiring")
             backgroundExpired = true
             return
+        case .didBecomeActive:
+            appActive = true
+        case .didEnterBackground:
+            appActive = false
         default:
             break
         }
@@ -129,7 +136,6 @@ final class LiveEngineHost: EngineHosting {
     }
 
     private func becomeActive() async {
-        if restartRequired { return }
         if let token = pendingBackgroundToken {
             // Back in the foreground before the drain ran: nothing to cover.
             pendingBackgroundToken = nil
@@ -160,10 +166,9 @@ final class LiveEngineHost: EngineHosting {
             await onEngineStarted?()
         } catch {
             phase = .idle
-            noteStopTimeout(error)
             fail("start", error)
             // A timed-out start may still complete later: make sure it is stopped.
-            if !restartRequired { await stopQuietly() }
+            await stopQuietly()
         }
     }
 
@@ -176,13 +181,19 @@ final class LiveEngineHost: EngineHosting {
             return
         }
         if isBackgroundRunning { return }   // the BG task owns the engine
+        if continuedProcessing, phase == .foregroundRunning {
+            // User-initiated continued processing: keep syncing under the system progress UI.
+            phase = .backgroundRunning(kind: .continuedProcessing)
+            log.record("background-continued", "engine keeps running for BGContinuedProcessingTask")
+            return
+        }
         guard phase == .foregroundRunning || engineMaybeLive else { return }
         await drain(reason: "didEnterBackground", requireTask: true)
     }
 
     private func startBackgroundTask(kind: BackgroundTaskKind, deadline: Duration) async {
-        guard phase == .idle, !restartRequired else {
-            log.record("bg-skip", "phase=\(phase) restartRequired=\(restartRequired)")
+        guard phase == .idle else {
+            log.record("bg-skip", "phase=\(phase)")
             return
         }
         log.record("bg-start", "kind=\(kind.rawValue) deadline=\(deadline)")
@@ -197,9 +208,8 @@ final class LiveEngineHost: EngineHosting {
             if backgroundExpired { log.record("bg-expired-during-start") }
         } catch {
             phase = .idle
-            noteStopTimeout(error)
             fail("bg-start", error)
-            if !restartRequired { await stopQuietly() }
+            await stopQuietly()
         }
     }
 
@@ -262,8 +272,9 @@ final class LiveEngineHost: EngineHosting {
             engineMaybeLive = false
             log.record("lock-released", "engine stopped remaining=\(Int(min(tasks.remaining, 9999)))s")
         } catch {
-            noteStopTimeout(error)
-            // engineMaybeLive stays true: the next background transition retries the stop.
+            // A stop_timeout no longer poisons the engine (WP-A/B round 2): it is
+            // simply started again on the next didBecomeActive. engineMaybeLive
+            // stays true so the next background transition retries the stop.
             fail("stop", error)
         }
         phase = .idle
@@ -328,11 +339,21 @@ final class LiveEngineHost: EngineHosting {
         onFailure?(error)
     }
 
-    /// `stop_timeout` (from stop, or from a later start of a poisoned engine):
-    /// this process must not try again (DESIGN §4.3); the UI asks for a restart.
-    private func noteStopTimeout(_ error: Error) {
-        if case let .bridge(code, _) = error as? EngineError, code == BridgeContract.Code.stopTimeout.rawValue {
-            restartRequired = true
+    // MARK: Continued processing (iOS 26+, user initiated)
+
+    /// Called when the system starts the user's BGContinuedProcessingTask.
+    func beginContinuedProcessing() {
+        continuedProcessing = true
+        log.record("continued-begin", "phase=\(phase)")
+    }
+
+    /// Task finished or expired: if the app is in the background, drain now.
+    func endContinuedProcessing(reason: String) async {
+        continuedProcessing = false
+        log.record("continued-end", "reason=\(reason) appActive=\(appActive)")
+        await enqueue {
+            guard !self.appActive, case .backgroundRunning(.continuedProcessing) = self.phase else { return }
+            await self.drain(reason: "continued-\(reason)", requireTask: true)
         }
     }
 

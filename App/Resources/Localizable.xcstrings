@@ -279,6 +279,16 @@
         }
       }
     },
+    "Advanced options are available while syncing is running.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步运行时才能修改高级选项。"
+          }
+        }
+      }
+    },
     "All devices and folders are removed from this app. Files already on this device are kept.": {
       "localizations": {
         "zh-Hans": {
@@ -639,6 +649,54 @@
         }
       }
     },
+    "FILES_ERROR_OPEN_APP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No device is reachable. Open Psynguechthyngue to download this file."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有可连接的设备，请打开 Psynguechthyngue 下载此文件。"
+          }
+        }
+      }
+    },
+    "FILES_ERROR_STALE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file has changed on other devices. Open Psynguechthyngue to sync."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件已在其他设备上更改，请打开 Psynguechthyngue 同步。"
+          }
+        }
+      }
+    },
+    "FILES_ERROR_TOO_LARGE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is too large to download here. Open Psynguechthyngue to download it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件太大，无法在此下载，请打开 Psynguechthyngue 下载。"
+          }
+        }
+      }
+    },
     "File": {
       "localizations": {
         "zh-Hans": {
@@ -879,12 +937,42 @@
         }
       }
     },
+    "Ignore Patterns": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "忽略规则"
+          }
+        }
+      }
+    },
+    "Ignore patterns saved.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "忽略规则已保存。"
+          }
+        }
+      }
+    },
     "In this app (shown in Files)": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存在本 App 中（显示在“文件”里）"
+          }
+        }
+      }
+    },
+    "Keep Syncing in Background": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在后台继续同步"
           }
         }
       }
@@ -945,6 +1033,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "许可证"
+          }
+        }
+      }
+    },
+    "Listen addresses": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监听地址"
           }
         }
       }
@@ -1199,6 +1297,16 @@
         }
       }
     },
+    "One pattern per line, e.g. *.tmp or /Archive. Matching files are not synced. Lines starting with // are comments.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每行一条规则，例如 *.tmp 或 /Archive。匹配的文件不会同步。以 // 开头的行是注释。"
+          }
+        }
+      }
+    },
     "Open Files": {
       "localizations": {
         "zh-Hans": {
@@ -1389,6 +1497,16 @@
         }
       }
     },
+    "Psynguechthyngue keeps syncing until your transfers finish.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Psynguechthyngue 会继续同步，直到传输完成。"
+          }
+        }
+      }
+    },
     "Psynguechthyngue uses Syncthing, which is licensed under the Mozilla Public License 2.0. The source code of the exact Syncthing release used is available at github.com/syncthing/syncthing.": {
       "localizations": {
         "zh-Hans": {
@@ -1549,6 +1667,16 @@
         }
       }
     },
+    "Save": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
     "Scan QR Code": {
       "localizations": {
         "zh-Hans": {
@@ -1615,6 +1743,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅发送"
+          }
+        }
+      }
+    },
+    "Separate several addresses with commas, e.g. tcp://:22000. “default” lets Syncthing choose.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "多个地址用英文逗号分隔，例如 tcp://:22000。“default”表示由 Syncthing 自动选择。"
           }
         }
       }
@@ -1849,6 +1987,26 @@
         }
       }
     },
+    "Syncing continues in the background": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步将在后台继续"
+          }
+        }
+      }
+    },
+    "Syncing files": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在同步文件"
+          }
+        }
+      }
+    },
     "Syncing is busy in another part of the app. Please try again in a moment.": {
       "localizations": {
         "zh-Hans": {
@@ -1875,6 +2033,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "App 在后台时同步会暂停。请打开 App 后重试。"
+          }
+        }
+      }
+    },
+    "Syncing will continue after you leave the app.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离开 App 后同步会继续。"
           }
         }
       }
@@ -1969,16 +2137,6 @@
         }
       }
     },
-    "The sync engine did not stop in time. Please restart the app.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎未能及时停止，请重新启动 App。"
-          }
-        }
-      }
-    },
     "The sync engine rejected the request.": {
       "localizations": {
         "zh-Hans": {
@@ -1995,6 +2153,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "同步引擎报告了一个问题。"
+          }
+        }
+      }
+    },
+    "The sync engine took too long to stop. It will restart when you return to the app.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步引擎停止超时，回到 App 时会自动重新启动。"
           }
         }
       }
@@ -2179,6 +2347,16 @@
         }
       }
     },
+    "default": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "default"
+          }
+        }
+      }
+    },
     "iCloud Drive and other cloud folders can’t be synced in place. Choose a folder on this device.": {
       "localizations": {
         "zh-Hans": {
@@ -2189,12 +2367,32 @@
         }
       }
     },
+    "iOS can’t continue syncing in the background right now. Keep the app open to finish.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS 暂时无法在后台继续同步，请保持 App 打开直到完成。"
+          }
+        }
+      }
+    },
     "iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "后台同步的时机由 iOS 决定，通常每天几次。App 打开期间会持续同步。"
+          }
+        }
+      }
+    },
+    "—": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "—"
           }
         }
       }

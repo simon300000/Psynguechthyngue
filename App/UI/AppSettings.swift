@@ -17,9 +17,6 @@ final class AppSettings {
     var cellularReceiveLimit: Int { didSet { defaults.set(cellularReceiveLimit, forKey: "psy.cellularRecv"); changed() } }
     var backgroundSync: Bool { didSet { defaults.set(backgroundSync, forKey: BackgroundScheduler.enabledKey); changed() } }
     var notificationsEnabled: Bool { didSet { defaults.set(notificationsEnabled, forKey: "psy.notifications") } }
-    var deviceName: String { didSet { defaults.set(deviceName, forKey: "psy.deviceName") } }
-    var globalDiscovery: Bool { didSet { defaults.set(globalDiscovery, forKey: "psy.globalDiscovery") } }
-    var relaysEnabled: Bool { didSet { defaults.set(relaysEnabled, forKey: "psy.relays") } }
 
     var lastBackgroundRun: Date? { defaults.object(forKey: BackgroundScheduler.lastRunKey) as? Date }
 
@@ -37,9 +34,6 @@ final class AppSettings {
         cellularReceiveLimit = defaults.integer(forKey: "psy.cellularRecv")
         backgroundSync = bool(BackgroundScheduler.enabledKey, true)
         notificationsEnabled = bool("psy.notifications", false)
-        deviceName = defaults.string(forKey: "psy.deviceName") ?? ""
-        globalDiscovery = bool("psy.globalDiscovery", true)
-        relaysEnabled = bool("psy.relays", true)
     }
 
     var policyPreferences: PolicyPreferences {

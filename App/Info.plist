@@ -46,7 +46,10 @@
     <array>
         <string>$(APP_BUNDLE_IDENTIFIER).refresh</string>
         <string>$(APP_BUNDLE_IDENTIFIER).processing</string>
+        <string>$(APP_BUNDLE_IDENTIFIER).continued.*</string>
     </array>
+    <key>PsyContinuedTaskPrefix</key>
+    <string>$(APP_BUNDLE_IDENTIFIER).continued</string>
     <key>PsyRefreshTaskIdentifier</key>
     <string>$(APP_BUNDLE_IDENTIFIER).refresh</string>
     <key>PsyProcessingTaskIdentifier</key>

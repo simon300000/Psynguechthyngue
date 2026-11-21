@@ -101,6 +101,8 @@ struct FolderDetailView: View {
                         if case let .external(_, path) = folder.location {
                             LabeledContent("Location") { Text(path).font(.footnote).lineLimit(2).truncationMode(.head) }
                         }
+                        NavigationLink("Ignore Patterns") { IgnoreRulesEditor(folder: folder) }
+                            .accessibilityIdentifier("folder.ignores")
                         Button("Rescan Now") { Task { await model.rescan(folder) } }
                             .accessibilityIdentifier("folder.rescan")
                     }
@@ -129,6 +131,54 @@ struct FolderDetailView: View {
             }
         } else {
             ContentUnavailableView("Folder removed", systemImage: "trash")
+        }
+    }
+}
+
+/// Folder ▸ Advanced ▸ Ignore Patterns: the user's own `.stignore` rules
+/// (for on-demand folders, the user section outside the managed rules).
+struct IgnoreRulesEditor: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let folder: Folder
+    @State private var text = ""
+    @State private var original = ""
+    @State private var loaded = false
+    @State private var saving = false
+
+    var body: some View {
+        Form {
+            Section {
+                TextEditor(text: $text)
+                    .font(.body.monospaced())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .frame(minHeight: 220)
+                    .accessibilityIdentifier("ignores.editor")
+            } footer: {
+                Text("One pattern per line, e.g. *.tmp or /Archive. Matching files are not synced. Lines starting with // are comments.")
+            }
+        }
+        .navigationTitle("Ignore Patterns")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    saving = true
+                    Task {
+                        if await model.setUserIgnoreRules(folder, text: text) { original = text; dismiss() }
+                        saving = false
+                    }
+                }
+                .disabled(!loaded || saving || text == original)
+                .accessibilityIdentifier("ignores.save")
+            }
+        }
+        .task {
+            guard !loaded, let lines = await model.userIgnoreRules(folder) else { return }
+            text = lines.joined(separator: "\n")
+            original = text
+            loaded = true
         }
     }
 }
