@@ -113,6 +113,12 @@ struct SyncProgressAccessory: View {
     }
 }
 
+extension View {
+    /// Sheets cover RootView's banner, so errors from a sheet's own action
+    /// (add device, new/accept folder) were invisible: repeat it on top.
+    func bannerOverlay() -> some View { overlay(alignment: .top) { BannerView() } }
+}
+
 /// Global error / info overlay: visible on every tab, dismisses itself.
 struct BannerView: View {
     @Environment(AppModel.self) private var model

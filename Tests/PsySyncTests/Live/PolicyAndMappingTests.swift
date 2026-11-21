@@ -215,6 +215,19 @@ import Testing
         #expect(s.progress.remoteCompletion == [a: 80])
         #expect(StatusMapper.classify("open /x: permission denied") == .permissionDenied)
     }
+
+    @Test func conflictCopiesBecomeConflictIssues() {
+        let when = Date(timeIntervalSince1970: 42)
+        let i = FolderStatusInputs(folderID: f, conflicts: [.init(path: "a/b.sync-conflict-20261122-001844-76HLXND.txt", modified: when)])
+        let s = StatusMapper.map(i)
+        #expect(s.state == .upToDate, "a conflict is not a sync failure")
+        #expect(s.issues.map(\.kind) == [.conflict])
+        #expect(s.issues[0].path == RelativePath(rawValue: "a/b.sync-conflict-20261122-001844-76HLXND.txt"))
+        #expect(s.issues[0].occurredAt == when)
+        #expect(StatusMapper.isConflictCopy("x/notes.sync-conflict-20261122-001844-ABCDEFG.md"))
+        #expect(!StatusMapper.isConflictCopy("x.sync-conflict-dir/plain.txt"))
+        #expect(!StatusMapper.isConflictCopy("readme.txt"))
+    }
 }
 
 @Suite struct IgnoreRulesGeneratorTests {

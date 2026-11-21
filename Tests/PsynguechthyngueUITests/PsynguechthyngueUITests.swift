@@ -234,6 +234,11 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         el("folders.new").tap()
         XCTAssertTrue(anyLabel("A folder I choose").waitForExistence(timeout: 5))
         XCTAssertTrue(anyLabel("In this app").exists)
+        // Regression (simulator acceptance): the folder picker never appeared.
+        app.buttons["A folder I choose"].firstMatch.tap()
+        let picker = app.buttons["DOCPicker.actionButton"].firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 10), "folder picker shown")
+        XCTAssertTrue(el("newfolder.create").exists, "the New Folder form stays open under the picker")
     }
 
     func testFolderDetailShowsErrorsConflictsAndAdvanced() {

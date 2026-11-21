@@ -53,6 +53,10 @@ public actor LiveSyncEngine: SyncEngine {
     private var refreshAll = false
     private var refreshTask: Task<Void, Never>?
     private var inProgress: [FolderID: [RelativePath: Int64]] = [:]
+    /// Conflict copies per folder (global index walk at start, then re-walked
+    /// when an event mentions a `.sync-conflict-` path).
+    private var conflicts: [FolderID: [FolderStatusInputs.Conflict]] = [:]
+    private var conflictScans: [FolderID: Task<Void, Never>] = [:]
 
     public init(
         bridge: any SyncthingBridge,
@@ -157,6 +161,9 @@ public actor LiveSyncEngine: SyncEngine {
             if let listenPort { try? await applyListenPort(listenPort, client) }
             try? await reconcilePolicy()
             scheduleRefresh(nil)
+            if let folders = try? await client.configFolders() {
+                for f in folders { scheduleConflictScan(FolderID(rawValue: f.id)) }
+            }
         } catch {
             let mapped = Self.map(error)
             await teardown(stopDeadline: .seconds(5))
@@ -222,6 +229,9 @@ public actor LiveSyncEngine: SyncEngine {
         pendingRefresh = []
         refreshAll = false
         inProgress = [:]
+        conflictScans.values.forEach { $0.cancel() }
+        conflictScans = [:]
+        conflicts = [:]
         client = nil
         var failure: EngineError?
         if bridgeStarted {
@@ -309,9 +319,40 @@ public actor LiveSyncEngine: SyncEngine {
             inProgress[f, default: [:]][p] = done
         case .itemFinished(let f, let p, _):
             inProgress[f]?[p] = nil
+            if StatusMapper.isConflictCopy(p.rawValue) { scheduleConflictScan(f) }
+        case .indexChanged(let f, let paths):
+            if paths?.contains(where: { StatusMapper.isConflictCopy($0.rawValue) }) == true { scheduleConflictScan(f) }
         default:
             break
         }
+    }
+
+    /// Re-walks the folder's global index for conflict copies (upstream has no
+    /// conflict list API). Runs at start and whenever a conflict path changes.
+    private func scheduleConflictScan(_ id: FolderID) {
+        conflictScans[id]?.cancel()
+        conflictScans[id] = Task { [weak self] in
+            guard let self else { return }
+            var found: [FolderStatusInputs.Conflict] = []
+            do {
+                for try await page in self.globalIndex(id, pageSize: 1000) {
+                    for e in page where !e.deleted && !e.invalid && e.type == .file && StatusMapper.isConflictCopy(e.name.rawValue) {
+                        found.append(.init(path: e.name.rawValue, modified: e.modified))
+                    }
+                }
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self.setConflicts(id, found.sorted { $0.path < $1.path })
+        }
+    }
+
+    private func setConflicts(_ id: FolderID, _ list: [FolderStatusInputs.Conflict]) {
+        conflictScans[id] = nil
+        guard conflicts[id, default: []] != list else { return }
+        conflicts[id] = list
+        scheduleRefresh([id])
     }
 
     private func scheduleRefresh(_ ids: Set<FolderID>?) {
@@ -534,6 +575,7 @@ public actor LiveSyncEngine: SyncEngine {
             inProgressBytes: inProgress[id]?.values.reduce(0, +) ?? 0,
             remotes: remotes,
             folderErrors: errors.map { .init(path: $0.path, error: $0.error) },
+            conflicts: conflicts[id] ?? [],
             stateChanged: SyncthingDate.parseNonZero(status.stateChanged)
         )
         var result = StatusMapper.map(inputs)

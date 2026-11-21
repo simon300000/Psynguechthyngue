@@ -40,6 +40,14 @@ public struct FolderStatusInputs: Hashable, Sendable {
     }
 
     public var folderErrors: [FileError]
+    /// Upstream conflict copies (`*.sync-conflict-*`) present in the global index.
+    public struct Conflict: Hashable, Sendable {
+        public var path: String
+        public var modified: Date
+        public init(path: String, modified: Date) { self.path = path; self.modified = modified }
+    }
+
+    public var conflicts: [Conflict]
     public var stateChanged: Date?
     public var now: Date
 
@@ -57,6 +65,7 @@ public struct FolderStatusInputs: Hashable, Sendable {
         inProgressBytes: Int64 = 0,
         remotes: [DeviceID: RemoteCompletion] = [:],
         folderErrors: [FileError] = [],
+        conflicts: [Conflict] = [],
         stateChanged: Date? = nil,
         now: Date = Date()
     ) {
@@ -73,6 +82,7 @@ public struct FolderStatusInputs: Hashable, Sendable {
         self.inProgressBytes = inProgressBytes
         self.remotes = remotes
         self.folderErrors = folderErrors
+        self.conflicts = conflicts
         self.stateChanged = stateChanged
         self.now = now
     }
@@ -199,7 +209,24 @@ public enum StatusMapper {
                 occurredAt: i.now
             ))
         }
+        for c in i.conflicts {
+            issues.append(SyncIssue(
+                id: "\(i.folderID.rawValue):conflict:\(c.path)",
+                kind: .conflict,
+                folderID: i.folderID,
+                path: RelativePath(rawValue: c.path),
+                technicalDetail: c.path,
+                occurredAt: c.modified
+            ))
+        }
         return issues
+    }
+
+    /// Upstream names conflict copies `<name>.sync-conflict-<date>-<time>-<device><.ext>`
+    /// (lib/model/folder_sendrecv.go `conflictName`).
+    public static func isConflictCopy(_ path: String) -> Bool {
+        let name = path.split(separator: "/").last.map(String.init) ?? path
+        return name.contains(".sync-conflict-")
     }
 
     /// Upstream folder-level error strings (lib/model/folder.go, lib/config).

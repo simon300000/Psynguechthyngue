@@ -29,7 +29,11 @@ public enum FilesItemPolicy {
     /// version, so it is folded in here; otherwise the system would keep the
     /// properties it cached for the unchanged version. The root's stored
     /// version already covers the content mode (`FilesStore.upsertFolder`).
+    /// The receive-only flag (capabilities) is folded in the same way.
     public static func exposedMetadataVersion(for record: FileItemRecord) -> Data {
-        record.isPinned ? record.metadataVersion + Data("|pinned".utf8) : record.metadataVersion
+        var v = record.metadataVersion
+        if record.isPinned { v += Data("|pinned".utf8) }
+        if record.isReadOnly { v += Data("|readonly".utf8) }
+        return v
     }
 }

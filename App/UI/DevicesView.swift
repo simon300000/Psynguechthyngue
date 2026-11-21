@@ -55,7 +55,7 @@ struct DevicesView: View {
                     }
                 }
             }
-            .sheet(isPresented: $adding) { AddDeviceView() }
+            .sheet(isPresented: $adding) { AddDeviceView().bannerOverlay() }
             .onChange(of: model.pendingCommand, initial: true) { _, command in
                 if command == .addDevice { model.pendingCommand = nil; adding = true }
             }

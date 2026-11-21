@@ -106,7 +106,7 @@ func (e *Engine) OpenIndexStream(folderID string) (*IndexStream, error) {
 	s.open = func() {
 		seq, errFn := internals.AllGlobalFiles(folderID)
 		s.errFn = errFn
-		s.next, s.stop = iter.Pull(func(yield func(indexMeta) bool) {
+		s.next, s.stop = pullAnyThread(func(yield func(indexMeta) bool) {
 			for md := range seq {
 				if !yield(indexMeta{
 					Name: md.Name, Sequence: md.Sequence, ModNanos: md.ModNanos, Size: md.Size,
@@ -212,6 +212,41 @@ func (s *IndexStream) closeLocked0() {
 	if s.stop != nil {
 		s.stop()
 	}
+}
+
+// pullAnyThread is iter.Pull for callers on arbitrary OS threads. Every
+// gomobile call arrives as a cgo callback whose goroutine is locked to the
+// calling OS thread, and Swift's serial bridge queue does not pin a thread,
+// so iter.Pull's coroutine (which must be resumed on the thread that created
+// it) aborted the whole process ("coro: OS thread locking must match locking
+// at coroutine creation"). A producer goroutine + channel has no such rule.
+// stop ends the producer and waits for it, so the upstream DB rows are
+// closed when stop returns.
+func pullAnyThread[V any](seq iter.Seq[V]) (next func() (V, bool), stop func()) {
+	items := make(chan V, 64)
+	quit := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		defer close(items)
+		for v := range seq {
+			select {
+			case items <- v:
+			case <-quit:
+				return
+			}
+		}
+	}()
+	var once sync.Once
+	next = func() (V, bool) {
+		v, ok := <-items
+		return v, ok
+	}
+	stop = func() {
+		once.Do(func() { close(quit) })
+		<-finished
+	}
+	return next, stop
 }
 
 func entryType(t protocol.FileInfoType) string {

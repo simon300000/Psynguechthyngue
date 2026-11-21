@@ -52,6 +52,26 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(FilesItemPolicy.exposedMetadataVersion(for: unpinned) == before)
     }
 
+    /// Simulator acceptance: after Receive Only → Send & Receive, items synced
+    /// meanwhile stayed read-only in Files (no new anchor / version).
+    @Test func readOnlyFlipReannouncesExistingItems() throws {
+        let (store, reader) = try setup(.everything)
+        let a = try #require(try reader.item(at: RelativePath(rawValue: "a")))
+        let writable = FilesItemPolicy.exposedMetadataVersion(for: a)
+        try store.upsertFolder(FilesFolderInfo(folderID: f1, label: "Folder", isReadOnly: true, contentMode: .everything))
+        let ro = try #require(try reader.item(a.itemID))
+        #expect(ro.isReadOnly)
+        #expect(ro.changeAnchor > a.changeAnchor)
+        #expect(FilesItemPolicy.exposedMetadataVersion(for: ro) != writable)
+        try store.upsertFolder(FilesFolderInfo(folderID: f1, label: "Folder", isReadOnly: false, contentMode: .everything))
+        let back = try #require(try reader.item(a.itemID))
+        #expect(!back.isReadOnly)
+        #expect(back.changeAnchor > ro.changeAnchor)
+        #expect(FilesItemPolicy.exposedMetadataVersion(for: back) == writable)
+        let changed = try reader.changes(since: ro.changeAnchor, limit: 10, workingSetOnly: false)
+        #expect(changed.updated.contains { $0.itemID == a.itemID })
+    }
+
     @Test func contentModeChangeReannouncesRoot() throws {
         let (store, reader) = try setup(.onDemand)
         let root = try #require(try reader.item(reader.rootID))

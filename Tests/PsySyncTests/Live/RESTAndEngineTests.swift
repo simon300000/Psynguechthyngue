@@ -403,6 +403,32 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.stop(deadline: .seconds(1))
     }
 
+    /// Simulator acceptance found that conflict copies never reached the UI with
+    /// the live engine: the engine now lists them from the global index.
+    @Test func folderStatusListsConflictCopiesFromGlobalIndex() async throws {
+        let h = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        func entry(_ name: String, deleted: Bool = false) -> GlobalIndexEntry {
+            GlobalIndexEntry(name: RelativePath(rawValue: name), type: .file, size: 1, modified: Date(timeIntervalSince1970: 7),
+                             deleted: deleted, invalid: false, sequence: 1, version: "v", blocksHash: "h", localPresent: true)
+        }
+        h.bridge.indexEntries = [entry("notes.txt"), entry("notes.sync-conflict-20261122-001844-ABCDEFG.txt"),
+                                 entry("gone.sync-conflict-20261122-001845-ABCDEFG.txt", deleted: true)]
+        try await h.engine.start(context: .foreground)
+        try await h.engine.addFolder(Folder(id: FolderID(rawValue: "f"), label: "f"))
+        try await h.engine.stop(deadline: .seconds(1))
+        try await h.engine.start(context: .foreground)   // conflict scan runs at start
+        var issues: [SyncIssue] = []
+        for _ in 0..<100 {
+            issues = try await h.engine.folderStatus(FolderID(rawValue: "f")).issues
+            if !issues.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(issues.map(\.kind) == [.conflict])
+        #expect(issues.first?.path == RelativePath(rawValue: "notes.sync-conflict-20261122-001844-ABCDEFG.txt"))
+        try await h.engine.stop(deadline: .seconds(1))
+    }
+
     @Test func globalIndexStreamsPages() async throws {
         let h = try makeHarness()
         defer { try? FileManager.default.removeItem(at: h.root) }

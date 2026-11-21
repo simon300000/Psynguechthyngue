@@ -129,6 +129,8 @@ final class FakeBridge: SyncthingBridge, @unchecked Sendable {
     private(set) var queueLabels: [String] = []
     var stopError: Error?
     var startError: Error?
+    /// When set, every index stream returns these entries as one page.
+    var indexEntries: [GlobalIndexEntry]?
 
     init(endpoint: RESTEndpoint) { self.endpoint = endpoint }
 
@@ -158,7 +160,9 @@ final class FakeBridge: SyncthingBridge, @unchecked Sendable {
     func onMemoryWarning() { record("onMemoryWarning") }
     func openIndexStream(folder: FolderID) throws -> any GlobalIndexCursor {
         record("openIndexStream")
-        return FakeCursor()
+        let cursor = FakeCursor()
+        cursor.entries = lock.withLock { indexEntries }
+        return cursor
     }
 
     var callList: [String] { lock.withLock { calls } }
@@ -167,7 +171,9 @@ final class FakeBridge: SyncthingBridge, @unchecked Sendable {
 
 final class FakeCursor: GlobalIndexCursor {
     var remaining = 3
+    var entries: [GlobalIndexEntry]?
     func next(maxEntries: Int) throws -> [GlobalIndexEntry] {
+        if let e = entries { entries = []; return e }
         guard remaining > 0 else { return [] }
         remaining -= 1
         return [GlobalIndexEntry(name: RelativePath(rawValue: "f\(remaining)"), type: .file, size: 1, modified: Date(),
