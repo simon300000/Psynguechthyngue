@@ -2,7 +2,7 @@
 
 原生 SwiftUI 的 iPhone / iPad Syncthing 客户端（iOS / iPadOS 17+，也能以 Designed for iPad 形态运行在 Apple 芯片 Mac 上）。App 在前台运行**未打补丁的上游 Syncthing v2.1.6**，并通过 File Provider 把同步文件夹接入"文件" App。
 
-> **状态：重写中，尚不可发布。** 2026-11 起按 [重写设计](Docs/REWRITE/DESIGN.md) 重做。旧版（GoCore / PsyCore）的代码已删除，文档归档在 [Docs/Archive](Docs/Archive/README.md)。做不到或要打折扣的功能见 DESIGN §9。
+> **状态：重写中，尚不可发布。** 2026-11 起按 [重写设计](Docs/REWRITE/DESIGN.md) 重做。旧版代码已删除，文档归档在 [Docs/Archive](Docs/Archive/README.md)。做不到或要打折扣的功能见 DESIGN §9。
 
 ## 架构一览
 
@@ -32,7 +32,7 @@ make verify      # 完整门禁
 
 | 步骤 | 单独运行 | 内容 |
 |---|---|---|
-| sanity | `make sanity` | 工程与生成器输出一致；没有残留的 PsyCore / mobilebridge 引用 |
+| sanity | `make sanity` | 工程与生成器输出一致；没有残留的旧引擎（v1）引用 |
 | swift | `make swift-test` | `swift test`（PsySyncTests） |
 | go | `make go-test` | `GoBridge/Scripts/test.sh`：vet、单元测试与集成测试、race |
 | licenses | `make licenses` | NOTICE、THIRD_PARTY_NOTICES、SBOM 与 GoBridge 实际链接的模块一致 |
