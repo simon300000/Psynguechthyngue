@@ -79,6 +79,8 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
         var subscribers: [UUID: AsyncStream<EngineEvent>.Continuation] = [:]
         var log: [String] = []
         var failNext: EngineError?
+        var options = EngineOptions(deviceName: "iPhone")
+        var userIgnores: [FolderID: [String]] = [:]
     }
 
     private func sync<T>(_ body: (inout Mutable) -> T) -> T { lock.lock(); defer { lock.unlock() }; return body(&m) }
@@ -256,4 +258,27 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
     public func globalIndex(_ folder: FolderID, pageSize: Int) -> AsyncThrowingStream<[GlobalIndexEntry], Error> {
         AsyncThrowingStream { $0.finish() }
     }
+
+    // MARK: Settings
+
+    public func options() async throws -> EngineOptions {
+        try failIfScripted()
+        return sync { $0.options }
+    }
+    public func updateOptions(_ options: EngineOptions) async throws {
+        try failIfScripted()
+        record("options:\(options.deviceName):\(options.globalDiscovery):\(options.relays)")
+        sync { $0.options = options }
+        emit(.configurationChanged)
+    }
+    public func userIgnoreRules(_ folder: FolderID) async throws -> [String] {
+        try failIfScripted()
+        return sync { $0.userIgnores[folder] ?? [] }
+    }
+    public func setUserIgnoreRules(_ folder: FolderID, _ lines: [String]) async throws {
+        try failIfScripted()
+        record("ignores:\(folder.rawValue):\(lines.count)")
+        sync { $0.userIgnores[folder] = lines }
+    }
+    public var syncthingVersion: String { get async { "v2.1.6" } }
 }

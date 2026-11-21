@@ -82,4 +82,36 @@ public protocol SyncEngine: AnyObject, Sendable {
     func apply(_ decision: PolicyDecision) async throws
     /// Global index stream for the File Provider projection (bridge `IndexStream`).
     func globalIndex(_ folder: FolderID, pageSize: Int) -> AsyncThrowingStream<[GlobalIndexEntry], Error>
+
+    // MARK: Settings (contract change WP-D engine options)
+
+    /// Current engine options (requires a running engine).
+    func options() async throws -> EngineOptions
+    /// Applies options; upstream applies them live and persists config.xml.
+    func updateOptions(_ options: EngineOptions) async throws
+    /// The user's own ignore rules for a folder (Folder ▸ Advanced). For
+    /// on-demand folders this is `.stignore-user`, outside the managed section.
+    func userIgnoreRules(_ folder: FolderID) async throws -> [String]
+    func setUserIgnoreRules(_ folder: FolderID, _ lines: [String]) async throws
+    /// Embedded Syncthing version, e.g. "v2.1.6".
+    var syncthingVersion: String { get async }
+}
+
+/// Defaults for conformers that predate the settings API (App placeholders,
+/// dev harnesses, test fakes). `LiveSyncEngine` and `FakeSyncEngine`
+/// implement the real behaviour.
+public extension SyncEngine {
+    func options() async throws -> EngineOptions {
+        throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "options")
+    }
+    func updateOptions(_ options: EngineOptions) async throws {
+        throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "updateOptions")
+    }
+    func userIgnoreRules(_ folder: FolderID) async throws -> [String] {
+        throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "userIgnoreRules")
+    }
+    func setUserIgnoreRules(_ folder: FolderID, _ lines: [String]) async throws {
+        throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "setUserIgnoreRules")
+    }
+    var syncthingVersion: String { get async { "" } }
 }

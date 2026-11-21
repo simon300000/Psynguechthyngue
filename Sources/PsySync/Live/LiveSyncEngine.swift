@@ -46,8 +46,6 @@ public actor LiveSyncEngine: SyncEngine {
     private var myID: DeviceID?
     private var appState = LiveEngineAppState()
     private var externalScopes: [FolderID: ExternalLocationScope] = [:]
-    /// Set after `stop_timeout`: this process must not start the engine again.
-    private var poisoned = false
     private var transition: Task<Void, Error>?
     private var bridgeStarted = false
 
@@ -105,9 +103,6 @@ public actor LiveSyncEngine: SyncEngine {
     }
 
     private func doStart(_ context: EngineRunContext) async throws {
-        if poisoned {
-            throw EngineError.bridge(code: BridgeContract.Code.stopTimeout.rawValue, detail: "engine did not stop; restart the app")
-        }
         let profile = context == .foreground ? MemoryProfile.foreground : MemoryProfile.background
         if case .running = engineState {
             let bridge = bridge
@@ -203,7 +198,7 @@ public actor LiveSyncEngine: SyncEngine {
 
     private func doStop(_ deadline: Duration) async throws {
         guard lease != nil || bridgeStarted else {
-            if case .failed = engineState, !poisoned { setState(.stopped) }
+            if case .failed = engineState { setState(.stopped) }
             return
         }
         setState(.stopping)
@@ -216,7 +211,8 @@ public actor LiveSyncEngine: SyncEngine {
     }
 
     /// Stops pump, bridge, scopes and releases the lock. Returns a stop error
-    /// (and poisons the engine) if the bridge did not stop in time.
+    /// if the bridge did not stop in time (state `.failed(stop_timeout)`; a
+    /// later `start` is still allowed).
     @discardableResult
     private func teardown(stopDeadline: Duration) async -> EngineError? {
         pump?.cancel()
@@ -237,15 +233,17 @@ public actor LiveSyncEngine: SyncEngine {
                 if case .bridge(let code, _) = mapped, code == BridgeContract.Code.notRunning.rawValue {
                     // already gone
                 } else {
+                    // stop_timeout: the bridge keeps shutting down in the
+                    // background and its next Start waits for that (WP-A
+                    // 6261e01), so the process is not poisoned: a later
+                    // `start` is allowed and simply takes longer.
                     failure = mapped
-                    poisoned = true
                 }
             }
             bridgeStarted = false
         }
         // Even after a stop timeout the lock is released: holding it while
-        // suspended gets the process killed (0xdead10cc); `poisoned` prevents
-        // this process from ever starting the engine again.
+        // suspended gets the process killed (0xdead10cc).
         lease?.release()
         lease = nil
         for scope in externalScopes.values { scope.stop() }
@@ -737,6 +735,88 @@ public actor LiveSyncEngine: SyncEngine {
         try Data(IgnoreRulesGenerator.fileContents(present: present).utf8).write(to: dir.appending(path: ".stignore"), options: .atomic)
     }
 
+    // MARK: Settings
+
+    public func options() async throws -> EngineOptions {
+        let client = try requireClient()
+        let opts = try await client.options()
+        let me = try await client.configDevices().first { $0.deviceID == myID?.rawValue }
+        return EngineOptions(
+            deviceName: me?.name ?? config.deviceName,
+            globalDiscovery: opts.globalAnnounceEnabled ?? true,
+            relays: opts.relaysEnabled ?? true,
+            listenAddresses: opts.listenAddresses ?? ["default"]
+        )
+    }
+
+    public func updateOptions(_ options: EngineOptions) async throws {
+        let client = try requireClient()
+        let name = options.deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw EngineError.invalidArgument("device name is empty") }
+        let addresses = options.listenAddresses.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard !addresses.isEmpty else { throw EngineError.invalidArgument("no listen addresses") }
+        // Keep the shared-port protection (ListenAddressPlanner) when the user
+        // goes back to "default" / :22000.
+        let listen = appState.listenPort.flatMap { ListenAddressPlanner.rewrite(addresses, port: $0) } ?? addresses
+        try await client.send("PATCH", "rest/config/options", json: EngineOptionsPatchDTO(
+            globalAnnounceEnabled: options.globalDiscovery, relaysEnabled: options.relays, listenAddresses: listen))
+        if let myID {
+            let current = try await client.configDevices().first { $0.deviceID == myID.rawValue }
+            if current?.name != name {
+                try await client.send("PATCH", "rest/config/devices/\(myID.rawValue)", json: DeviceNamePatchDTO(name: name))
+            }
+        }
+    }
+
+    public func userIgnoreRules(_ folder: FolderID) async throws -> [String] {
+        let client = try requireClient()
+        if let file = try await userIgnoreFile(folder) {
+            guard let data = FileManager.default.contents(atPath: file.path(percentEncoded: false)) else { return [] }
+            return Self.splitLines(String(decoding: data, as: UTF8.self))
+        }
+        return try await client.ignores(folder.rawValue)
+    }
+
+    public func setUserIgnoreRules(_ folder: FolderID, _ lines: [String]) async throws {
+        let client = try requireClient()
+        guard !lines.contains(where: { $0.contains("\n") || $0.contains("\r") || $0.contains("\0") }) else {
+            throw EngineError.invalidArgument("ignore rule contains a line break")
+        }
+        if let file = try await userIgnoreFile(folder) {
+            // On-demand: the managed .stignore includes .stignore-user; rewrite
+            // it, then re-post the managed section so upstream reloads.
+            let body = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+            try Data(body.utf8).write(to: file, options: .atomic)
+            try await client.setIgnores(folder.rawValue, lines: try await client.ignores(folder.rawValue))
+        } else {
+            try await client.setIgnores(folder.rawValue, lines: lines)
+        }
+        try? await scan(folder, paths: nil)
+    }
+
+    /// `.stignore-user` for on-demand folders; nil when rules live in `.stignore` itself.
+    private func userIgnoreFile(_ folder: FolderID) async throws -> URL? {
+        let dto = try await folderConfig(folder)
+        guard appState.folders[folder.rawValue]?.contentMode == .onDemand else { return nil }
+        return URL(filePath: dto.path, directoryHint: .isDirectory).appending(path: IgnoreRulesGenerator.userFile)
+    }
+
+    static func splitLines(_ text: String) -> [String] {
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map {
+            $0.hasSuffix("\r") ? String($0.dropLast()) : String($0)
+        }
+        while lines.last == "" { lines.removeLast() }
+        return lines
+    }
+
+    public var syncthingVersion: String {
+        get async {
+            if let client, let v = try? await client.get("rest/system/version") as SystemVersionDTO { return v.version }
+            let bridge = bridge
+            return (try? await executor.run { bridge.syncthingVersion() }) ?? ""
+        }
+    }
+
     // MARK: Policy
 
     public func apply(_ decision: PolicyDecision) async throws {
@@ -805,12 +885,22 @@ public actor LiveSyncEngine: SyncEngine {
         try appState.save(to: config.layout.engineHome)
     }
 
+    /// Maps bridge/adapter errors to `EngineError`. The adapter's
+    /// `PsyBridgeError` is only `CustomStringConvertible` ("psy:<code>: <detail>"),
+    /// so its `localizedDescription` is the useless "…error 1"; prefer
+    /// `LocalizedError.errorDescription`, then `description`, then NSError.
     static func map(_ error: Error) -> EngineError {
         if let e = error as? EngineError { return e }
-        let message = (error as NSError).localizedDescription
-        let parsed = BridgeContract.parse(message)
-        if let code = parsed.code { return .bridge(code: code.rawValue, detail: parsed.detail) }
-        return .bridge(code: "unknown", detail: message)
+        let nsMessage = (error as NSError).localizedDescription
+        var candidates: [String] = []
+        if let localized = (error as? LocalizedError)?.errorDescription { candidates.append(localized) }
+        if let described = error as? CustomStringConvertible { candidates.append(described.description) }
+        candidates.append(nsMessage)
+        for message in candidates {
+            let parsed = BridgeContract.parse(message)
+            if let code = parsed.code { return .bridge(code: code.rawValue, detail: parsed.detail) }
+        }
+        return .bridge(code: "unknown", detail: candidates.first ?? nsMessage)
     }
 
     static func validateFolderID(_ id: FolderID) throws {

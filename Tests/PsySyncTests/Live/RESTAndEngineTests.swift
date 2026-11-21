@@ -116,7 +116,7 @@ final class FakeSyncthing: @unchecked Sendable {
     private let lock = NSLock()
     var devices: [DeviceConfigDTO] = []
     var folders: [FolderConfigDTO] = []
-    var options = OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0, listenAddresses: ["default"])
+    var options = OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0, listenAddresses: ["default"], globalAnnounceEnabled: true, relaysEnabled: true)
     var ignores: [String: [String]] = [:]
 
     init() {
@@ -152,7 +152,10 @@ final class FakeSyncthing: @unchecked Sendable {
             if let v = obj["maxSendKbps"] as? Int { options.maxSendKbps = v }
             if let v = obj["maxRecvKbps"] as? Int { options.maxRecvKbps = v }
             if let v = obj["listenAddresses"] as? [String] { options.listenAddresses = v }
+            if let v = obj["globalAnnounceEnabled"] as? Bool { options.globalAnnounceEnabled = v }
+            if let v = obj["relaysEnabled"] as? Bool { options.relaysEnabled = v }
             return .json("")
+        case ("GET", "/rest/system/version"): return .json(#"{"version":"v2.1.6","longVersion":"syncthing v2.1.6"}"#)
         case ("GET", "/rest/config/folders"): return json(folders)
         case ("POST", "/rest/config/folders"):
             folders.append(try! d.decode(FolderConfigDTO.self, from: r.body!)); return .json("")
@@ -171,6 +174,7 @@ final class FakeSyncthing: @unchecked Sendable {
                 let id = String(r.path.dropFirst("/rest/config/devices/".count))
                 let patch = try! JSONSerialization.jsonObject(with: r.body!) as! [String: Any]
                 if let i = devices.firstIndex(where: { $0.deviceID == id }), let p = patch["paused"] as? Bool { devices[i].paused = p }
+                if let i = devices.firstIndex(where: { $0.deviceID == id }), let n = patch["name"] as? String { devices[i].name = n }
                 return .json("")
             }
             if r.method == "GET", r.path.hasPrefix("/rest/config/folders/") {
@@ -261,16 +265,39 @@ final class FakeSyncthing: @unchecked Sendable {
         #expect(await h.engine.state == .failed(code: "listen", detail: "address in use"))
     }
 
-    @Test func stopTimeoutPoisonsButReleasesLock() async throws {
+    @Test func stopTimeoutReleasesLockAndAllowsRestart() async throws {
         let h = try makeHarness()
         defer { try? FileManager.default.removeItem(at: h.root) }
         try await h.engine.start(context: .foreground)
-        h.bridge.stopError = TestBridgeError(message: "psy:stop_timeout: still running")
-        await #expect(throws: EngineError.self) { try await h.engine.stop(deadline: .milliseconds(10)) }
-        #expect(h.lock.currentHolder() == nil)
+        h.bridge.stopError = TestBridgeError(message: "psy:stop_timeout: keeps stopping in the background")
+        await #expect(throws: EngineError.bridge(code: "stop_timeout", detail: "keeps stopping in the background")) {
+            try await h.engine.stop(deadline: .milliseconds(10))
+        }
+        #expect(h.lock.currentHolder() == nil)   // never held across suspension (0xdead10cc)
+        #expect(await h.engine.state == .failed(code: "stop_timeout", detail: "bridge(code: \"stop_timeout\", detail: \"keeps stopping in the background\")"))
+
+        // The bridge finishes the shutdown in the background and its next
+        // Start waits for it (WP-A): the engine must not stay unusable.
         h.bridge.stopError = nil
-        await #expect(throws: EngineError.self) { try await h.engine.start(context: .foreground) }
-        #expect(h.bridge.callList.filter { $0 == "start" }.count == 1)
+        try await h.engine.start(context: .foreground)
+        guard case .running = await h.engine.state else { Issue.record("not running after restart"); return }
+        #expect(h.lock.currentHolder() == .app)
+        #expect(h.bridge.callList.filter { $0 == "start" }.count == 2)
+        try await h.engine.stop(deadline: .seconds(1))
+        #expect(await h.engine.state == .stopped)
+        #expect(h.lock.currentHolder() == nil)
+    }
+
+    @Test func stopAfterStopTimeoutIsANoOpThatClearsFailure() async throws {
+        let h = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        try await h.engine.start(context: .foreground)
+        h.bridge.stopError = TestBridgeError(message: "psy:stop_timeout: slow")
+        await #expect(throws: EngineError.self) { try await h.engine.stop(deadline: .milliseconds(10)) }
+        h.bridge.stopError = nil
+        try await h.engine.stop(deadline: .seconds(1))   // nothing left to stop
+        #expect(await h.engine.state == .stopped)
+        #expect(h.bridge.callList.filter { $0 == "stop" }.count == 1)
     }
 
     @Test func concurrentStartsAreSerialised() async throws {
@@ -310,7 +337,7 @@ final class FakeSyncthing: @unchecked Sendable {
         #expect(h.fake.device(a.id)?.paused == false)
         #expect(h.fake.device(b.id)?.paused == true)
         #expect(h.fake.device(c.id)?.paused == false)
-        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 64, maxRecvKbps: 256, listenAddresses: ["default"]))
+        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 64, maxRecvKbps: 256, listenAddresses: ["default"], globalAnnounceEnabled: true, relaysEnabled: true))
 
         // Hold persists across restart: decision stored, re-applied at start.
         try await h.engine.apply(PolicyDecision(hold: .thermal))
@@ -319,7 +346,7 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.start(context: .foreground)
         #expect(h.fake.device(a.id)?.paused == false)
         #expect(h.fake.device(b.id)?.paused == true)
-        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0, listenAddresses: ["default"]))
+        #expect(h.fake.currentOptions == OptionsDTO(maxSendKbps: 0, maxRecvKbps: 0, listenAddresses: ["default"], globalAnnounceEnabled: true, relaysEnabled: true))
         try await h.engine.stop(deadline: .seconds(1))
     }
 

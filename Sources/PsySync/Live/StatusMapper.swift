@@ -95,10 +95,14 @@ public enum StatusMapper {
             inProgressBytes: i.inProgressBytes,
             remoteCompletion: validRemotes.mapValues(\.completion)
         )
-        let issues = makeIssues(i)
+        let fileErrors = i.folderErrors.filter { !isTransientDisconnectError($0.error) }
+        let state = state(i, validRemotes: validRemotes, fileErrors: fileErrors)
+        // While waiting for devices every pull error is a symptom of the
+        // missing peer, not a problem the user can act on.
+        let issues = makeIssues(i, fileErrors: state == .waitingForDevices ? [] : fileErrors)
         return FolderStatus(
             folderID: i.folderID,
-            state: state(i, validRemotes: validRemotes),
+            state: state,
             progress: progress,
             issues: issues,
             lastScan: nil,
@@ -117,7 +121,8 @@ public enum StatusMapper {
         }
     }
 
-    static func state(_ i: FolderStatusInputs, validRemotes: [DeviceID: FolderStatusInputs.RemoteCompletion]) -> FolderSyncState {
+    static func state(_ i: FolderStatusInputs, validRemotes: [DeviceID: FolderStatusInputs.RemoteCompletion],
+                      fileErrors: [FolderStatusInputs.FileError]) -> FolderSyncState {
         guard i.engineRunning else { return .offline }
         if i.folderPaused || i.upstreamState == "paused" { return .paused }
         if i.policyHeld { return .heldByPolicy }
@@ -130,8 +135,8 @@ public enum StatusMapper {
         if i.upstreamState == "error" { return .error }
         // Pull errors that block every remaining item while a peer is online:
         // the folder cannot make progress on its own.
-        if localNeeds, anyConnected, !i.folderErrors.isEmpty,
-           Int64(i.folderErrors.count) >= i.needItems, isIdleLike(i.upstreamState) {
+        if localNeeds, anyConnected, !fileErrors.isEmpty,
+           Int64(fileErrors.count) >= i.needItems, isIdleLike(i.upstreamState) {
             return .error
         }
         switch i.upstreamState {
@@ -154,7 +159,25 @@ public enum StatusMapper {
         ["idle", "sync-waiting", "clean-waiting", "cleaning", ""].contains(s)
     }
 
-    static func makeIssues(_ i: FolderStatusInputs) -> [SyncIssue] {
+    /// Pull errors caused by a peer disconnecting mid-transfer (upstream
+    /// lib/model folder_sendrecv.go, lib/protocol, net). Upstream retries them
+    /// on its own once a peer is back, so they are not user-facing problems.
+    static func isTransientDisconnectError(_ message: String) -> Bool {
+        let m = message.lowercased()
+        let markers = [
+            "peers who had this file went away",
+            "no connected device has the required version",
+            "no device has the required version",
+            "connection closed", "closed connection", "use of closed network connection",
+            "connection reset", "broken pipe", "unexpected eof", "i/o timeout",
+            "context canceled", "context deadline exceeded", "request timed out", "timeout waiting for",
+            "device is not connected",
+        ]
+        if markers.contains(where: m.contains) { return true }
+        return m == "eof" || m.hasSuffix(": eof")
+    }
+
+    static func makeIssues(_ i: FolderStatusInputs, fileErrors: [FolderStatusInputs.FileError]) -> [SyncIssue] {
         var issues: [SyncIssue] = []
         if !i.upstreamError.isEmpty {
             issues.append(SyncIssue(
@@ -166,7 +189,7 @@ public enum StatusMapper {
                 occurredAt: i.stateChanged ?? i.now
             ))
         }
-        for e in i.folderErrors {
+        for e in fileErrors {
             issues.append(SyncIssue(
                 id: "\(i.folderID.rawValue):file:\(e.path)",
                 kind: classifyFile(e.error),
