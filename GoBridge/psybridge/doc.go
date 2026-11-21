@@ -19,6 +19,6 @@
 //   - Errors returned to Swift have the form "psy:<code>: <detail>" where
 //     <code> is one of the Code* constants in errors.go.
 //
-// Every function in this file set is currently a stub that returns
-// CodeNotImplemented; WP-A replaces the bodies without changing signatures.
+// Building requires the `noassets` tag (upstream lib/api embeds GUI assets
+// otherwise): `go test -tags noassets ./...` or GoBridge/Scripts/test.sh.
 package psybridge
