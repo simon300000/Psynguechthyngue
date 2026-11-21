@@ -1,0 +1,552 @@
+[
+  {
+    "id": 1,
+    "globalID": 1,
+    "time": "2026-11-21T15:29:19.450489+08:00",
+    "type": "Starting",
+    "data": {
+      "home": "/tmp/fixture/b",
+      "myID": "BQVZFNZ-K4SUG7K-UEPOCMG-3R63WKC-JHTXNOI-RPDERXA-Q6SMC5A-CDBKTAS"
+    }
+  },
+  {
+    "id": 2,
+    "globalID": 2,
+    "time": "2026-11-21T15:29:19.451752+08:00",
+    "type": "ListenAddressesChanged",
+    "data": {
+      "address": {
+        "Scheme": "tcp",
+        "Opaque": "",
+        "User": null,
+        "Host": "127.0.0.1:28412",
+        "Path": "",
+        "Fragment": "",
+        "RawQuery": "",
+        "RawPath": "",
+        "RawFragment": "",
+        "ForceQuery": false,
+        "OmitHost": false
+      },
+      "lan": [
+        {
+          "Scheme": "tcp",
+          "Opaque": "",
+          "User": null,
+          "Host": "127.0.0.1:28412",
+          "Path": "",
+          "Fragment": "",
+          "RawQuery": "",
+          "RawPath": "",
+          "RawFragment": "",
+          "ForceQuery": false,
+          "OmitHost": false
+        }
+      ],
+      "wan": [
+        {
+          "Scheme": "tcp",
+          "Opaque": "",
+          "User": null,
+          "Host": "127.0.0.1:28412",
+          "Path": "",
+          "Fragment": "",
+          "RawQuery": "",
+          "RawPath": "",
+          "RawFragment": "",
+          "ForceQuery": false,
+          "OmitHost": false
+        }
+      ]
+    }
+  },
+  {
+    "id": 3,
+    "globalID": 3,
+    "time": "2026-11-21T15:29:19.452842+08:00",
+    "type": "StartupComplete",
+    "data": {
+      "myID": "BQVZFNZ-K4SUG7K-UEPOCMG-3R63WKC-JHTXNOI-RPDERXA-Q6SMC5A-CDBKTAS"
+    }
+  },
+  {
+    "id": 4,
+    "globalID": 4,
+    "time": "2026-11-21T15:29:23.490811+08:00",
+    "type": "PendingDevicesChanged",
+    "data": {
+      "added": [
+        {
+          "address": "127.0.0.1:28411",
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+          "name": "Mac"
+        }
+      ]
+    }
+  },
+  {
+    "id": 5,
+    "globalID": 5,
+    "time": "2026-11-21T15:29:23.490816+08:00",
+    "type": "DeviceRejected",
+    "data": {
+      "address": "127.0.0.1:28411",
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "name": "Mac"
+    }
+  },
+  {
+    "id": 6,
+    "globalID": 6,
+    "time": "2026-11-21T15:29:24.492988+08:00",
+    "type": "PendingDevicesChanged",
+    "data": {
+      "added": [
+        {
+          "address": "127.0.0.1:28411",
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+          "name": "Mac"
+        }
+      ]
+    }
+  },
+  {
+    "id": 7,
+    "globalID": 7,
+    "time": "2026-11-21T15:29:24.492991+08:00",
+    "type": "DeviceRejected",
+    "data": {
+      "address": "127.0.0.1:28411",
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "name": "Mac"
+    }
+  },
+  {
+    "id": 8,
+    "globalID": 8,
+    "time": "2026-11-21T15:29:25.494891+08:00",
+    "type": "PendingDevicesChanged",
+    "data": {
+      "added": [
+        {
+          "address": "127.0.0.1:28411",
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+          "name": "Mac"
+        }
+      ]
+    }
+  },
+  {
+    "id": 9,
+    "globalID": 9,
+    "time": "2026-11-21T15:29:25.494896+08:00",
+    "type": "DeviceRejected",
+    "data": {
+      "address": "127.0.0.1:28411",
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "name": "Mac"
+    }
+  },
+  {
+    "id": 10,
+    "globalID": 10,
+    "time": "2026-11-21T15:29:26.497553+08:00",
+    "type": "PendingDevicesChanged",
+    "data": {
+      "added": [
+        {
+          "address": "127.0.0.1:28411",
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+          "name": "Mac"
+        }
+      ]
+    }
+  },
+  {
+    "id": 11,
+    "globalID": 11,
+    "time": "2026-11-21T15:29:26.497557+08:00",
+    "type": "DeviceRejected",
+    "data": {
+      "address": "127.0.0.1:28411",
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "name": "Mac"
+    }
+  },
+  {
+    "id": 12,
+    "globalID": 12,
+    "time": "2026-11-21T15:29:27.500604+08:00",
+    "type": "PendingDevicesChanged",
+    "data": {
+      "added": [
+        {
+          "address": "127.0.0.1:28411",
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+          "name": "Mac"
+        }
+      ]
+    }
+  },
+  {
+    "id": 13,
+    "globalID": 13,
+    "time": "2026-11-21T15:29:27.500607+08:00",
+    "type": "DeviceRejected",
+    "data": {
+      "address": "127.0.0.1:28411",
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "name": "Mac"
+    }
+  },
+  {
+    "id": 14,
+    "globalID": 14,
+    "time": "2026-11-21T15:29:31.561827+08:00",
+    "type": "PendingDevicesChanged",
+    "data": {
+      "removed": [
+        {
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7"
+        }
+      ]
+    }
+  },
+  {
+    "id": 16,
+    "globalID": 16,
+    "time": "2026-11-21T15:29:31.574414+08:00",
+    "type": "DeviceConnected",
+    "data": {
+      "addr": "127.0.0.1:28411",
+      "clientName": "syncthing",
+      "clientVersion": "v2.1.6",
+      "deviceName": "Mac",
+      "id": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "type": "tcp-client"
+    }
+  },
+  {
+    "id": 17,
+    "globalID": 17,
+    "time": "2026-11-21T15:29:32.576473+08:00",
+    "type": "FolderRejected",
+    "data": {
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "folder": "f1",
+      "folderLabel": "F One"
+    }
+  },
+  {
+    "id": 18,
+    "globalID": 18,
+    "time": "2026-11-21T15:29:32.576494+08:00",
+    "type": "PendingFoldersChanged",
+    "data": {
+      "added": [
+        {
+          "folderID": "f1",
+          "folderLabel": "F One",
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+          "receiveEncrypted": false,
+          "remoteEncrypted": false
+        }
+      ],
+      "removed": []
+    }
+  },
+  {
+    "id": 21,
+    "globalID": 21,
+    "time": "2026-11-21T15:29:39.576193+08:00",
+    "type": "DeviceConnected",
+    "data": {
+      "addr": "127.0.0.1:28411",
+      "clientName": "syncthing",
+      "clientVersion": "v2.1.6",
+      "deviceName": "Mac",
+      "id": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "type": "tcp-client"
+    }
+  },
+  {
+    "id": 22,
+    "globalID": 22,
+    "time": "2026-11-21T15:29:39.631944+08:00",
+    "type": "StateChanged",
+    "data": {
+      "folder": "f1",
+      "from": "idle",
+      "to": "starting"
+    }
+  },
+  {
+    "id": 23,
+    "globalID": 23,
+    "time": "2026-11-21T15:29:39.636126+08:00",
+    "type": "PendingFoldersChanged",
+    "data": {
+      "removed": [
+        {
+          "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+          "folderID": "f1"
+        }
+      ]
+    }
+  },
+  {
+    "id": 25,
+    "globalID": 25,
+    "time": "2026-11-21T15:29:39.649547+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.649542,
+      "folder": "f1",
+      "from": "starting",
+      "to": "idle"
+    }
+  },
+  {
+    "id": 26,
+    "globalID": 26,
+    "time": "2026-11-21T15:29:39.649598+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.649597,
+      "folder": "f1",
+      "from": "idle",
+      "to": "scan-waiting"
+    }
+  },
+  {
+    "id": 27,
+    "globalID": 27,
+    "time": "2026-11-21T15:29:39.649603+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.649602,
+      "folder": "f1",
+      "from": "scan-waiting",
+      "to": "scanning"
+    }
+  },
+  {
+    "id": 28,
+    "globalID": 28,
+    "time": "2026-11-21T15:29:39.651596+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.651596,
+      "folder": "f1",
+      "from": "scanning",
+      "to": "idle"
+    }
+  },
+  {
+    "id": 29,
+    "globalID": 29,
+    "time": "2026-11-21T15:29:39.651636+08:00",
+    "type": "RemoteIndexUpdated",
+    "data": {
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "folder": "f1",
+      "items": 1,
+      "sequence": 1,
+      "version": 1
+    }
+  },
+  {
+    "id": 30,
+    "globalID": 30,
+    "time": "2026-11-21T15:29:39.65178+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.651776,
+      "folder": "f1",
+      "from": "idle",
+      "to": "sync-waiting"
+    }
+  },
+  {
+    "id": 31,
+    "globalID": 31,
+    "time": "2026-11-21T15:29:39.651818+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.651818,
+      "folder": "f1",
+      "from": "sync-waiting",
+      "to": "idle"
+    }
+  },
+  {
+    "id": 32,
+    "globalID": 32,
+    "time": "2026-11-21T15:29:39.651824+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.651823,
+      "folder": "f1",
+      "from": "idle",
+      "to": "sync-preparing"
+    }
+  },
+  {
+    "id": 33,
+    "globalID": 33,
+    "time": "2026-11-21T15:29:39.652554+08:00",
+    "type": "ItemStarted",
+    "data": {
+      "action": "update",
+      "folder": "f1",
+      "item": "one.txt",
+      "type": "file"
+    }
+  },
+  {
+    "id": 34,
+    "globalID": 34,
+    "time": "2026-11-21T15:29:39.652572+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.652569,
+      "folder": "f1",
+      "from": "sync-preparing",
+      "to": "syncing"
+    }
+  },
+  {
+    "id": 35,
+    "globalID": 35,
+    "time": "2026-11-21T15:29:40.589552+08:00",
+    "type": "ItemFinished",
+    "data": {
+      "action": "update",
+      "error": null,
+      "folder": "f1",
+      "item": "one.txt",
+      "type": "file"
+    }
+  },
+  {
+    "id": 36,
+    "globalID": 36,
+    "time": "2026-11-21T15:29:40.597518+08:00",
+    "type": "LocalIndexUpdated",
+    "data": {
+      "filenames": [
+        "one.txt"
+      ],
+      "folder": "f1",
+      "items": 1,
+      "sequence": 2,
+      "version": 2
+    }
+  },
+  {
+    "id": 37,
+    "globalID": 38,
+    "time": "2026-11-21T15:29:40.597764+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 1.5977519999999998,
+      "folder": "f1",
+      "from": "syncing",
+      "to": "sync-preparing"
+    }
+  },
+  {
+    "id": 38,
+    "globalID": 39,
+    "time": "2026-11-21T15:29:40.597899+08:00",
+    "type": "StateChanged",
+    "data": {
+      "duration": 0.597898,
+      "folder": "f1",
+      "from": "sync-preparing",
+      "to": "idle"
+    }
+  },
+  {
+    "id": 39,
+    "globalID": 40,
+    "time": "2026-11-21T15:29:40.598781+08:00",
+    "type": "FolderSummary",
+    "data": {
+      "folder": "f1",
+      "summary": {
+        "errors": 0,
+        "pullErrors": 0,
+        "invalid": "",
+        "globalFiles": 1,
+        "globalDirectories": 0,
+        "globalSymlinks": 0,
+        "globalDeleted": 0,
+        "globalBytes": 6,
+        "globalTotalItems": 1,
+        "localFiles": 1,
+        "localDirectories": 0,
+        "localSymlinks": 0,
+        "localDeleted": 0,
+        "localBytes": 6,
+        "localTotalItems": 1,
+        "needFiles": 0,
+        "needDirectories": 0,
+        "needSymlinks": 0,
+        "needDeletes": 0,
+        "needBytes": 0,
+        "needTotalItems": 0,
+        "receiveOnlyChangedFiles": 0,
+        "receiveOnlyChangedDirectories": 0,
+        "receiveOnlyChangedSymlinks": 0,
+        "receiveOnlyChangedDeletes": 0,
+        "receiveOnlyChangedBytes": 0,
+        "receiveOnlyTotalItems": 0,
+        "inSyncFiles": 1,
+        "inSyncBytes": 6,
+        "state": "idle",
+        "stateChanged": "2026-11-21T15:29:40+08:00",
+        "error": "",
+        "version": 2,
+        "sequence": 2,
+        "remoteSequence": {
+          "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7": 1
+        },
+        "ignorePatterns": false,
+        "watchError": ""
+      }
+    }
+  },
+  {
+    "id": 40,
+    "globalID": 41,
+    "time": "2026-11-21T15:29:40.599429+08:00",
+    "type": "FolderCompletion",
+    "data": {
+      "completion": 100,
+      "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "folder": "f1",
+      "globalBytes": 6,
+      "globalItems": 1,
+      "needBytes": 0,
+      "needDeletes": 0,
+      "needItems": 0,
+      "remoteState": "valid",
+      "sequence": 1
+    }
+  },
+  {
+    "id": 42,
+    "globalID": 43,
+    "time": "2026-11-21T15:29:47.505977+08:00",
+    "type": "DeviceConnected",
+    "data": {
+      "addr": "127.0.0.1:64081",
+      "clientName": "syncthing",
+      "clientVersion": "v2.1.6",
+      "deviceName": "Mac",
+      "id": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+      "type": "tcp-server"
+    }
+  }
+]

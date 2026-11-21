@@ -1,0 +1,31 @@
+{
+  "alloc": 2705792,
+  "connectionServiceStatus": {
+    "tcp://127.0.0.1:28412": {
+      "error": null,
+      "lanAddresses": [
+        "tcp://127.0.0.1:28412"
+      ],
+      "wanAddresses": [
+        "tcp://127.0.0.1:28412"
+      ]
+    }
+  },
+  "cpuPercent": 0,
+  "goroutines": 61,
+  "guiAddressOverridden": false,
+  "guiAddressUsed": "127.0.0.1:28402",
+  "lastDialStatus": {
+    "tcp://127.0.0.1:28411": {
+      "when": "2026-11-21T07:29:39Z",
+      "error": null
+    }
+  },
+  "myID": "BQVZFNZ-K4SUG7K-UEPOCMG-3R63WKC-JHTXNOI-RPDERXA-Q6SMC5A-CDBKTAS",
+  "pathSeparator": "/",
+  "startTime": "2026-11-21T15:29:19+08:00",
+  "sys": 14956824,
+  "tilde": "/Users/test",
+  "uptime": 28,
+  "urVersionMax": 3
+}

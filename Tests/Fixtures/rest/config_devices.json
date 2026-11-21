@@ -1,0 +1,48 @@
+[
+  {
+    "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
+    "name": "ay",
+    "addresses": [
+      "tcp://127.0.0.1:28411"
+    ],
+    "compression": "metadata",
+    "certName": "",
+    "introducer": false,
+    "skipIntroductionRemovals": false,
+    "introducedBy": "",
+    "paused": false,
+    "allowedNetworks": [],
+    "autoAcceptFolders": false,
+    "maxSendKbps": 0,
+    "maxRecvKbps": 0,
+    "ignoredFolders": [],
+    "maxRequestKiB": 0,
+    "untrusted": false,
+    "remoteGUIPort": 0,
+    "numConnections": 0,
+    "group": ""
+  },
+  {
+    "deviceID": "BQVZFNZ-K4SUG7K-UEPOCMG-3R63WKC-JHTXNOI-RPDERXA-Q6SMC5A-CDBKTAS",
+    "name": "Mac",
+    "addresses": [
+      "dynamic"
+    ],
+    "compression": "metadata",
+    "certName": "",
+    "introducer": false,
+    "skipIntroductionRemovals": false,
+    "introducedBy": "",
+    "paused": false,
+    "allowedNetworks": [],
+    "autoAcceptFolders": false,
+    "maxSendKbps": 0,
+    "maxRecvKbps": 0,
+    "ignoredFolders": [],
+    "maxRequestKiB": 0,
+    "untrusted": false,
+    "remoteGUIPort": 0,
+    "numConnections": 0,
+    "group": ""
+  }
+]
