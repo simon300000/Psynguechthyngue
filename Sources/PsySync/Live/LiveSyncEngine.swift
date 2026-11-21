@@ -670,7 +670,9 @@ public actor LiveSyncEngine: SyncEngine {
         let root = URL(filePath: existing.path, directoryHint: .isDirectory)
         var current = IgnoreRulesGenerator.presentPaths(from: try await client.ignores(folder.rawValue))
         for p in paths {
-            _ = try IgnoreRulesGenerator.pattern(for: p)   // validates
+            do { _ = try IgnoreRulesGenerator.pattern(for: p) } catch {
+                throw EngineError.invalidArgument("path cannot be expressed as an ignore rule: \(p.rawValue)")
+            }
             if present {
                 current.insert(p)
             } else {
