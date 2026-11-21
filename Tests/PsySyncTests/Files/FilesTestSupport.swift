@@ -72,7 +72,7 @@ final class FilesFakeEngine: SyncEngine, @unchecked Sendable {
     }
 }
 
-enum Fixtures {
+enum FilesFixtures {
     static func tempDir(_ name: String = #function) -> URL {
         let url = FileManager.default.temporaryDirectory
             .appending(path: "psy-files-tests/\(name.filter { $0.isLetter || $0.isNumber })-\(UUID().uuidString.prefix(8))")

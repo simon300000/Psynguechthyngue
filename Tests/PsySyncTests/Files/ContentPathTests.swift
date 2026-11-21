@@ -37,7 +37,7 @@ struct ContentHarness {
     let lock: FlockEngineLock
 
     init(mode: ContentMode = .onDemand) throws {
-        root = Fixtures.tempDir()
+        root = FilesFixtures.tempDir()
         layout = AppGroupLayout(root: root)
         store = try FilesStore(url: layout.filesDatabase)
         try store.upsertFolder(FilesFolderInfo(folderID: f1, label: "F", isReadOnly: false, contentMode: mode))
@@ -72,7 +72,7 @@ struct ContentHarness {
 @Suite(.serialized) struct LiveContentProviderTests {
     @Test func localCloneWhenFileIsLocal() async throws {
         let h = try ContentHarness()
-        try h.project([Fixtures.file("docs/a.txt", size: 5, local: true)])
+        try h.project([FilesFixtures.file("docs/a.txt", size: 5, local: true)])
         try h.write("docs/a.txt", "hello")
         let bridge = FakeFetchBridge()
         let result = try await h.provider(bridge: bridge).provideContents(for: h.id("docs/a.txt"), requestedVersion: nil, progress: Progress())
@@ -83,7 +83,7 @@ struct ContentHarness {
 
     @Test func restrictedFetchWhenAppNotRunning() async throws {
         let h = try ContentHarness()
-        try h.project([Fixtures.file("b.bin", size: 7, local: false)])
+        try h.project([FilesFixtures.file("b.bin", size: 7, local: false)])
         let bridge = FakeFetchBridge()
         let result = try await h.provider(bridge: bridge).provideContents(for: h.id("b.bin"), requestedVersion: Data([9]), progress: Progress())
         #expect(result.source == .restrictedFetch)
@@ -102,7 +102,7 @@ struct ContentHarness {
 
     @Test func restrictedFetchErrorsMapToOpenApp() async throws {
         let h = try ContentHarness()
-        try h.project([Fixtures.file("c", local: false)])
+        try h.project([FilesFixtures.file("c", local: false)])
         let noPeer = FakeFetchBridge(error: EngineError.bridge(code: "no_peer", detail: "x"))
         await #expect(throws: FilesContentError.openAppRequired(.noPeer)) {
             _ = try await h.provider(bridge: noPeer).provideContents(for: h.id("c"), requestedVersion: nil, progress: Progress())
@@ -115,7 +115,7 @@ struct ContentHarness {
 
     @Test func delegatedToAppWhenEngineRunning() async throws {
         let h = try ContentHarness()
-        try h.project([Fixtures.file("d/remote.txt", size: 6, local: false)])
+        try h.project([FilesFixtures.file("d/remote.txt", size: 6, local: false)])
         let appLease = try #require(await h.lock.acquire(owner: .app, timeout: .seconds(1)))
         defer { appLease.release() }
         let engine = FilesFakeEngine()
@@ -144,7 +144,7 @@ struct ContentHarness {
 
     @Test func delegationNotAcceptedFallsBackToRestrictedFetchAfterAppReleasesLock() async throws {
         let h = try ContentHarness()
-        try h.project([Fixtures.file("e", size: 7, local: false)])
+        try h.project([FilesFixtures.file("e", size: 7, local: false)])
         let appLease = try #require(await h.lock.acquire(owner: .app, timeout: .seconds(1)))
         // App "suspends" shortly after: no server, lock released after 400 ms.
         Task {
@@ -162,7 +162,7 @@ struct ContentHarness {
 @Suite(.serialized) struct ContentRequestServerTests {
     @Test func journalDrivesTargetedScanAndUnignoreOrder() async throws {
         let h = try ContentHarness(mode: .onDemand)
-        try h.project([Fixtures.file("old.txt"), Fixtures.file("gone.txt")])
+        try h.project([FilesFixtures.file("old.txt"), FilesFixtures.file("gone.txt")])
         _ = try h.store.recordLocalWrite(f1, path: RelativePath(rawValue: "new/n.txt"), isDirectory: false, size: 1, modified: Date())
         try h.store.append(f1, kind: .created, path: RelativePath(rawValue: "new/n.txt"), previousPath: nil)
         try h.store.recordLocalDelete(try h.id("gone.txt"))
@@ -203,7 +203,7 @@ struct ContentHarness {
     @Test func projectsAndReactsToIndexChanges() async throws {
         let h = try ContentHarness(mode: .everything)
         let engine = FilesFakeEngine()
-        engine.setIndex(f1, [Fixtures.dir("a"), Fixtures.file("a/1"), Fixtures.file("a/2")])
+        engine.setIndex(f1, [FilesFixtures.dir("a"), FilesFixtures.file("a/1"), FilesFixtures.file("a/2")])
         let signals = LockedBox<Int>(0)
         let projector = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(50), pageSize: 2) { _ in
             signals.mutate { $0 += 1 }
@@ -212,7 +212,7 @@ struct ContentHarness {
         await projector.start()
         #expect(await eventually { (try? h.store.itemCount(f1)) == 4 })
         let firstID = try h.id("a/1")
-        engine.setIndex(f1, [Fixtures.dir("a"), Fixtures.file("a/1", version: "v2"), Fixtures.file("b")])
+        engine.setIndex(f1, [FilesFixtures.dir("a"), FilesFixtures.file("a/1", version: "v2"), FilesFixtures.file("b")])
         engine.emit(.indexChanged(folderID: f1, paths: nil))
         #expect(await eventually { (try? h.store.record(folder: f1, path: RelativePath(rawValue: "b"))) != nil })
         #expect(try h.id("a/1") == firstID)

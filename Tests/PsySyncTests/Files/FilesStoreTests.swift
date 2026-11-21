@@ -6,8 +6,8 @@ private let f1 = FolderID(rawValue: "f1")
 
 @Suite struct FilesStoreTests {
     @Test func projectsHierarchyWithStableIdentity() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.dir("a"), Fixtures.file("a/x.txt"), Fixtures.file("b/c/y.txt")])
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.dir("a"), FilesFixtures.file("a/x.txt"), FilesFixtures.file("b/c/y.txt")])
         let reader = store.reader(folder: f1)
         let top = try reader.children(of: reader.rootID, after: nil, limit: 10).items.map(\.path.rawValue)
         #expect(top == ["a", "b"])
@@ -18,16 +18,16 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(c.path.rawValue == "b/c")
         // Re-applying the same entries keeps ids and anchors.
         let anchor = try store.currentAnchor()
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.dir("a"), Fixtures.file("a/x.txt"), Fixtures.file("b/c/y.txt")])
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.dir("a"), FilesFixtures.file("a/x.txt"), FilesFixtures.file("b/c/y.txt")])
         #expect(try store.currentAnchor() == anchor)
         #expect(try reader.item(at: RelativePath(rawValue: "b/c/y.txt"))?.itemID == y.itemID)
     }
 
     @Test func contentVersionIgnoresMetadataOnlyChanges() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("x", version: "v1", blocks: "QUJD")])
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("x", version: "v1", blocks: "QUJD")])
         let before = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "x")))
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("x", version: "v2", blocks: "QUJD")])
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("x", version: "v2", blocks: "QUJD")])
         let after = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "x")))
         #expect(before.contentVersion == after.contentVersion)
         #expect(before.metadataVersion != after.metadataVersion)
@@ -35,18 +35,18 @@ private let f1 = FolderID(rawValue: "f1")
     }
 
     @Test func deletionsBecomeTombstonesAndSweepRemovesMissing() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("d/1"), Fixtures.file("d/2"), Fixtures.file("e")])
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("d/1"), FilesFixtures.file("d/2"), FilesFixtures.file("e")])
         let reader = store.reader(folder: f1)
         let anchor = try reader.currentAnchor()
         let d = try #require(try reader.item(at: RelativePath(rawValue: "d")))
         let one = try #require(try reader.item(at: RelativePath(rawValue: "d/1")))
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("d/1", deleted: true)])
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("d/1", deleted: true)])
         var changes = try reader.changes(since: anchor, limit: 100)
         #expect(changes.deleted == [one.itemID])
         // Full sync where "d" vanished entirely.
         try store.beginFullSync(f1)
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("e")])
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("e")])
         let next = changes.newAnchor
         try store.finishFullSync(f1)
         changes = try reader.changes(since: next, limit: 100)
@@ -55,8 +55,8 @@ private let f1 = FolderID(rawValue: "f1")
     }
 
     @Test func localRenameKeepsIdentityAndShieldsFromStaleIndex() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.dir("dir"), Fixtures.file("dir/a"), Fixtures.file("dir/sub/b")])
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.dir("dir"), FilesFixtures.file("dir/a"), FilesFixtures.file("dir/sub/b")])
         let dir = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "dir")))
         let b = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "dir/sub/b")))
         _ = try store.moveIdentity(dir.itemID, to: RelativePath(rawValue: "renamed"), in: f1)
@@ -65,7 +65,7 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(try store.record(folder: f1, path: RelativePath(rawValue: "renamed/sub/b"))?.itemID == b.itemID)
         // A projection pass with the stale (pre-scan) index must not resurrect "dir" nor drop "renamed".
         try store.beginFullSync(f1)
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.dir("dir"), Fixtures.file("dir/a"), Fixtures.file("dir/sub/b")])
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.dir("dir"), FilesFixtures.file("dir/a"), FilesFixtures.file("dir/sub/b")])
         try store.finishFullSync(f1)
         #expect(try store.record(folder: f1, path: RelativePath(rawValue: "dir")) == nil)
         #expect(try store.record(folder: f1, path: RelativePath(rawValue: "renamed/a")) != nil)
@@ -74,8 +74,8 @@ private let f1 = FolderID(rawValue: "f1")
         try store.clearPendingUpload(f1, paths: [RelativePath(rawValue: "renamed")])
         try store.beginFullSync(f1)
         _ = try store.applyIndexBatch(f1, entries: [
-            Fixtures.dir("renamed"), Fixtures.file("renamed/a"), Fixtures.file("renamed/sub/b"),
-            Fixtures.file("dir/a", deleted: true),
+            FilesFixtures.dir("renamed"), FilesFixtures.file("renamed/a"), FilesFixtures.file("renamed/sub/b"),
+            FilesFixtures.file("dir/a", deleted: true),
         ])
         try store.finishFullSync(f1)
         #expect(try store.record(folder: f1, path: RelativePath(rawValue: "renamed/sub/b"))?.itemID == b.itemID)
@@ -83,22 +83,22 @@ private let f1 = FolderID(rawValue: "f1")
     }
 
     @Test func localWriteAndDeleteSurviveStaleProjection() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("keep"), Fixtures.file("gone")])
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("keep"), FilesFixtures.file("gone")])
         let written = try store.recordLocalWrite(f1, path: RelativePath(rawValue: "new.txt"), isDirectory: false, size: 3, modified: Date())
         #expect(written.pendingUpload && written.isLocal)
         let gone = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "gone")))
         try store.recordLocalDelete(gone.itemID)
         try store.append(f1, kind: .deleted, path: gone.path, previousPath: nil)
         try store.beginFullSync(f1)
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("keep"), Fixtures.file("gone")])
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("keep"), FilesFixtures.file("gone")])
         try store.finishFullSync(f1)
         #expect(try store.record(folder: f1, path: RelativePath(rawValue: "new.txt")) != nil)
         #expect(try store.record(folder: f1, path: RelativePath(rawValue: "gone")) == nil)
     }
 
     @Test func journalAndInboxRoundTrip() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
         try store.append(f1, kind: .created, path: RelativePath(rawValue: "a"), previousPath: nil)
         try store.append(f1, kind: .moved, path: RelativePath(rawValue: "b"), previousPath: RelativePath(rawValue: "a"))
         let pending = try store.pending(limit: 10)
@@ -114,8 +114,8 @@ private let f1 = FolderID(rawValue: "f1")
     }
 
     @Test func workingSetExcludesUnmaterializedEverythingFiles() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
-        _ = try store.applyIndexBatch(f1, entries: (0..<50).map { Fixtures.file("d/f\($0)") } + [Fixtures.file("top")])
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: (0..<50).map { FilesFixtures.file("d/f\($0)") } + [FilesFixtures.file("top")])
         let reader = store.reader(folder: f1)
         #expect(try reader.workingSet(after: nil, limit: 100).items.isEmpty)
         let d = try #require(try reader.item(at: RelativePath(rawValue: "d")))
@@ -126,15 +126,15 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(try reader.workingSet(after: nil, limit: 100).items.count == 52)
         // Working-set changes do not report the unrelated file updates outside the set.
         let anchor = try reader.currentAnchor()
-        _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("other", version: "v9")])
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("other", version: "v9")])
         #expect(try reader.changes(since: anchor, limit: 10, workingSetOnly: true).updated.isEmpty)
         #expect(try reader.changes(since: anchor, limit: 10).updated.count == 1)
     }
 
     @Test func anchorExpiresAfterTombstonePruning() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
         store.tombstoneRetention = 5
-        _ = try store.applyIndexBatch(f1, entries: (0..<20).map { Fixtures.file("x\($0)") })
+        _ = try store.applyIndexBatch(f1, entries: (0..<20).map { FilesFixtures.file("x\($0)") })
         try store.beginFullSync(f1)
         try store.finishFullSync(f1)  // everything swept → 20 tombstones → pruned to 5
         #expect(throws: FilesStoreError.anchorExpired) { try store.reader(folder: f1).changes(since: 1, limit: 10) }
@@ -144,20 +144,20 @@ private let f1 = FolderID(rawValue: "f1")
     /// active, pinning a WAL snapshot; the next write from that connection
     /// failed with SQLITE_BUSY_SNAPSHOT (517) after the other process wrote.
     @Test func secondConnectionWritesDoNotStaleFirstConnection() throws {
-        let dir = Fixtures.tempDir()
-        let app = try Fixtures.store(dir)
+        let dir = FilesFixtures.tempDir()
+        let app = try FilesFixtures.store(dir)
         let ext = try FilesStore(url: dir.appending(path: "Files/files.sqlite"))
-        _ = try app.applyIndexBatch(f1, entries: [Fixtures.file("a")])
+        _ = try app.applyIndexBatch(f1, entries: [FilesFixtures.file("a")])
         let a = try #require(try ext.record(folder: f1, path: RelativePath(rawValue: "a")))
         _ = try ext.reader(folder: f1).children(of: FilesStore.rootItemID(f1), after: nil, limit: 1)
-        _ = try app.applyIndexBatch(f1, entries: [Fixtures.file("b")])
+        _ = try app.applyIndexBatch(f1, entries: [FilesFixtures.file("b")])
         _ = try ext.post(f1, path: a.path, version: a.contentVersion)
         try ext.append(f1, kind: .modified, path: a.path, previousPath: nil)
         #expect(try app.open(limit: 10).count == 1)
     }
 
     @Test func reopensAfterCorruption() throws {
-        let dir = Fixtures.tempDir()
+        let dir = FilesFixtures.tempDir()
         let url = dir.appending(path: "Files/files.sqlite")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(repeating: 0x42, count: 8192).write(to: url)
@@ -171,14 +171,14 @@ private let f1 = FolderID(rawValue: "f1")
     static let total = 100_000
 
     @Test func hundredThousandItemsPaginationAndChanges() throws {
-        let store = try Fixtures.store(Fixtures.tempDir())
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
         let clock = ContinuousClock()
         // 100 directories × (1 dir entry + 999 files) = 100,000 entries.
         var entries: [GlobalIndexEntry] = []
         entries.reserveCapacity(Self.total)
         for d in 0..<100 {
-            entries.append(Fixtures.dir(String(format: "dir%03d", d)))
-            for f in 0..<999 { entries.append(Fixtures.file(String(format: "dir%03d/file%04d.bin", d, f))) }
+            entries.append(FilesFixtures.dir(String(format: "dir%03d", d)))
+            for f in 0..<999 { entries.append(FilesFixtures.file(String(format: "dir%03d/file%04d.bin", d, f))) }
         }
         #expect(entries.count == Self.total)
 
@@ -219,7 +219,7 @@ private let f1 = FolderID(rawValue: "f1")
             names += page.items.map(\.path.lastComponent)
             cursor = page.next
             if names.count == 500 {
-                _ = try store.applyIndexBatch(f1, entries: [Fixtures.file("dir010/file0001.bin", version: "v2")])
+                _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("dir010/file0001.bin", version: "v2")])
             }
         } while cursor != nil
         let pageTime = pageStart.duration(to: clock.now)
@@ -233,7 +233,7 @@ private let f1 = FolderID(rawValue: "f1")
         try store.beginFullSync(f1)
         var modified = entries
         modified[modified.firstIndex { $0.name.rawValue == "dir010/file0001.bin" }!] =
-            Fixtures.file("dir010/file0001.bin", version: "v2")
+            FilesFixtures.file("dir010/file0001.bin", version: "v2")
         for start in stride(from: 0, to: modified.count, by: 1000) {
             _ = try store.applyIndexBatch(f1, entries: Array(modified[start..<min(start + 1000, modified.count)]))
         }
@@ -241,8 +241,8 @@ private let f1 = FolderID(rawValue: "f1")
         let reapplyTime = reapplyStart.duration(to: clock.now)
         #expect(try reader.currentAnchor() == before)
 
-        var edits = (0..<10).map { Fixtures.file(String(format: "dir099/file%04d.bin", $0), version: "v3") }
-        edits += (0..<5).map { Fixtures.file(String(format: "dir098/file%04d.bin", $0), deleted: true) }
+        var edits = (0..<10).map { FilesFixtures.file(String(format: "dir099/file%04d.bin", $0), version: "v3") }
+        edits += (0..<5).map { FilesFixtures.file(String(format: "dir098/file%04d.bin", $0), deleted: true) }
         _ = try store.applyIndexBatch(f1, entries: edits)
         let delta = try reader.changes(since: before, limit: 1000)
         #expect(delta.updated.count == 10)

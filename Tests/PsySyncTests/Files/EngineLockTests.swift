@@ -41,7 +41,7 @@ import Testing
     }
 
     @Test func otherProcessHoldingBlocksAcquireAndReportsOwner() async throws {
-        let url = Fixtures.tempDir().appending(path: "Engine/engine.lock")
+        let url = FilesFixtures.tempDir().appending(path: "Engine/engine.lock")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let lock = FlockEngineLock(url: url)
         #expect(lock.currentHolder() == nil)
@@ -64,7 +64,7 @@ import Testing
     }
 
     @Test func ourLeaseExcludesOtherProcessUntilReleased() async throws {
-        let url = Fixtures.tempDir().appending(path: "engine.lock")
+        let url = FilesFixtures.tempDir().appending(path: "engine.lock")
         let lock = FlockEngineLock(url: url)
         let lease = try #require(await lock.acquire(owner: .app, timeout: .seconds(1)))
         let (blocked, _) = try Self.child(url, owner: "fileProviderExtension", hold: 0, wait: 0.3)
@@ -81,7 +81,7 @@ import Testing
     }
 
     @Test func crashedHolderReleasesLock() async throws {
-        let url = Fixtures.tempDir().appending(path: "engine.lock")
+        let url = FilesFixtures.tempDir().appending(path: "engine.lock")
         let lock = FlockEngineLock(url: url)
         let (process, pipe) = try Self.child(url, owner: "app", hold: 30)
         #expect(Self.waitForLine(pipe).contains("LOCKED"))
@@ -92,7 +92,7 @@ import Testing
     }
 
     @Test func twoOpensInOneProcessExcludeEachOther() async throws {
-        let url = Fixtures.tempDir().appending(path: "engine.lock")
+        let url = FilesFixtures.tempDir().appending(path: "engine.lock")
         let a = FlockEngineLock(url: url)
         let b = FlockEngineLock(url: url)
         let lease = try #require(a.tryAcquire(owner: .app))
@@ -104,8 +104,8 @@ import Testing
 
 @Suite struct PathContainmentTests {
     @Test func rejectsEscapes() throws {
-        let root = Fixtures.tempDir()
-        let outside = Fixtures.tempDir()
+        let root = FilesFixtures.tempDir()
+        let outside = FilesFixtures.tempDir()
         try FileManager.default.createSymbolicLink(at: root.appending(path: "link"), withDestinationURL: outside)
         let c = PathContainment(root: root)
         #expect(throws: PathContainmentError.self) { try c.url(for: RelativePath(rawValue: "../x")) }
@@ -120,8 +120,8 @@ import Testing
 
     @Test func allowsSymlinkedRootItself() throws {
         // The folder root may itself be a symlink (e.g. /var → /private/var).
-        let real = Fixtures.tempDir()
-        let linkParent = Fixtures.tempDir()
+        let real = FilesFixtures.tempDir()
+        let linkParent = FilesFixtures.tempDir()
         let link = linkParent.appending(path: "root")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
         #expect(try PathContainment(root: link).url(for: RelativePath(rawValue: "x/y")).lastPathComponent == "y")
