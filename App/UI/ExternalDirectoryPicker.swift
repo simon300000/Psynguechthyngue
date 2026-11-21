@@ -72,7 +72,6 @@ struct FolderOptionsSection: View {
             }
             .pickerStyle(.inline)
             .labelsHidden()
-            .accessibilityIdentifier("folder.location")
             .onChange(of: useExternal) { _, now in
                 if now { if external == nil { picking = true } } else { external = nil }
                 if now { mode = .everything }

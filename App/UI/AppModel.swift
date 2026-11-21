@@ -29,7 +29,8 @@ final class AppModel {
     let notifier: AppNotifier
     /// True under `-PsyUITestFixture` (FakeSyncEngine).
     let isFixture: Bool
-    let isOnMac = ProcessInfo.processInfo.isiOSAppOnMac
+    /// Designed for iPad on Mac: no QR scanning, engine keeps running in background.
+    let isOnMac: Bool
 
     private(set) var engineState: EngineState = .stopped
     private(set) var localID: DeviceID?
@@ -41,13 +42,20 @@ final class AppModel {
     private(set) var pendingFolders: [PendingFolder] = []
     private(set) var transfers: [String: ActiveTransfer] = [:]
     private(set) var banner: Banner?
+    /// Counts of engine start/stop transitions (fixture diagnostics for UI tests).
+    private(set) var engineStarts = 0
+    private(set) var engineStops = 0
     var isActive = false
+    /// Set while the onboarding cover is visible so adding the first device does not close it.
+    var onboardingInProgress = false
 
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var bannerTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
-    init(engine: any SyncEngine, host: LiveEngineHost, settings: AppSettings, notifier: AppNotifier, isFixture: Bool) {
+    init(engine: any SyncEngine, host: LiveEngineHost, settings: AppSettings, notifier: AppNotifier, isFixture: Bool,
+         isOnMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac) {
+        self.isOnMac = isOnMac
         self.engine = engine
         self.host = host
         self.settings = settings
@@ -75,8 +83,8 @@ final class AppModel {
         switch event {
         case let .engineStateChanged(state):
             engineState = state
-            if case .running = state { scheduleRefresh() }
-            if case .stopped = state { transfers.removeAll() }
+            if case .running = state { engineStarts += 1; scheduleRefresh() }
+            if case .stopped = state { engineStops += 1; transfers.removeAll() }
         case let .deviceConnectionChanged(c):
             connections[c.deviceID] = c
         case let .pendingDevicesChanged(list):
@@ -121,6 +129,10 @@ final class AppModel {
             let snap = try await engine.snapshot()
             statuses = Dictionary(uniqueKeysWithValues: snap.folders.map { ($0.folderID, $0) })
             localID = snap.localDeviceID ?? localID
+            // Existing configuration (e.g. reinstall with kept identity): no first-run guide.
+            if !settings.onboardingDone && !onboardingInProgress && (!devices.isEmpty || !folders.isEmpty) {
+                settings.onboardingDone = true
+            }
         } catch {
             if case EngineError.notRunning = error { return }
             show(error: Self.message(for: error))

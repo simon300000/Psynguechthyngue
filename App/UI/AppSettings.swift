@@ -27,7 +27,8 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        func bool(_ key: String, _ fallback: Bool) -> Bool { defaults.object(forKey: key) as? Bool ?? fallback }
+        // `bool(forKey:)` also accepts "YES"/"NO" strings from launch arguments.
+        func bool(_ key: String, _ fallback: Bool) -> Bool { defaults.object(forKey: key) == nil ? fallback : defaults.bool(forKey: key) }
         onboardingDone = bool("psy.onboardingDone", false)
         syncOnCellular = bool("psy.syncOnCellular", true)
         respectLowDataMode = bool("psy.respectLowData", true)

@@ -104,7 +104,6 @@ struct FolderDetailView: View {
                         Button("Rescan Now") { Task { await model.rescan(folder) } }
                             .accessibilityIdentifier("folder.rescan")
                     }
-                    .accessibilityIdentifier("folder.advanced")
                 }
 
                 Section {

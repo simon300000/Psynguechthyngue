@@ -71,7 +71,6 @@ struct SettingsView: View {
                         Button("Reset Devices and Folders", role: .destructive) { confirmReset = true }
                             .accessibilityIdentifier("settings.reset")
                     }
-                    .accessibilityIdentifier("settings.advanced")
                 }
             }
             .navigationTitle("Settings")

@@ -75,6 +75,8 @@ struct OnboardingView: View {
             .sheet(isPresented: $creatingFolder) { NewFolderView() }
         }
         .interactiveDismissDisabled()
+        .onAppear { model.onboardingInProgress = true }
+        .onDisappear { model.onboardingInProgress = false }
     }
 
     private func header(_ title: LocalizedStringKey, symbol: String, text: LocalizedStringKey) -> some View {

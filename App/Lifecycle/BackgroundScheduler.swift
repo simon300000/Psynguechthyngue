@@ -28,25 +28,35 @@ final class BackgroundScheduler {
         Bundle.main.object(forInfoDictionaryKey: "PsyProcessingTaskIdentifier") as? String
     }
 
-    var isEnabled: Bool { defaults.object(forKey: Self.enabledKey) as? Bool ?? true }
+    var isEnabled: Bool { defaults.object(forKey: Self.enabledKey) == nil ? true : defaults.bool(forKey: Self.enabledKey) }
 
     /// Must be called before `application(_:didFinishLaunchingWithOptions:)` returns.
     func register() {
         if let id = Self.refreshIdentifier {
-            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { [weak self] task in
-                guard let task = task as? BGAppRefreshTask else { return }
-                nonisolated(unsafe) let unsafeTask = task
-                Task { @MainActor in self?.run(unsafeTask, kind: .appRefresh) }
-            }
+            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: Self.launchHandler(self, kind: .appRefresh))
             log.record("bgtask-register", "\(id) ok=\(ok)")
         }
         if let id = Self.processingIdentifier {
-            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { [weak self] task in
-                guard let task = task as? BGProcessingTask else { return }
-                nonisolated(unsafe) let unsafeTask = task
-                Task { @MainActor in self?.run(unsafeTask, kind: .processing) }
-            }
+            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: Self.launchHandler(self, kind: .processing))
             log.record("bgtask-register", "\(id) ok=\(ok)")
+        }
+    }
+
+    /// Built outside the main actor so the closure carries no actor-isolation
+    /// check: the system may invoke handlers on any queue.
+    private nonisolated static func launchHandler(_ scheduler: BackgroundScheduler, kind: BackgroundTaskKind) -> @Sendable (BGTask) -> Void {
+        { [weak scheduler] task in
+            nonisolated(unsafe) let unsafeTask = task
+            Task { @MainActor in scheduler?.run(unsafeTask, kind: kind) }
+        }
+    }
+
+    private nonisolated static func expirationHandler(host: LiveEngineHost, work: Task<Void, Never>) -> @Sendable () -> Void {
+        {
+            Task { @MainActor in
+                await host.handle(.backgroundTaskExpiring)
+                _ = work   // keep the run task alive until it finishes stopping the engine
+            }
         }
     }
 
@@ -94,11 +104,6 @@ final class BackgroundScheduler {
             self.log.record("bgtask-completed", "\(unsafeTask.identifier) settled=\(ok)")
             unsafeTask.setTaskCompleted(success: true)
         }
-        task.expirationHandler = { [host] in
-            Task { @MainActor in
-                await host.handle(.backgroundTaskExpiring)
-                _ = work   // keep the run task alive until it finishes stopping the engine
-            }
-        }
+        task.expirationHandler = Self.expirationHandler(host: host, work: work)
     }
 }

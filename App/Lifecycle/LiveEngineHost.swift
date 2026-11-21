@@ -30,7 +30,7 @@ final class LiveEngineHost: EngineHosting {
     /// `Stop` timed out → the process must not try to start again (DESIGN §4.3).
     private(set) var restartRequired = false
     var preferences = PolicyPreferences() {
-        didSet { if preferences != oldValue { Task { await self.reevaluatePolicy() } } }
+        didSet { if preferences != oldValue { Task { await self.enqueue { await self.applyPolicy(force: false) } } } }
     }
 
     @ObservationIgnored private let policy: any SyncPolicy
@@ -40,7 +40,13 @@ final class LiveEngineHost: EngineHosting {
     @ObservationIgnored private var inputs = PolicyInputs(network: .wifiOrWired)
     @ObservationIgnored private var chain: Task<Void, Never>?
     @ObservationIgnored private var backgroundExpired = false
-    @ObservationIgnored private var lastBackgroundDeadlineMarker: ContinuousClock.Instant?
+    /// True from the moment `start` is called until a `stop` succeeds. The
+    /// engine (and its lock) may be live even when `phase == .idle`, e.g. after
+    /// a start timeout or a failed stop, so draining keys off this flag.
+    @ObservationIgnored private var engineMaybeLive = false
+    /// beginBackgroundTask token taken synchronously in the didEnterBackground
+    /// callback, before any queued work (see `prepareForBackground`).
+    @ObservationIgnored private var pendingBackgroundToken: Int?
     @ObservationIgnored var onFailure: (@MainActor (String) -> Void)?
 
     init(
@@ -67,18 +73,34 @@ final class LiveEngineHost: EngineHosting {
         default:
             break
         }
+        await enqueue { await self.process(signal) }
+    }
+
+    func policyInputsChanged(_ inputs: PolicyInputs) async {
+        await enqueue {
+            self.inputs = inputs
+            await self.applyPolicy(force: false)
+        }
+    }
+
+    /// Serialises every engine-affecting operation (lifecycle + policy).
+    private func enqueue(_ operation: @escaping @MainActor () async -> Void) async {
         let previous = chain
         let task = Task { @MainActor in
             await previous?.value
-            await self.process(signal)
+            await operation()
         }
         chain = task
         await task.value
     }
 
-    func policyInputsChanged(_ inputs: PolicyInputs) async {
-        self.inputs = inputs
-        await reevaluatePolicy()
+    /// Call synchronously from the didEnterBackground callback: takes the
+    /// background-time assertion *before* queued work (a slow start) runs, so
+    /// the drain is always covered (I2).
+    func prepareForBackground() {
+        guard !isOnMac, pendingBackgroundToken == nil else { return }
+        let token = beginTask(reason: "didEnterBackground")
+        pendingBackgroundToken = token
     }
 
     // MARK: Processing
@@ -108,6 +130,11 @@ final class LiveEngineHost: EngineHosting {
 
     private func becomeActive() async {
         if restartRequired { return }
+        if let token = pendingBackgroundToken {
+            // Back in the foreground before the drain ran: nothing to cover.
+            pendingBackgroundToken = nil
+            endTask(token)
+        }
         switch phase {
         case .foregroundRunning:
             return
@@ -121,6 +148,7 @@ final class LiveEngineHost: EngineHosting {
             break
         }
         log.record("engine-start", "context=foreground")
+        engineMaybeLive = true
         do {
             try await withTimeout(LifecycleBudget.foregroundStartTimeout) {
                 try await self.engine.start(context: .foreground)
@@ -132,15 +160,21 @@ final class LiveEngineHost: EngineHosting {
         } catch {
             phase = .idle
             fail("start: \(error)")
+            // A timed-out start may still complete later: make sure it is stopped.
+            await stopQuietly()
         }
     }
 
     private func enterBackground() async {
-        guard phase == .foregroundRunning else { return }
+        defer {
+            if let token = pendingBackgroundToken { pendingBackgroundToken = nil; endTask(token) }
+        }
         if isOnMac {
             log.record("background-ignored", "isiOSAppOnMac: engine keeps running")
             return
         }
+        if isBackgroundRunning { return }   // the BG task owns the engine
+        guard phase == .foregroundRunning || engineMaybeLive else { return }
         await drain(reason: "didEnterBackground", requireTask: true)
     }
 
@@ -150,14 +184,18 @@ final class LiveEngineHost: EngineHosting {
             return
         }
         log.record("bg-start", "kind=\(kind.rawValue) deadline=\(deadline)")
-        backgroundExpired = false
+        engineMaybeLive = true
         do {
-            try await engine.start(context: .background)
+            try await withTimeout(LifecycleBudget.foregroundStartTimeout) {
+                try await self.engine.start(context: .background)
+            }
             phase = .backgroundRunning(kind: kind)
             await applyPolicy(force: true)
+            if backgroundExpired { log.record("bg-expired-during-start") }
         } catch {
             phase = .idle
             fail("bg-start: \(error)")
+            await stopQuietly()
         }
     }
 
@@ -166,6 +204,7 @@ final class LiveEngineHost: EngineHosting {
     /// settled state (all folders upToDate/waitingForDevices) before stopping.
     func runBackgroundTask(kind: BackgroundTaskKind) async -> Bool {
         let criteria: BackgroundCompletionCriteria = kind == .processing ? .processing : .appRefresh
+        backgroundExpired = false   // reset here, never after start (an expiry may arrive while queued)
         await handle(.backgroundTaskStarted(kind: kind, deadline: criteria.maximumRuntime))
         guard isBackgroundRunning else { return false }
         let clock = ContinuousClock()
@@ -175,7 +214,7 @@ final class LiveEngineHost: EngineHosting {
         while isBackgroundRunning {
             if backgroundExpired { break }
             if clock.now - started >= criteria.maximumRuntime { break }
-            if let status = try? await engine.snapshot() {
+            if let status = try? await withTimeoutValue(.seconds(2), { try await self.engine.snapshot() }) {
                 let quiet = !status.folders.isEmpty
                     && status.folders.allSatisfy { $0.state == .upToDate || $0.state == .waitingForDevices }
                 if quiet {
@@ -188,15 +227,11 @@ final class LiveEngineHost: EngineHosting {
             try? await Task.sleep(for: .milliseconds(250))
         }
         let reason = backgroundExpired ? "expired" : (settled ? "settled" : "max-runtime")
-        let previous = chain
-        let task = Task { @MainActor in
-            await previous?.value
+        await enqueue {
             if self.isBackgroundRunning {
                 await self.drain(reason: "bg-\(reason)", requireTask: false, deadline: .seconds(5))
             }
         }
-        chain = task
-        await task.value
         return settled
     }
 
@@ -208,35 +243,65 @@ final class LiveEngineHost: EngineHosting {
         phase = .draining
         var token: Int?
         if requireTask {
-            token = tasks.begin(name: "psy.engine.stop") { [weak self] in
-                self?.log.record("bgtask-expired", "system expiration handler fired during drain")
+            if let pending = pendingBackgroundToken {
+                token = pending
+                pendingBackgroundToken = nil
+                log.record("beginBackgroundTask", "reason=\(reason) token=\(pending) (taken in callback)")
+            } else {
+                token = beginTask(reason: reason)
             }
-            log.record("beginBackgroundTask", "reason=\(reason) token=\(token ?? -1)")
         }
         log.record("engine-stop", "deadline=\(deadline)")
         do {
             try await engine.stop(deadline: deadline)
+            engineMaybeLive = false
             log.record("lock-released", "engine stopped")
         } catch {
             if case let .bridge(code, _) = error as? EngineError, code == BridgeContract.Code.stopTimeout.rawValue {
                 restartRequired = true
             }
+            // engineMaybeLive stays true: the next background transition retries the stop.
             fail("stop: \(error)")
         }
         phase = .idle
-        if let token {
-            tasks.end(token)
-            log.record("endBackgroundTask", "token=\(token)")
-        }
+        if let token { endTask(token) }
         let elapsed = clock.now - t0
         log.record("drain-complete", "reason=\(reason) elapsed=\(elapsed)")
     }
 
-    // MARK: Policy
+    // MARK: Background-time assertions
 
-    private func reevaluatePolicy() async {
-        await applyPolicy(force: false)
+    @ObservationIgnored private var liveTokens = Set<Int>()
+
+    private func beginTask(reason: String) -> Int {
+        var token = -1
+        token = tasks.begin(name: "psy.engine.stop") { [weak self] in
+            // Out of time: end the assertion now so the watchdog does not kill us.
+            self?.log.record("bgtask-expired", "system expiration handler fired")
+            self?.endTask(token)
+        }
+        liveTokens.insert(token)
+        log.record("beginBackgroundTask", "reason=\(reason) token=\(token)")
+        return token
     }
+
+    /// Idempotent per token.
+    private func endTask(_ token: Int) {
+        guard liveTokens.remove(token) != nil else { return }
+        tasks.end(token)
+        log.record("endBackgroundTask", "token=\(token)")
+    }
+
+    private func stopQuietly() async {
+        do {
+            try await engine.stop(deadline: LifecycleBudget.backgroundStopDeadline)
+            engineMaybeLive = false
+        } catch {
+            log.record("stop-after-failure", "\(error)")
+        }
+    }
+
+    // MARK: Policy
 
     private func applyPolicy(force: Bool) async {
         let next = policy.decide(inputs: inputs, preferences: preferences)
@@ -259,14 +324,35 @@ final class LiveEngineHost: EngineHosting {
     }
 
     private func withTimeout(_ timeout: Duration, _ body: @escaping @Sendable () async throws -> Void) async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await body() }
-            group.addTask {
-                try await Task.sleep(for: timeout)
-                throw EngineError.bridge(code: BridgeContract.Code.deadline.rawValue, detail: "engine start timed out")
+        try await withTimeoutValue(timeout, body)
+    }
+
+    /// Returns when `body` finishes or `timeout` elapses, whichever is first.
+    /// Unlike a task group it does not wait for a body that ignores cancellation
+    /// (the body keeps running detached; callers compensate via `engineMaybeLive`).
+    private func withTimeoutValue<T: Sendable>(_ timeout: Duration, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+        let gate = ResumeGate<T>()
+        return try await withCheckedThrowingContinuation { continuation in
+            gate.set(continuation)
+            let work = Task { do { gate.resume(.success(try await body())) } catch { gate.resume(.failure(error)) } }
+            Task {
+                try? await Task.sleep(for: timeout)
+                gate.resume(.failure(EngineError.bridge(code: BridgeContract.Code.deadline.rawValue, detail: "timed out after \(timeout)")))
+                work.cancel()
             }
-            _ = try await group.next()
-            group.cancelAll()
         }
+    }
+}
+
+/// Resumes a continuation exactly once.
+private final class ResumeGate<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+
+    func set(_ c: CheckedContinuation<T, Error>) { lock.lock(); continuation = c; lock.unlock() }
+
+    func resume(_ result: Result<T, Error>) {
+        lock.lock(); let c = continuation; continuation = nil; lock.unlock()
+        c?.resume(with: result)
     }
 }

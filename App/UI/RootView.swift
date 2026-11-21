@@ -25,13 +25,22 @@ struct RootView: View {
                 .tag(Tab.settings)
         }
         .overlay(alignment: .top) { BannerView() }
+        .overlay(alignment: .bottomLeading) {
+            if model.isFixture {
+                // Invisible probe for UI tests: engine transitions seen by the UI.
+                Text("starts=\(model.engineStarts) stops=\(model.engineStops)")
+                    .font(.system(size: 1)).opacity(0.01)
+                    .accessibilityIdentifier("debug.engine")
+                    .allowsHitTesting(false)
+            }
+        }
         .animation(.default, value: model.banner)
         .fullScreenCover(isPresented: onboardingBinding) { OnboardingView() }
     }
 
     private var onboardingBinding: Binding<Bool> {
         Binding(
-            get: { !settings.onboardingDone && model.devices.isEmpty && model.folders.isEmpty },
+            get: { !settings.onboardingDone },
             set: { if !$0 { settings.onboardingDone = true } }
         )
     }

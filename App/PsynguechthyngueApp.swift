@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated {
                     env.model.isActive = false
+                    env.host.prepareForBackground()   // assertion first, before any queued work
                     env.scheduler.scheduleNext()
                     Task { await env.host.handle(.didEnterBackground) }
                 }

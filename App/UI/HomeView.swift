@@ -71,7 +71,6 @@ struct HomeView: View {
         } header: {
             Text("Needs your attention")
         }
-        .accessibilityIdentifier("home.inbox")
     }
 
     private var transfers: some View {

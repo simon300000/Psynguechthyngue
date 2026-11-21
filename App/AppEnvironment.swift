@@ -26,9 +26,7 @@ final class AppEnvironment {
             let suite = "psy.uitest"
             UserDefaults.standard.removePersistentDomain(forName: suite)
             defaults = UserDefaults(suiteName: suite) ?? .standard
-            for (i, a) in args.enumerated() where a.hasPrefix("-psy.") && i + 1 < args.count {
-                defaults.set(args[i + 1] == "YES", forKey: String(a.dropFirst()))
-            }
+            // `-psy.<key> YES` launch arguments override via the argument domain.
         } else {
             defaults = .standard
         }
@@ -43,13 +41,15 @@ final class AppEnvironment {
         } else {
             engine = EngineFactory.makeLiveEngine()
         }
-        let host = LiveEngineHost(engine: engine, tasks: UIKitBackgroundTaskRunner())
+        // `-PsySimulateMac` (fixture only) exercises the isiOSAppOnMac branch on the simulator.
+        let onMac = ProcessInfo.processInfo.isiOSAppOnMac || (fixture && args.contains("-PsySimulateMac"))
+        let host = LiveEngineHost(engine: engine, tasks: UIKitBackgroundTaskRunner(), isOnMac: onMac)
         host.preferences = settings.policyPreferences
         self.host = host
         scheduler = BackgroundScheduler(host: host, defaults: defaults)
         policyMonitor = PolicyMonitor(host: host)
         model = AppModel(engine: engine, host: host, settings: settings,
-                         notifier: AppNotifier(enabled: !fixture), isFixture: fixture)
+                         notifier: AppNotifier(enabled: !fixture), isFixture: fixture, isOnMac: onMac)
         settings.onChange = { [weak self] in
             guard let self else { return }
             self.host.preferences = self.settings.policyPreferences
