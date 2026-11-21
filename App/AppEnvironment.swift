@@ -37,6 +37,7 @@ final class AppEnvironment {
             let name = Self.argument("-PsyUITestScenario", in: args) ?? "populated"
             let fake = FakeSyncEngine(named: name)
             if let ms = Self.argument("-PsyUITestStartDelayMS", in: args).flatMap(Int.init) { fake.startDelay = .milliseconds(ms) }
+            if let ms = Self.argument("-PsyUITestStopDelayMS", in: args).flatMap(Int.init) { fake.stopDelay = .milliseconds(ms) }
             engine = fake
         } else {
             engine = EngineFactory.makeLiveEngine()
@@ -50,6 +51,8 @@ final class AppEnvironment {
         policyMonitor = PolicyMonitor(host: host)
         model = AppModel(engine: engine, host: host, settings: settings,
                          notifier: AppNotifier(enabled: !fixture), isFixture: fixture, isOnMac: onMac)
+        let filesDisabled = fixture && args.contains("-PsyUITestFilesDisabled")
+        model.filesStatus = StaticFilesLocationStatus(filesDisabled ? .disabled : .unknown)
         settings.onChange = { [weak self] in
             guard let self else { return }
             self.host.preferences = self.settings.policyPreferences
@@ -65,6 +68,9 @@ final class AppEnvironment {
     /// Called from `application(_:didFinishLaunchingWithOptions:)`.
     func bootstrap() {
         scheduler.register()
+        #if DEBUG
+        scheduler.installDebugTrigger()
+        #endif
         if !isFixture { policyMonitor.start() }
         model.startObserving()
     }

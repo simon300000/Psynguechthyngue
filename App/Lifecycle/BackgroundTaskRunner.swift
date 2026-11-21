@@ -8,6 +8,8 @@ protocol BackgroundTaskRunning: AnyObject {
     /// system is about to suspend the app.
     func begin(name: String, expiration: @escaping @MainActor () -> Void) -> Int
     func end(_ token: Int)
+    /// Seconds of background time left (diagnostics only).
+    var remaining: Double { get }
 }
 
 @MainActor
@@ -20,6 +22,8 @@ final class UIKitBackgroundTaskRunner: BackgroundTaskRunning {
         }
         return identifier.rawValue
     }
+
+    var remaining: Double { UIApplication.shared.backgroundTimeRemaining }
 
     func end(_ token: Int) {
         let identifier = UIBackgroundTaskIdentifier(rawValue: token)

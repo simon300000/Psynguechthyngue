@@ -46,6 +46,13 @@ final class AppModel {
     private(set) var engineStarts = 0
     private(set) var engineStops = 0
     var isActive = false
+    private(set) var filesLocation: FilesLocationState = .unknown
+    @ObservationIgnored var filesStatus: (any FilesLocationStatusProviding)?
+
+    func refreshFilesLocation() async {
+        guard let filesStatus else { return }
+        filesLocation = await filesStatus.currentState()
+    }
     /// Set while the onboarding cover is visible so adding the first device does not close it.
     var onboardingInProgress = false
 

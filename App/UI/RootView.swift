@@ -28,7 +28,7 @@ struct RootView: View {
         .overlay(alignment: .bottomLeading) {
             if model.isFixture {
                 // Invisible probe for UI tests: engine transitions seen by the UI.
-                Text("starts=\(model.engineStarts) stops=\(model.engineStops)")
+                Text(verbatim: "starts=\(model.engineStarts) stops=\(model.engineStops)")
                     .font(.system(size: 1)).opacity(0.01)
                     .accessibilityIdentifier("debug.engine")
                     .allowsHitTesting(false)

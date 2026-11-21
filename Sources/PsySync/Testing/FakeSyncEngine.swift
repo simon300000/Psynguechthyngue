@@ -98,11 +98,20 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
 
     // MARK: Lifecycle
 
+    /// Simulates a blocking bridge call on a dedicated thread (like the real
+    /// `SyncthingBridge`), rather than a timer that the OS may coalesce in background.
+    private static func blockOnThread(_ d: Duration) async {
+        let micros = UInt32(d.components.seconds * 1_000_000 + d.components.attoseconds / 1_000_000_000_000)
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            Thread.detachNewThread { usleep(micros); c.resume() }
+        }
+    }
+
     public func start(context: EngineRunContext) async throws {
         record("start:\(context.rawValue)")
         if case .running = sync({ $0.engineState }) { return }
         setState(.starting)
-        if startDelay > .zero { try? await Task.sleep(for: startDelay) }
+        if startDelay > .zero { await Self.blockOnThread(startDelay) }
         setState(.running(since: Date()))
     }
 
@@ -110,7 +119,7 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
         record("stop")
         if case .stopped = sync({ $0.engineState }) { return }
         setState(.stopping)
-        if stopDelay > .zero { try? await Task.sleep(for: stopDelay) }
+        if stopDelay > .zero { await Self.blockOnThread(stopDelay) }
         setState(.stopped)
     }
 

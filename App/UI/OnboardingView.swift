@@ -11,7 +11,7 @@ struct OnboardingView: View {
     @State private var addingDevice = false
     @State private var creatingFolder = false
 
-    private var lastStep: Int { model.isOnMac ? 2 : 3 }
+    private var lastStep: Int { 3 }
 
     var body: some View {
         NavigationStack {
@@ -43,10 +43,15 @@ struct OnboardingView: View {
                             Label("\(model.folders.count) folders", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                         }
                     default:
-                        header("Find your files", symbol: "folder",
-                               text: "Your synced folders appear in the Files app under Locations → Psynguechthyngue. If you don’t see it, tap ••• in Files, choose Edit, and turn it on.")
-                        Button("Open Files") { openURL(URL(string: "shareddocuments://")!) }
-                            .buttonStyle(.bordered)
+                        if model.isOnMac {
+                            header("Find your files in Finder", symbol: "folder",
+                                   text: "On Mac this location is off at first. Open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue. Closing the window stops syncing; minimize it to keep syncing.")
+                        } else {
+                            header("Find your files", symbol: "folder",
+                                   text: "Your synced folders appear in the Files app under Locations → Psynguechthyngue. If you don’t see it, tap ••• in Files, choose Edit, and turn it on.")
+                            Button("Open Files") { openURL(URL(string: "shareddocuments://")!) }
+                                .buttonStyle(.bordered)
+                        }
                     }
                 }
                 .padding(24)

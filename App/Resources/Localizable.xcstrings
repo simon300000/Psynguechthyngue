@@ -389,6 +389,16 @@
         }
       }
     },
+    "Closing the window stops syncing. Minimize it to keep syncing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭窗口会停止同步，最小化窗口可继续同步。"
+          }
+        }
+      }
+    },
     "Conflicts": {
       "localizations": {
         "zh-Hans": {
@@ -679,6 +689,16 @@
         }
       }
     },
+    "Files location is turned off": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件位置未启用"
+          }
+        }
+      }
+    },
     "Files that were already synced stay on this device. You can add the device again later.": {
       "localizations": {
         "zh-Hans": {
@@ -695,6 +715,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "查找你的文件"
+          }
+        }
+      }
+    },
+    "Find your files in Finder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中查找文件"
           }
         }
       }
@@ -1079,12 +1109,22 @@
         }
       }
     },
-    "On Mac, syncing continues while the app is open.": {
+    "On Mac this location is off at first. Open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue. Closing the window stops syncing; minimize it to keep syncing.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 Mac 上，只要 App 打开就会持续同步。"
+            "value": "在 Mac 上，此位置默认未启用。请打开 系统设置 ▸ 通用 ▸ 登录项与扩展 ▸ 文件提供程序，启用 Psynguechthyngue。关闭窗口会停止同步，最小化窗口可继续同步。"
+          }
+        }
+      }
+    },
+    "On Mac, syncing continues while the window is open or minimized. Closing the window quits the app and stops syncing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Mac 上，窗口打开或最小化时会持续同步。关闭窗口会退出 App 并停止同步。"
           }
         }
       }
@@ -1965,6 +2005,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "这是本机的 ID，请输入另一台设备的 ID。"
+          }
+        }
+      }
+    },
+    "To see your synced folders in Files, open the Files app, tap ••• ▸ Edit, and turn on Psynguechthyngue.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要在“文件”中查看同步的文件夹，请打开“文件”App，轻点 ••• ▸ 编辑，然后启用 Psynguechthyngue。"
+          }
+        }
+      }
+    },
+    "To see your synced folders in Finder, open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要在访达中查看同步的文件夹，请打开 系统设置 ▸ 通用 ▸ 登录项与扩展 ▸ 文件提供程序，然后启用 Psynguechthyngue。"
           }
         }
       }

@@ -10,6 +10,7 @@ struct HomeView: View {
         NavigationStack {
             List {
                 Section { StatusCard() }
+                if model.filesLocation == .disabled { Section { FilesDisabledCard() } }
                 if model.pendingCount > 0 { inbox }
                 if !model.syncingFolders.isEmpty || !model.transfers.isEmpty { transfers }
                 if !model.allIssues.isEmpty { problems }
@@ -126,6 +127,25 @@ struct HomeView: View {
     }
 }
 
+/// Shown when the Files/Finder location is turned off (default on Mac).
+struct FilesDisabledCard: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Files location is turned off", systemImage: "externaldrive.badge.exclamationmark")
+                .font(.headline).foregroundStyle(.orange)
+            Text(model.isOnMac
+                 ? "To see your synced folders in Finder, open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue."
+                 : "To see your synced folders in Files, open the Files app, tap ••• ▸ Edit, and turn on Psynguechthyngue.")
+                .font(.subheadline).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("home.filesdisabled")
+    }
+}
+
 /// Overall state at a glance (engine, policy, devices).
 struct StatusCard: View {
     @Environment(AppModel.self) private var model
@@ -164,6 +184,11 @@ struct StatusCard: View {
                 } else if !model.devices.isEmpty {
                     Text("\(model.connectedCount) of \(model.devices.count) devices connected")
                         .font(.subheadline).foregroundStyle(.secondary)
+                    if model.isOnMac {
+                        Text("Closing the window stops syncing. Minimize it to keep syncing.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("home.machint")
+                    }
                 } else if case let .failed(_, detail) = model.engineState {
                     Text(detail).font(.footnote).foregroundStyle(.secondary)
                 }

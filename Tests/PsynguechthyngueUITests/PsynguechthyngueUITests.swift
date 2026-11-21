@@ -292,8 +292,10 @@ final class PsynguechthyngueUITests: PsyUITestCase {
     }
 
     func testMacBranchKeepsEngineRunningAndOffersPaste() {
-        launch(extra: ["-PsySimulateMac"])
+        launch(extra: ["-PsySimulateMac", "-PsyUITestFilesDisabled"])
         XCTAssertTrue(text("1 of 2 devices connected").waitForExistence(timeout: 5))
+        XCTAssertTrue(anyLabel("Closing the window stops syncing").exists, "Mac window-close hint")
+        XCTAssertTrue(anyLabel("Login Items & Extensions").waitForExistence(timeout: 5), "Mac Files-location guidance")
         XCUIDevice.shared.press(.home)
         sleep(2)
         app.activate()

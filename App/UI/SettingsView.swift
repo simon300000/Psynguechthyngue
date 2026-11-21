@@ -36,7 +36,7 @@ struct SettingsView: View {
                     }
                 } header: { Text("Background") } footer: {
                     Text(model.isOnMac
-                         ? "On Mac, syncing continues while the app is open."
+                         ? "On Mac, syncing continues while the window is open or minimized. Closing the window quits the app and stops syncing."
                          : "iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open.")
                 }
 

@@ -30,7 +30,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated {
                     env.model.isActive = true
-                    Task { await env.host.handle(.didBecomeActive); await env.model.refreshAll() }
+                    Task {
+                        await env.host.handle(.didBecomeActive)
+                        await env.model.refreshAll()
+                        await env.model.refreshFilesLocation()
+                    }
                 }
             }
             center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
@@ -43,6 +47,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             }
             center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { Task { await env.host.handle(.memoryWarning) } }
+            }
+            // Mac (Designed for iPad): closing the last window terminates the app ~5 s
+            // later without a background transition. Stop the engine gracefully now.
+            center.addObserver(forName: UIScene.didDisconnectNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    let remaining = UIApplication.shared.connectedScenes.filter { $0.activationState != .unattached }
+                    guard env.model.isOnMac, remaining.isEmpty else { return }
+                    LifecycleLog.shared.record("last-window-closed", "isiOSAppOnMac: stopping engine before termination")
+                    Task { await env.host.handle(.willTerminate) }
+                }
             }
             center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { Task { await env.host.handle(.willTerminate) } }

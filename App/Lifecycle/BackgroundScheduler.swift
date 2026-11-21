@@ -60,6 +60,38 @@ final class BackgroundScheduler {
         }
     }
 
+    #if DEBUG
+    /// Simulator stand-in for `_simulateLaunchForTaskWithIdentifier` (BGTaskScheduler is
+    /// unavailable in the Simulator). Trigger with
+    ///   xcrun simctl spawn booted notifyutil -p app.psynguechthyngue.debug.bg-refresh
+    /// Runs the same host path as a real BGAppRefreshTask under a background assertion.
+    static let debugRefreshNotification = "app.psynguechthyngue.debug.bg-refresh"
+
+    func installDebugTrigger() {
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterAddObserver(center, observer, { _, observer, _, _, _ in
+            guard let observer else { return }
+            let scheduler = Unmanaged<BackgroundScheduler>.fromOpaque(observer).takeUnretainedValue()
+            nonisolated(unsafe) let s = scheduler
+            Task { @MainActor in s.debugRun(kind: .appRefresh) }
+        }, Self.debugRefreshNotification as CFString, nil, .deliverImmediately)
+    }
+
+    private func debugRun(kind: BackgroundTaskKind) {
+        log.record("bgtask-launched", "debug-trigger kind=\(kind.rawValue)")
+        let runner = UIKitBackgroundTaskRunner()
+        var token = 0
+        token = runner.begin(name: "psy.debug.bgtask") { runner.end(token) }
+        Task { @MainActor in
+            let ok = await self.host.runBackgroundTask(kind: kind)
+            self.defaults.set(Date(), forKey: Self.lastRunKey)
+            self.log.record("bgtask-completed", "debug-trigger settled=\(ok)")
+            runner.end(token)
+        }
+    }
+    #endif
+
     /// Called when the app enters the background and whenever the setting changes.
     func scheduleNext() {
         let scheduler = BGTaskScheduler.shared

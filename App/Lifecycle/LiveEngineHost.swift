@@ -251,11 +251,11 @@ final class LiveEngineHost: EngineHosting {
                 token = beginTask(reason: reason)
             }
         }
-        log.record("engine-stop", "deadline=\(deadline)")
+        log.record("engine-stop", "deadline=\(deadline) remaining=\(Int(min(tasks.remaining, 9999)))s")
         do {
             try await engine.stop(deadline: deadline)
             engineMaybeLive = false
-            log.record("lock-released", "engine stopped")
+            log.record("lock-released", "engine stopped remaining=\(Int(min(tasks.remaining, 9999)))s")
         } catch {
             if case let .bridge(code, _) = error as? EngineError, code == BridgeContract.Code.stopTimeout.rawValue {
                 restartRequired = true
@@ -264,9 +264,9 @@ final class LiveEngineHost: EngineHosting {
             fail("stop: \(error)")
         }
         phase = .idle
-        if let token { endTask(token) }
         let elapsed = clock.now - t0
         log.record("drain-complete", "reason=\(reason) elapsed=\(elapsed)")
+        if let token { endTask(token) }
     }
 
     // MARK: Background-time assertions
@@ -281,15 +281,16 @@ final class LiveEngineHost: EngineHosting {
             self?.endTask(token)
         }
         liveTokens.insert(token)
-        log.record("beginBackgroundTask", "reason=\(reason) token=\(token)")
+        log.record("beginBackgroundTask", "reason=\(reason) token=\(token) remaining=\(Int(min(tasks.remaining, 9999)))s")
         return token
     }
 
     /// Idempotent per token.
     private func endTask(_ token: Int) {
         guard liveTokens.remove(token) != nil else { return }
-        tasks.end(token)
+        // Log first: ending the last assertion may suspend the process immediately.
         log.record("endBackgroundTask", "token=\(token)")
+        tasks.end(token)
     }
 
     private func stopQuietly() async {
