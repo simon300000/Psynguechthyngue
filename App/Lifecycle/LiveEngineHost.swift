@@ -327,7 +327,7 @@ final class LiveEngineHost: EngineHosting {
         guard changed || force else { return }
         do {
             try await engine.apply(next)
-            log.record("policy-applied", "hold=\(next.hold?.rawValue ?? "none")")
+            log.record("policy-applied", "hold=\(next.hold?.rawValue ?? "none") send=\(next.sendLimitKiBps) recv=\(next.receiveLimitKiBps) reduced=\(next.reducedResourceUsage)")
         } catch {
             fail("policy", error)
         }
