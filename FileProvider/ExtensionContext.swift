@@ -98,6 +98,8 @@ enum FootprintProbe {
     struct Sample {
         var footprintMiB: Double
         var peakMiB: Double
+        /// os_proc_available_memory(): headroom before jetsam; footprint + this ≈ the limit.
+        var availableMiB: Double
     }
 
     static func sample() -> Sample? {
@@ -110,12 +112,13 @@ enum FootprintProbe {
         }
         guard kr == KERN_SUCCESS else { return nil }
         return Sample(footprintMiB: Double(info.phys_footprint) / 1_048_576,
-                      peakMiB: Double(info.ledger_phys_footprint_peak) / 1_048_576)
+                      peakMiB: Double(info.ledger_phys_footprint_peak) / 1_048_576,
+                      availableMiB: Double(os_proc_available_memory()) / 1_048_576)
     }
 
     static func log(_ phase: String) {
         guard let s = sample() else { return }
         Logger(subsystem: "app.psynguechthyngue.files", category: "footprint")
-            .log("phase=\(phase, privacy: .public) footprint=\(s.footprintMiB, format: .fixed(precision: 1))MiB peak=\(s.peakMiB, format: .fixed(precision: 1))MiB")
+            .log("phase=\(phase, privacy: .public) footprint=\(s.footprintMiB, format: .fixed(precision: 1))MiB peak=\(s.peakMiB, format: .fixed(precision: 1))MiB available=\(s.availableMiB, format: .fixed(precision: 1))MiB limit≈\(s.footprintMiB + s.availableMiB, format: .fixed(precision: 0))MiB")
     }
 }
