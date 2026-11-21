@@ -50,7 +50,7 @@ validate() { # products-dir platform
     plist_is "${app}/Info.plist" CFBundleIdentifier com.example.Psynguechthyngue.CI
     plist_is "${app}/Info.plist" CFBundleShortVersionString "${EXPECTED_VERSION}"
     plist_is "${app}/Info.plist" CFBundleVersion "${EXPECTED_BUILD}"
-    plist_is "${app}/Info.plist" MinimumOSVersion 17.0
+    plist_is "${app}/Info.plist" MinimumOSVersion 26.0
     plist_is "${app}/Info.plist" CFBundleSupportedPlatforms.0 "${platform}"
     plist_is "${app}/Info.plist" PsyKeychainAccessGroup com.example.Psynguechthyngue.CI
     plist_is "${ext}/Info.plist" CFBundleIdentifier com.example.Psynguechthyngue.CI.FileProvider

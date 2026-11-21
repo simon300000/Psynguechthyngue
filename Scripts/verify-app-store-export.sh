@@ -122,8 +122,8 @@ assert_plist_value "${app_info}" CFBundleShortVersionString "${expected_version}
 assert_plist_value "${app_info}" CFBundleVersion "${expected_build}" "app build"
 assert_plist_value "${provider_info}" CFBundleShortVersionString "${expected_version}" "extension version"
 assert_plist_value "${provider_info}" CFBundleVersion "${expected_build}" "extension build"
-assert_plist_value "${app_info}" MinimumOSVersion "17.0" "app minimum OS"
-assert_plist_value "${provider_info}" MinimumOSVersion "17.0" "extension minimum OS"
+assert_plist_value "${app_info}" MinimumOSVersion "26.0" "app minimum OS"
+assert_plist_value "${provider_info}" MinimumOSVersion "26.0" "extension minimum OS"
 assert_plist_value \
     "${provider_info}" NSExtension.NSExtensionPointIdentifier \
     com.apple.fileprovider-nonui "File Provider extension point"
