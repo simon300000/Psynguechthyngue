@@ -25,34 +25,78 @@ import (
 // Upstream Syncthing keeps process-global state (locations, the default slog
 // logger, protocol counters), so at most one upstream App may run per
 // process: either the long-lived Engine or one restricted FetchFile.
+//
+// A Stop that misses its deadline does not poison the process: the old
+// runtime keeps shutting down in the background ("draining") and keeps the
+// process slot until it is done; the next Start/FetchFile waits for it.
 var (
-	processMu     sync.Mutex
-	processOwner  string // "" | "engine" | "fetch"
-	processPoison bool   // set after a stop timeout; nothing may start again
+	processMu       sync.Mutex
+	processOwner    string        // "" | "engine" | "fetch" | "record"
+	processDraining bool          // owner is a runtime still stopping after a missed deadline
+	processIdle     chan struct{} // closed when processOwner becomes ""
 )
 
-func acquireProcess(owner string) error {
-	processMu.Lock()
-	defer processMu.Unlock()
-	if processPoison {
-		return newError(CodeStopTimeout, "a previous engine did not stop; restart the process")
+// acquireProcess takes the process slot, waiting up to wait for a previous
+// owner to release it.
+func acquireProcess(owner string, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		processMu.Lock()
+		if processOwner == "" {
+			processOwner = owner
+			processDraining = false
+			processIdle = make(chan struct{})
+			processMu.Unlock()
+			return nil
+		}
+		idle, current, draining := processIdle, processOwner, processDraining
+		processMu.Unlock()
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			if draining {
+				return newError(CodeStopTimeout, "the previous %s is still stopping; retry later", current)
+			}
+			return newError(CodeAlreadyRunning, "%s already owns the Syncthing runtime in this process", current)
+		}
+		select {
+		case <-idle:
+		case <-time.After(remaining):
+		}
 	}
-	if processOwner != "" {
-		return newError(CodeAlreadyRunning, "%s already owns the Syncthing runtime in this process", processOwner)
-	}
-	processOwner = owner
-	return nil
 }
 
-func releaseProcess(owner string, poisoned bool) {
+func releaseProcess(owner string) {
 	processMu.Lock()
 	defer processMu.Unlock()
 	if processOwner == owner {
 		processOwner = ""
+		processDraining = false
+		close(processIdle)
 	}
-	if poisoned {
-		processPoison = true
+}
+
+// markDraining records that owner's runtime missed its stop deadline and is
+// still shutting down.
+func markDraining(owner string) {
+	processMu.Lock()
+	defer processMu.Unlock()
+	if processOwner == owner {
+		processDraining = true
 	}
+}
+
+// connectionCloseTimeout bounds how long upstream waits to deliver a BEP
+// Close message before dropping a connection (protocol.CloseTimeout, 10 s
+// upstream). A peer that vanished mid-transfer (writer blocked or gone) made
+// every Stop wait the full 10 s before the DB was even closed; 2 s keeps the
+// polite close for live peers and lets Stop meet a 5-10 s background budget.
+const connectionCloseTimeout = 2 * time.Second
+
+// tuneUpstream applies process-wide upstream knobs. Called while holding the
+// process slot and before any connection exists, so no goroutine reads them
+// concurrently.
+func tuneUpstream() {
+	protocol.CloseTimeout = connectionCloseTimeout
 }
 
 // Upstream defaults (cmd/syncthing): --db-delete-retention-interval=10920h,
@@ -99,6 +143,9 @@ type upstreamRuntime struct {
 	extraCancel context.CancelFunc // bridge-side goroutines (peer cache)
 	earlyCancel context.CancelFunc
 	earlyDone   <-chan error
+
+	stopOnce sync.Once
+	stopped  chan struct{}
 }
 
 func newEarlySupervisor() (events.Logger, *suture.Supervisor, context.CancelFunc, <-chan error) {
@@ -110,32 +157,48 @@ func newEarlySupervisor() (events.Logger, *suture.Supervisor, context.CancelFunc
 	return evLogger, sup, cancel, done
 }
 
-// stop stops the App and then the early services. Returns false when the
-// deadline passed before everything (including the DB) closed.
-func (r *upstreamRuntime) stop(timeout time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if r.extraCancel != nil {
-			r.extraCancel()
-		}
-		if r.app != nil {
-			r.app.Stop(svcutil.ExitSuccess) // waits for services and DB close
-		}
-		if r.db != nil {
-			// The App closes the DB itself once started; this covers error
-			// paths before that point (Close is idempotent upstream).
-			_ = r.db.Close()
-		}
-		if r.earlyCancel != nil {
-			r.earlyCancel()
-			<-r.earlyDone
-		}
-	}()
+// stopAsync starts shutting down (once) and returns a channel closed when
+// the App, its DB and the early services are all gone.
+func (r *upstreamRuntime) stopAsync() <-chan struct{} {
+	r.stopOnce.Do(func() {
+		r.stopped = make(chan struct{})
+		go func() {
+			defer close(r.stopped)
+			if r.extraCancel != nil {
+				r.extraCancel()
+			}
+			if r.app != nil {
+				r.app.Stop(svcutil.ExitSuccess) // waits for services and DB close
+			}
+			if r.db != nil {
+				// The App closes the DB itself once started; this covers error
+				// paths before that point (Close is idempotent upstream).
+				_ = r.db.Close()
+			}
+			if r.earlyCancel != nil {
+				r.earlyCancel()
+				<-r.earlyDone
+			}
+		}()
+	})
+	return r.stopped
+}
+
+// stopAndRelease stops the runtime within timeout. On time it releases the
+// process slot and returns true. Otherwise it marks the slot as draining,
+// releases it in the background once shutdown completes, and returns false.
+func (r *upstreamRuntime) stopAndRelease(owner string, timeout time.Duration) bool {
+	done := r.stopAsync()
 	select {
 	case <-done:
+		releaseProcess(owner)
 		return true
 	case <-time.After(timeout):
+		markDraining(owner)
+		go func() {
+			<-done
+			releaseProcess(owner)
+		}()
 		return false
 	}
 }
