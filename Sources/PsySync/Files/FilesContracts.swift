@@ -207,6 +207,20 @@ public protocol RestrictedFetchBridge: Sendable {
         progress: @escaping @Sendable (_ completed: Int64, _ total: Int64) -> Void,
         isCancelled: @escaping @Sendable () -> Bool
     ) throws -> RestrictedFetchResult
+
+    /// Record a fetched file in the local index with the global `version`, so the
+    /// App's next scan keeps the global version instead of minting a new one.
+    /// Call order while holding the engine lock (contract change 2026-11-21,
+    /// Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md):
+    /// fetch → rename into folder → recordFetchedFile → `.stignore` `!/path` → journal → unlock.
+    /// Never call before the rename, or the next scan propagates a deletion.
+    func recordFetchedFile(
+        homeDirectory: URL,
+        identity: DeviceIdentity,
+        folder: FolderID,
+        path: RelativePath,
+        version: String
+    ) throws
 }
 
 /// How the extension satisfies `fetchContents` (decision tree in DESIGN.md §6.2).

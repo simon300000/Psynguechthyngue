@@ -28,6 +28,15 @@ final class FakeFetchBridge: RestrictedFetchBridge, @unchecked Sendable {
         progress(Int64(payload.count), Int64(payload.count))
         return RestrictedFetchResult(stagedFile: destination, size: Int64(payload.count), version: "v", servedBy: [])
     }
+
+    private var _recorded: [(FolderID, RelativePath, String)] = []
+    var recorded: [(FolderID, RelativePath, String)] { lock.withLock { _recorded } }
+
+    func recordFetchedFile(
+        homeDirectory: URL, identity: DeviceIdentity, folder: FolderID, path: RelativePath, version: String
+    ) throws {
+        lock.withLock { _recorded.append((folder, path, version)) }
+    }
 }
 
 struct ContentHarness {

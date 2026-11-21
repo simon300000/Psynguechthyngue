@@ -314,8 +314,8 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
     /// `psybridge.RecordFetchedFile`: after `fetch` and after the staged file
     /// was renamed to `<folder>/<path>` (engine lock still held), record it in
     /// the local index with the global version so the App's next scan does
-    /// not mint a new version. Not part of `RestrictedFetchBridge` yet
-    /// (contract change proposed in Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md).
+    /// not mint a new version. Part of `RestrictedFetchBridge` (contract change
+    /// accepted 2026-11-21, Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md).
     public func recordFetchedFile(
         homeDirectory: URL,
         identity: DeviceIdentity,
