@@ -55,7 +55,14 @@ type helperArgs struct {
 	Deadline int64  `json:"deadline,omitempty"`
 	// CancelAfter cancels the fetch once this many bytes completed (0 = never).
 	CancelAfter int64 `json:"cancelAfter,omitempty"`
+	Grace       int64 `json:"grace,omitempty"`
+	// Trace: SetFetchLogSink(stderr, "trace") — per-phase memory lines.
+	Trace bool `json:"trace,omitempty"`
 }
+
+type stderrSink struct{}
+
+func (stderrSink) Log(level, msg string) { fmt.Fprintf(os.Stderr, "[restricted %s] %s\n", level, msg) }
 
 type fetchOutcome struct {
 	Result    *psybridge.FetchResult `json:"result,omitempty"`
@@ -107,11 +114,14 @@ func (p *helperProgress) IsCancelled() bool {
 
 func helperFetch() {
 	a := readHelperArgs()
+	if a.Trace {
+		psybridge.SetFetchLogSink(stderrSink{}, "trace")
+	}
 	start := time.Now()
 	res, err := psybridge.FetchFile(&psybridge.FetchRequest{
 		HomeDir: a.Home, CertPEM: a.CertPEM, KeyPEM: a.KeyPEM,
 		FolderID: a.Folder, Path: a.Path, ExpectedVersion: a.Expected,
-		DestinationPath: a.Dest, DeadlineMillis: a.Deadline,
+		DestinationPath: a.Dest, DeadlineMillis: a.Deadline, ConnectGraceMillis: a.Grace,
 	}, &helperProgress{cancelAfter: a.CancelAfter})
 	out := fetchOutcome{Result: res, ElapsedMS: time.Since(start).Milliseconds()}
 	if err != nil {
@@ -127,15 +137,17 @@ func helperFetch() {
 // --- parent-side helpers ---
 
 type node struct {
-	id       *psybridge.Identity
-	devID    protocol.DeviceID
-	home     string
-	dir      string
-	port     int
-	endpoint *psybridge.APIEndpoint
-	cmd      *exec.Cmd
-	stdin    io.WriteCloser
-	lines    chan string
+	// dynamicPeers: writeConfig gives peers "dynamic" instead of their address.
+	dynamicPeers bool
+	id           *psybridge.Identity
+	devID        protocol.DeviceID
+	home         string
+	dir          string
+	port         int
+	endpoint     *psybridge.APIEndpoint
+	cmd          *exec.Cmd
+	stdin        io.WriteCloser
+	lines        chan string
 }
 
 func newNode(t *testing.T, root, name string) *node {
@@ -186,6 +198,9 @@ func writeConfig(t *testing.T, n *node, peers ...*node) {
 		d.DeviceID = p.devID
 		d.Name = "peer"
 		d.Addresses = []string{fmt.Sprintf("tcp://127.0.0.1:%d", p.port)}
+		if n.dynamicPeers {
+			d.Addresses = []string{"dynamic"}
+		}
 		c.Devices = append(c.Devices, d)
 		f.Devices = append(f.Devices, config.FolderDeviceConfiguration{DeviceID: p.devID})
 	}
@@ -344,4 +359,19 @@ func (n *node) record(t *testing.T, path, version string) string {
 	}
 	t.Fatalf("record helper printed no result:\n%s", out)
 	return ""
+}
+
+// restTry is restGet without failing the test on transport errors (-1).
+func restTry(ep *psybridge.APIEndpoint, path string, into any) int {
+	req, _ := http.NewRequest(http.MethodGet, ep.BaseURL+path, nil)
+	req.Header.Set("X-API-Key", ep.APIKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return -1
+	}
+	defer resp.Body.Close()
+	if into != nil && resp.StatusCode == http.StatusOK {
+		_ = json.NewDecoder(resp.Body).Decode(into)
+	}
+	return resp.StatusCode
 }

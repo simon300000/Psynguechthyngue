@@ -96,6 +96,7 @@ func configureLocations(homeDir string) error {
 type upstreamRuntime struct {
 	app         *syncthing.App
 	db          io.Closer
+	extraCancel context.CancelFunc // bridge-side goroutines (peer cache)
 	earlyCancel context.CancelFunc
 	earlyDone   <-chan error
 }
@@ -115,6 +116,9 @@ func (r *upstreamRuntime) stop(timeout time.Duration) bool {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		if r.extraCancel != nil {
+			r.extraCancel()
+		}
 		if r.app != nil {
 			r.app.Stop(svcutil.ExitSuccess) // waits for services and DB close
 		}

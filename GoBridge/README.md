@@ -36,11 +36,23 @@ generated GUI assets). The scripts set it.
   App's next scan mints a new version in about 60% of runs, because the
   scanner compares against the *local* entry. See
   `Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md`.
+- The App engine keeps `<HomeDir>/peer-addresses.json` (last outgoing
+  connection plus discovery addresses per device); `FetchFile` dials those
+  first, so the restricted core does not wait for discovery (local announce
+  every 30 s, global lookup, relays). Format and measurements:
+  `Docs/REWRITE/notes/wp-a-restricted-fetch-connect-and-memory.md`.
+- Memory: measure **phys_footprint** (what jetsam limits), not RSS.
+  `PsyBridgeAdapter.setRestrictedLog(level: "trace")` logs it per fetch
+  phase; `Scripts/sim-fetch-memory.sh` measures it in the iOS Simulator.
 - Upstream exposes no SQLite `cache_size` knob (DESIGN §3.5 asked): it runs
   with SQLite's default page cache (2 MiB per connection) in C memory,
   outside GOMEMLIMIT.
 
-## Measurements (macOS host, Apple Silicon, not a device)
+## Measurements (not a device)
+
+iOS Simulator, bare process, 5 MiB fetch from an official v2.1.6 peer:
+phys_footprint 5.9 MiB before → **14.3 MiB peak** (RSS 54 MiB, mostly shared
+pages). macOS host:
 
 `FetchFile` of a 100 MiB file from a local A engine, B at GOMEMLIMIT 40 MiB /
 GOGC 50: **peak RSS 29.2 MiB**, ~2 s. 1 KiB / 257 KiB fetches peak at
