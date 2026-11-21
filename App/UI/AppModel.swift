@@ -103,6 +103,8 @@ final class AppModel {
             if case .stopped = state { engineStops += 1; transfers.removeAll() }
         case let .deviceConnectionChanged(c):
             connections[c.deviceID] = c
+            // DeviceConnected events carry no LAN flag: pull it from REST.
+            if c.state == .connected && c.isLocalNetwork == nil { scheduleRefresh() }
         case let .pendingDevicesChanged(list):
             pendingDevices = list
         case let .pendingFoldersChanged(list):

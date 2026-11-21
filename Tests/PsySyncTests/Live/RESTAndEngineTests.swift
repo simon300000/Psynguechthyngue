@@ -13,6 +13,10 @@ import Testing
         #expect(folders.first?.id == "f1" && folders.first?.devices.count == 2)
         let conns = try d.decode(ConnectionsDTO.self, from: Fixtures.data("connections.json"))
         #expect(conns.connections.values.first?.connected == true)
+        // Upstream `type` names the protocol only ("tcp-client"); LAN is `isLocal`
+        // (device acceptance: a LAN peer was shown as "over the internet").
+        #expect(conns.connections.values.first?.type == "tcp-client")
+        #expect(conns.connections.values.first?.isLocal == true)
         let pd = try d.decode([String: PendingDeviceDTO].self, from: Fixtures.data("pending_devices.json"))
         #expect(pd.count == 1)
         let pf = try d.decode([String: PendingFolderDTO].self, from: Fixtures.data("pending_folders.json"))

@@ -162,6 +162,8 @@ struct ConnectionDTO: Decodable {
     var paused: Bool
     var address: String?
     var type: String?
+    /// Upstream: the peer address is on a LAN (`lanNetworks` / private ranges).
+    var isLocal: Bool?
     var clientVersion: String?
     var inBytesTotal: Int64
     var outBytesTotal: Int64

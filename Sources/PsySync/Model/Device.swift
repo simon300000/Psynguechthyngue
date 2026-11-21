@@ -39,8 +39,12 @@ public struct DeviceConnection: Hashable, Codable, Sendable {
 
     public var deviceID: DeviceID
     public var state: State
-    /// e.g. "tcp-lan", "quic-wan", "relay-wan" (upstream `type`).
+    /// Upstream connection `type`, e.g. "tcp-client", "quic-server",
+    /// "relay-client". It does not say LAN vs WAN; see `isLocalNetwork`.
     public var transport: String?
+    /// Upstream `isLocal` (LAN per the engine's LAN classification); nil when
+    /// unknown (e.g. built from a `DeviceConnected` event).
+    public var isLocalNetwork: Bool?
     public var address: String?
     public var clientVersion: String?
     public var lastSeen: Date?
@@ -51,6 +55,7 @@ public struct DeviceConnection: Hashable, Codable, Sendable {
         deviceID: DeviceID,
         state: State,
         transport: String? = nil,
+        isLocalNetwork: Bool? = nil,
         address: String? = nil,
         clientVersion: String? = nil,
         lastSeen: Date? = nil,
@@ -60,6 +65,7 @@ public struct DeviceConnection: Hashable, Codable, Sendable {
         self.deviceID = deviceID
         self.state = state
         self.transport = transport
+        self.isLocalNetwork = isLocalNetwork
         self.address = address
         self.clientVersion = clientVersion
         self.lastSeen = lastSeen
