@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "213F03B327C4D72CB42D5332"
+               BlueprintIdentifier = "A89580FC49C9E113DDA65ADF"
                BuildableName = "Psynguechthyngue.app"
                BlueprintName = "Psynguechthyngue"
                ReferencedContainer = "container:Psynguechthyngue.xcodeproj">
@@ -28,7 +28,7 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "01DF42CCC62933651ED7BBB4"
+               BlueprintIdentifier = "6DA707A008D023FDEB1B389E"
                BuildableName = "PsyFileProvider.appex"
                BlueprintName = "PsyFileProvider"
                ReferencedContainer = "container:Psynguechthyngue.xcodeproj">
@@ -40,11 +40,11 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "NO">
+      shouldUseLaunchSchemeArgsEnv = "YES">
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "213F03B327C4D72CB42D5332"
+            BlueprintIdentifier = "A89580FC49C9E113DDA65ADF"
             BuildableName = "Psynguechthyngue.app"
             BlueprintName = "Psynguechthyngue"
             ReferencedContainer = "container:Psynguechthyngue.xcodeproj">
@@ -55,40 +55,13 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "DE874E41FD267BDDE7593CAD"
-               BuildableName = "PsynguechthyngueTests.xctest"
-               BlueprintName = "PsynguechthyngueTests"
-               ReferencedContainer = "container:Psynguechthyngue.xcodeproj">
-            </BuildableReference>
-            <SkippedTests>
-               <Test
-                  Identifier = "PhysicalFileProviderE2ETests">
-               </Test>
-            </SkippedTests>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7140672F507D3084E4ED90B0"
+               BlueprintIdentifier = "F2BE484A5533B86CD80C9C5A"
                BuildableName = "PsynguechthyngueUITests.xctest"
                BlueprintName = "PsynguechthyngueUITests"
                ReferencedContainer = "container:Psynguechthyngue.xcodeproj">
             </BuildableReference>
-            <SkippedTests>
-               <Test
-                  Identifier = "PhysicalFilesUIE2ETests">
-               </Test>
-            </SkippedTests>
          </TestableReference>
       </Testables>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "PSY_XCTEST_PERMISSIVE_ENVIRONMENT"
-            value = "1"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -104,7 +77,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "213F03B327C4D72CB42D5332"
+            BlueprintIdentifier = "A89580FC49C9E113DDA65ADF"
             BuildableName = "Psynguechthyngue.app"
             BlueprintName = "Psynguechthyngue"
             ReferencedContainer = "container:Psynguechthyngue.xcodeproj">
@@ -121,7 +94,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "213F03B327C4D72CB42D5332"
+            BlueprintIdentifier = "A89580FC49C9E113DDA65ADF"
             BuildableName = "Psynguechthyngue.app"
             BlueprintName = "Psynguechthyngue"
             ReferencedContainer = "container:Psynguechthyngue.xcodeproj">
