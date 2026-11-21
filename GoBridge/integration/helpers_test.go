@@ -182,15 +182,17 @@ func helperFetch() {
 type node struct {
 	// dynamicPeers: writeConfig gives peers "dynamic" instead of their address.
 	dynamicPeers bool
-	id           *psybridge.Identity
-	devID        protocol.DeviceID
-	home         string
-	dir          string
-	port         int
-	endpoint     *psybridge.APIEndpoint
-	cmd          *exec.Cmd
-	stdin        io.WriteCloser
-	lines        chan string
+	// maxSendKbps: upload limit written to the config (0 = unlimited).
+	maxSendKbps int
+	id          *psybridge.Identity
+	devID       protocol.DeviceID
+	home        string
+	dir         string
+	port        int
+	endpoint    *psybridge.APIEndpoint
+	cmd         *exec.Cmd
+	stdin       io.WriteCloser
+	lines       chan string
 }
 
 func newNode(t *testing.T, root, name string) *node {
@@ -230,6 +232,8 @@ func writeConfig(t *testing.T, n *node, peers ...*node) {
 	c.Options.RelaysEnabled = false
 	c.Options.NATEnabled = false
 	c.Options.URAccepted = -1
+	c.Options.MaxSendKbps = n.maxSendKbps
+	c.Options.LimitBandwidthInLan = n.maxSendKbps > 0 // loopback counts as LAN
 	f := c.Defaults.Folder.Copy()
 	f.ID, f.Label, f.Path = "f", "f", n.dir
 	f.FilesystemType = config.FilesystemTypeBasic

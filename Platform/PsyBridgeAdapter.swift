@@ -240,13 +240,15 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
         lock.lock()
         defer { lock.unlock() }
         guard let engine else { throw PsyBridgeError(code: .notRunning, detail: "engine is not running") }
+        // The Go engine is unusable after Stop either way. On .stopTimeout it
+        // keeps shutting down in the background; the next `start` (a new
+        // engine) waits for that instead of failing, so the process is not
+        // poisoned.
+        self.engine = nil
         do {
             try engine.stop(timeout.milliseconds)
-            self.engine = nil
         } catch {
-            let bridgeError = PsyBridgeError(error)
-            if bridgeError.code != .stopTimeout { self.engine = nil }
-            throw bridgeError
+            throw PsyBridgeError(error)
         }
     }
 
