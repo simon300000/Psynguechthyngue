@@ -64,7 +64,7 @@ embed.dst_subfolder_spec = "13"
 embed.add_file_reference(ext.product_reference, true).settings = { "ATTRIBUTES" => ["CodeSignOnCopy", "RemoveHeadersOnCopy"] }
 
 common = {
-  "IPHONEOS_DEPLOYMENT_TARGET" => "17.0", "TARGETED_DEVICE_FAMILY" => "1,2", "SWIFT_VERSION" => "6.0",
+  "IPHONEOS_DEPLOYMENT_TARGET" => "26.0", "TARGETED_DEVICE_FAMILY" => "1,2", "SWIFT_VERSION" => "6.0",
   "SWIFT_STRICT_CONCURRENCY" => "complete", "GENERATE_INFOPLIST_FILE" => "NO",
   "CODE_SIGN_STYLE" => "Manual", "CODE_SIGN_IDENTITY" => "-", "DEVELOPMENT_TEAM" => "",
   "APP_GROUP_IDENTIFIER" => "group.com.example.PsyFilesHarness",

@@ -68,15 +68,3 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
         ["pinned": record.isPinned, "isFile": !record.isDirectory]
     }
 }
-
-/// Synthetic, empty trash container.
-final class TrashContainerItem: NSObject, NSFileProviderItem {
-    var itemIdentifier: NSFileProviderItemIdentifier { .trashContainer }
-    var parentItemIdentifier: NSFileProviderItemIdentifier { .trashContainer }
-    var filename: String { "Trash" }
-    var contentType: UTType { .folder }
-    var capabilities: NSFileProviderItemCapabilities { [.allowsContentEnumerating] }
-    var itemVersion: NSFileProviderItemVersion {
-        NSFileProviderItemVersion(contentVersion: Data("trash".utf8), metadataVersion: Data("trash".utf8))
-    }
-}
