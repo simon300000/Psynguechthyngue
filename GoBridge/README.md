@@ -23,7 +23,10 @@ generated GUI assets). The scripts set it.
 - On iOS (`GOOS=ios`, which includes Designed for iPad on Mac) every folder
   gets `fsWatcherEnabled=false`, `rescanIntervalS=3600` on each start.
 - `Stop` closes every file under the home directory (asserted with `lsof`).
-  `CodeStopTimeout` poisons the process: no further Start/FetchFile.
+  It honours its deadline: on `CodeStopTimeout` the shutdown continues in the
+  background and the next `Start`/`FetchFile` waits for it (no poisoned
+  process). Upstream's `protocol.CloseTimeout` is lowered from 10 s to 2 s:
+  with a peer lost mid-upload, closing its connection alone used to take 10 s.
 - One upstream App per process (Engine **or** FetchFile): a second one gets
   `already_running`.
 - `FetchFile` reads config.xml into memory (never writes it), pauses every

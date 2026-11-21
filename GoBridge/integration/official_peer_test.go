@@ -34,6 +34,13 @@ func officialBinary(t *testing.T) string {
 // startOfficial runs `syncthing serve` for node n with a loopback GUI.
 func startOfficial(t *testing.T, bin string, n *node) *psybridge.APIEndpoint {
 	t.Helper()
+	ep, _ := startOfficialProc(t, bin, n)
+	return ep
+}
+
+// startOfficialProc is startOfficial that also returns the process.
+func startOfficialProc(t *testing.T, bin string, n *node) (*psybridge.APIEndpoint, *os.Process) {
+	t.Helper()
 	if err := os.WriteFile(filepath.Join(n.home, "cert.pem"), n.id.CertPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +57,7 @@ func startOfficial(t *testing.T, bin string, n *node) *psybridge.APIEndpoint {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
+		_ = cmd.Process.Signal(syscall.SIGCONT)
 		_ = cmd.Process.Signal(syscall.SIGTERM)
 		done := make(chan struct{})
 		go func() { _ = cmd.Wait(); close(done) }()
@@ -64,7 +72,7 @@ func startOfficial(t *testing.T, bin string, n *node) *psybridge.APIEndpoint {
 		var v map[string]any
 		return restTry(ep, "/rest/system/version", &v) == 200 && v["version"] == psybridge.PinnedSyncthingVersion
 	})
-	return ep
+	return ep, cmd.Process
 }
 
 // TestFetchFromOfficialPeerUsesAddressCache: the restricted core reaches an

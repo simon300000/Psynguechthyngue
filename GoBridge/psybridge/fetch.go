@@ -70,6 +70,10 @@ type FetchRequest struct {
 
 // Default budgets for the restricted fetch.
 const (
+	// fetchAcquireWait: how long FetchFile/RecordFetchedFile wait for a
+	// previous runtime in this process that is still stopping.
+	fetchAcquireWait = 5 * time.Second
+
 	DefaultFetchDeadlineMillis = 90_000
 	DefaultFetchMaxFileBytes   = 2 << 30 // 2 GiB; above this we tell the user to open the App
 	// ConnectGraceMillis: how long to wait for the first peer connection
@@ -122,18 +126,19 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 	if err != nil {
 		return nil, err
 	}
-	if err := acquireProcess("fetch"); err != nil {
+	if err := acquireProcess("fetch", fetchAcquireWait); err != nil {
 		return nil, err
 	}
 	rt := &upstreamRuntime{}
 	defer func() {
-		poisoned := !rt.stop(10 * time.Second)
-		releaseProcess("fetch", poisoned)
-		if poisoned && err == nil {
-			err = newError(CodeStopTimeout, "restricted core did not stop")
+		// I1: the caller releases the engine lock when we return, so report
+		// a core that is still stopping instead of claiming success.
+		if !rt.stopAndRelease("fetch", 10*time.Second) && err == nil {
+			err = newError(CodeStopTimeout, "restricted core did not stop in time")
 			result = nil
 		}
 	}()
+	tuneUpstream()
 
 	applyRuntimeProfile(req.MemoryLimitMiB, 0, 2, DefaultRestrictedMemoryLimitMiB, DefaultRestrictedGCPercent, 2)
 	if err := configureLocations(req.HomeDir); err != nil {

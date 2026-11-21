@@ -51,10 +51,10 @@ func RecordFetchedFile(req *RecordRequest) error {
 	if err != nil {
 		return err
 	}
-	if err := acquireProcess("record"); err != nil {
+	if err := acquireProcess("record", fetchAcquireWait); err != nil {
 		return err
 	}
-	defer releaseProcess("record", false)
+	defer releaseProcess("record")
 	if err := configureLocations(req.HomeDir); err != nil {
 		return err
 	}

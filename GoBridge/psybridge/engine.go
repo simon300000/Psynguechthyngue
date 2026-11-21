@@ -204,19 +204,19 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 	if e.rt != nil {
 		return nil, newError(CodeAlreadyRunning, "engine already started")
 	}
-	if err := acquireProcess("engine"); err != nil {
+	timeout := millis(timeoutMillis, defaultStartTimeout)
+	deadline := time.Now().Add(timeout)
+	// Waits for a previous engine that missed its Stop deadline to finish.
+	if err := acquireProcess("engine", timeout/2); err != nil {
 		return nil, err
 	}
 	rt := &upstreamRuntime{}
 	defer func() {
 		if err != nil {
-			poisoned := !rt.stop(10 * time.Second)
-			releaseProcess("engine", poisoned)
+			rt.stopAndRelease("engine", 10*time.Second)
 		}
 	}()
-
-	timeout := millis(timeoutMillis, defaultStartTimeout)
-	deadline := time.Now().Add(timeout)
+	tuneUpstream()
 
 	cert, myID, err := parseIdentity(e.cfg.CertPEM, e.cfg.KeyPEM)
 	if err != nil {
@@ -339,7 +339,7 @@ func (e *Engine) watchExit(rt *upstreamRuntime, logs *sinkShared) {
 		e.rt = nil
 		e.endpoint = nil
 		e.sdb = nil
-		releaseProcess("engine", false)
+		releaseProcess("engine")
 	}
 	e.mu.Unlock()
 	if unexpected && e.obs != nil {
@@ -355,9 +355,14 @@ func (e *Engine) watchExit(rt *upstreamRuntime, logs *sinkShared) {
 }
 
 // Stop requests a graceful shutdown (upstream App.Stop) and waits up to
-// timeoutMillis for the DB to close and the engine lock to be released.
-// On CodeStopTimeout the caller must treat the process as poisoned for engine
-// purposes (do not Start again in this process).
+// timeoutMillis for the connections, the DB and every engine file to close.
+//
+// On CodeStopTimeout the engine is no longer usable through this object, but
+// the shutdown continues in the background and the process is NOT poisoned:
+// a later Start (on this or a new Engine) waits for it to finish, up to half
+// of its own timeout, and then starts normally. Until then nothing from this
+// engine is guaranteed closed, so callers that must release files (iOS
+// background) should treat the timeout as "best effort done".
 func (e *Engine) Stop(timeoutMillis int64) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -366,13 +371,13 @@ func (e *Engine) Stop(timeoutMillis int64) error {
 	}
 	e.stopping = true
 	e.closeStreamsLocked()
-	ok := e.rt.stop(millis(timeoutMillis, 10*time.Second))
+	timeout := millis(timeoutMillis, 10*time.Second)
+	ok := e.rt.stopAndRelease("engine", timeout)
 	e.rt = nil
 	e.endpoint = nil
 	e.sdb = nil
-	releaseProcess("engine", !ok)
 	if !ok {
-		return newError(CodeStopTimeout, "engine did not stop within %d ms", timeoutMillis)
+		return newError(CodeStopTimeout, "engine did not stop within %v; it keeps stopping in the background and Start will wait for it", timeout)
 	}
 	return nil
 }
