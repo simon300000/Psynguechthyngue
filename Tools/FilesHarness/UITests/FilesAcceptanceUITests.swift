@@ -53,6 +53,7 @@ final class FilesAcceptanceUITests: XCTestCase {
     func open(_ name: String, expect text: String) {
         let c = cell(name)
         XCTAssertTrue(c.waitForExistence(timeout: 15), "\(name) listed")
+        for _ in 0..<4 where !c.isHittable || c.frame.maxY > 760 { files.swipeUp() }
         c.tap()
         let match = files.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", text, text)).firstMatch
         let shown = match.waitForExistence(timeout: 60)
@@ -184,5 +185,17 @@ final class FilesAcceptanceUITests: XCTestCase {
         harness.terminate()
         openFolder()
         open("large-offline", expect: "LARGE-START")
+    }
+
+    /// Parameterised offline open (env PSY_OPEN_NAME / PSY_OPEN_EXPECT) for
+    /// repeated real restricted-fetch runs.
+    func test13OpenRealRestrictedNamed() {
+        let env = ProcessInfo.processInfo.environment
+        files.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        files.launch()
+        sleep(6)
+        harness.terminate()
+        openFolder()
+        open(env["PSY_OPEN_NAME"] ?? "offline-1", expect: env["PSY_OPEN_EXPECT"] ?? "via real restricted fetch")
     }
 }

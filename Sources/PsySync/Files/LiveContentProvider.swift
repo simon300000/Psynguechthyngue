@@ -42,6 +42,10 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         public var lockTimeout: Duration = .seconds(15)
         public var pollInterval: Duration = .milliseconds(500)
         public var fetchBudget: RestrictedFetchBudget = .default
+        /// Runs after every restricted fetch (success or failure), on the
+        /// blocking thread — e.g. return Go memory to the OS so the
+        /// extension's phys_footprint drops back between fetches.
+        public var afterFetch: (@Sendable () -> Void)?
         public init() {}
     }
 
@@ -250,6 +254,8 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         let folder = self.folder
         let home = layout.engineHost
         let result: RestrictedFetchResult
+        let afterFetch = configuration.afterFetch
+        defer { if let afterFetch { Task.detached { _ = try? await BlockingThread.run { afterFetch() } } } }
         do {
             result = try await BlockingThread.run {
                 try fetchBridge.fetch(

@@ -20,8 +20,10 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
 
     required init(domain: NSFileProviderDomain) {
         self.domain = domain
+        FootprintProbe.log("init-start")
         contextResult = Result { try ExtensionContext(domain: domain) }
         super.init()
+        FootprintProbe.log("init-done")
         if case .failure(let error) = contextResult {
             log.fault("extension init failed: \(String(describing: error), privacy: .public)")
         }
@@ -84,6 +86,8 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
         let versionData = requestedVersion?.contentVersion
         let task = Task { [log] in
             do {
+                FootprintProbe.log("fetch-start")
+                defer { FootprintProbe.log("fetch-end") }
                 let context = try self.context()
                 let id = context.storeID(itemIdentifier)
                 let result = try await context.content.provideContents(

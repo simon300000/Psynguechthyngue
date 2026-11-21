@@ -1,5 +1,6 @@
 import FileProvider
 import PsySync
+import Darwin
 import os
 
 /// Everything one domain (= one managed folder) needs. Opened once per
@@ -16,7 +17,7 @@ final class ExtensionContext: @unchecked Sendable {
 
     init(domain: NSFileProviderDomain) throws {
         layout = try AppGroupResolver.layout()
-        store = try FilesStore(url: layout.filesDatabase)
+        store = try FilesStore(url: layout.filesDatabase, cacheKiB: 256)
         folder = FolderID(rawValue: domain.identifier.rawValue)
         reader = store.reader(folder: folder)
         containment = PathContainment(root: layout.managedFolder(folder))
@@ -24,9 +25,12 @@ final class ExtensionContext: @unchecked Sendable {
         let temporary = (try? manager?.temporaryDirectoryURL())
             ?? FileManager.default.temporaryDirectory.appending(path: "psy-fp")
         let services = RestrictedFetchServices.make(layout: layout)
+        var configuration = LiveContentProvider.Configuration()
+        configuration.afterFetch = services.afterFetch
         content = LiveContentProvider(
             layout: layout, store: store, folder: folder, engineLock: FlockEngineLock(layout: layout),
-            fetchBridge: services.bridge, identity: services.identity, temporaryDirectory: temporary)
+            fetchBridge: services.bridge, identity: services.identity, temporaryDirectory: temporary,
+            configuration: configuration)
     }
 
     var rootID: ItemIdentifier { reader.rootID }
@@ -56,27 +60,60 @@ final class ExtensionContext: @unchecked Sendable {
 /// stands in for the network (simulator harness). Without the xcframework the
 /// restricted path reports "open the App" (`.unavailable`).
 enum RestrictedFetchServices {
-    static func make(layout: AppGroupLayout) -> (bridge: (any RestrictedFetchBridge)?, identity: DeviceIdentityProvider) {
+    static func make(layout: AppGroupLayout)
+        -> (bridge: (any RestrictedFetchBridge)?, identity: DeviceIdentityProvider, afterFetch: (@Sendable () -> Void)?)
+    {
         #if DEBUG
         if let dev = DevRestrictedFetchBridge(layout: layout) {
-            return (dev, { DevRestrictedFetchBridge.identity })
+            return (dev, { DevRestrictedFetchBridge.identity }, nil)
         }
         #endif
         #if PSY_RESTRICTED_FETCH || canImport(PsyBridge)
         let group = Bundle.main.object(forInfoDictionaryKey: "PsyKeychainAccessGroup") as? String
         let identityStore = KeychainIdentityStore(accessGroup: group)
         let bridgeLog = Logger(subsystem: FilesLog.subsystem, category: "bridge")
-        #if DEBUG
-        let level = "info"
-        #else
-        let level = "warn"
-        #endif
-        let adapter = PsyBridgeAdapter(logLevel: level, log: { lvl, message in
+        let sink: PsyBridgeLogHandler = { lvl, message in
             bridgeLog.log("[\(lvl, privacy: .public)] \(message, privacy: .public)")
-        })
-        return (adapter, { try identityStore.load() })
+        }
+        #if DEBUG
+        // "trace": one line per fetch phase with footprint=/footprintPeak= (WP-A).
+        PsyBridgeAdapter.setRestrictedLog(level: "trace", sink)
         #else
-        return (nil, { nil })
+        PsyBridgeAdapter.setRestrictedLog(level: "warn", sink)
         #endif
+        let adapter = PsyBridgeAdapter(logLevel: "warn")
+        // No engine in the extension → onMemoryWarning() = psybridge.FreeOSMemory().
+        return (adapter, { try identityStore.load() }, { adapter.onMemoryWarning() })
+        #else
+        return (nil, { nil }, nil)
+        #endif
+    }
+}
+
+/// phys_footprint is what jetsam limits (not RSS). Logged at extension init
+/// and around each fetchContents so the non-bridge share can be attributed.
+enum FootprintProbe {
+    struct Sample {
+        var footprintMiB: Double
+        var peakMiB: Double
+    }
+
+    static func sample() -> Sample? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return nil }
+        return Sample(footprintMiB: Double(info.phys_footprint) / 1_048_576,
+                      peakMiB: Double(info.ledger_phys_footprint_peak) / 1_048_576)
+    }
+
+    static func log(_ phase: String) {
+        guard let s = sample() else { return }
+        Logger(subsystem: "app.psynguechthyngue.files", category: "footprint")
+            .log("phase=\(phase, privacy: .public) footprint=\(s.footprintMiB, format: .fixed(precision: 1))MiB peak=\(s.peakMiB, format: .fixed(precision: 1))MiB")
     }
 }
