@@ -61,4 +61,29 @@ private let f1 = FolderID(rawValue: "f1")
             f1, path: RelativePath(rawValue: "d/up.txt"), isDirectory: false, size: 1, modified: Date())
         #expect(try store.unmaterializedLocalFiles(f1, limit: 10).isEmpty)
     }
+
+    /// iOS 26.5 simulator: requests for items the system had not enumerated
+    /// were never acknowledged and the sequential loop stalled on the first
+    /// one, so nothing in the folder was ever materialized.
+    @Test func stalledRequestsTimeOutWithoutBlockingOthers() async throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: (0..<6).map { FilesFixtures.file("f\($0).txt") })
+        let stalled = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "f0.txt")))
+        let recorder = Recorder()
+        let lines = Recorder()
+        let materializer = FilesMaterializer(
+            store: store, width: 2, timeout: .milliseconds(200),
+            trace: { lines.add(ItemIdentifier(rawValue: $0)) }
+        ) { _, id in
+            if id == stalled.itemID {
+                // Never completes and ignores cancellation, like the XPC call.
+                await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+            }
+            recorder.add(id)
+        }
+        await materializer.refresh(f1)
+        await materializer.settle(f1)
+        #expect(recorder.all.count == 5)
+        #expect(lines.all.first?.contains("requested=5 failed=1") == true)
+    }
 }
