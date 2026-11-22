@@ -155,7 +155,8 @@ import Testing
         #expect(state { $0.upstreamState = "scanning" } == .scanning)
         #expect(state { $0.upstreamState = "scan-waiting" } == .scanning)
         #expect(state { $0.upstreamState = "syncing" } == .syncing)
-        #expect(state { $0.upstreamState = "sync-preparing" } == .syncing)
+        #expect(state { $0.upstreamState = "sync-preparing" } == .fetchingIndex)
+        #expect(state { $0.upstreamState = "sync-preparing"; $0.inProgressBytes = 1 } == .syncing)
         #expect(state { _ in } == .upToDate)
     }
 
@@ -221,6 +222,18 @@ import Testing
             $0.upstreamState = "sync-preparing"; $0.needItems = 5000; $0.needBytes = 33_000
             $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
         } == .fetchingIndex)
+        // Slow link: last batch 20 s ago, still nothing moving.
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-20)
+            $0.upstreamState = "syncing"; $0.needItems = 7127; $0.needBytes = 7000
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .fetchingIndex)
+        // Long after the index: real needs are syncing.
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-(StatusMapper.indexActiveInterval + 1))
+            $0.upstreamState = "syncing"; $0.needItems = 3
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .syncing)
         // Real transfer under way while more index arrives: syncing.
         #expect(state {
             $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-1)

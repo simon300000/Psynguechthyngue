@@ -164,10 +164,18 @@ public enum StatusMapper {
         // ignore rules to the new entries yet — an on-demand folder showed
         // "Syncing, 5,000 items left, 0 KB of 83 KB"); the honest state is
         // that the file list is still coming in.
-        let indexArriving = i.lastRemoteIndexAt.map { i.now.timeIntervalSince($0) < indexSettleInterval } ?? false
-        if indexArriving, anyConnected, i.inProgressBytes == 0, i.upstreamState != "scanning" {
+        // Over a slow link batches arrive tens of seconds apart (simulator,
+        // 60k entries at 30 KB/s: "Syncing, 7,127 items, 0 KB" between
+        // batches), hence the longer window here.
+        let indexArriving = i.lastRemoteIndexAt.map { i.now.timeIntervalSince($0) < indexActiveInterval } ?? false
+        if indexArriving, localNeeds, anyConnected, i.inProgressBytes == 0, i.upstreamState != "scanning" {
             return .fetchingIndex
         }
+        // Upstream works through the new list before pulling anything: an
+        // on-demand folder spent minutes in sync-preparing over 38k entries
+        // its rules ignore (count falling ~200/s, 0 bytes moving). That is
+        // still the file list being processed, not a transfer.
+        if i.upstreamState == "sync-preparing", i.inProgressBytes == 0 { return .fetchingIndex }
         switch i.upstreamState {
         case "scanning", "scan-waiting":
             return .scanning
@@ -186,6 +194,9 @@ public enum StatusMapper {
         // "Up to date, 0 KB" while 1059 files were still on their way).
         let awaitingIndex = i.remotes.values.contains { $0.connected && $0.remoteState == "unknown" }
         if awaitingIndex { return .fetchingIndex }
+        if let at = i.lastRemoteIndexAt, i.now.timeIntervalSince(at) < indexSettleInterval, anyConnected {
+            return .fetchingIndex
+        }
         if connectedRemoteBehind { return .syncing }
         if anyRemoteBehind && !anyConnected { return .waitingForDevices }
         // Never heard from anyone and nobody is connected: an empty folder is
@@ -199,6 +210,9 @@ public enum StatusMapper {
     /// receiving its file list. LiveSyncEngine refreshes the status once this
     /// has passed.
     public static let indexSettleInterval: TimeInterval = 3
+    /// While needs exist but nothing transfers, a folder that received index
+    /// data this recently is still getting its file list (not "syncing").
+    public static let indexActiveInterval: TimeInterval = 30
 
     private static func isIdleLike(_ s: String) -> Bool {
         ["idle", "sync-waiting", "clean-waiting", "cleaning", ""].contains(s)

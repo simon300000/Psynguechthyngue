@@ -373,6 +373,9 @@ public actor LiveSyncEngine: SyncEngine {
             try? await Task.sleep(for: .seconds(StatusMapper.indexSettleInterval + 0.3))
             guard !Task.isCancelled else { return }
             await self?.scheduleRefresh([id])
+            try? await Task.sleep(for: .seconds(StatusMapper.indexActiveInterval - StatusMapper.indexSettleInterval))
+            guard !Task.isCancelled else { return }
+            await self?.scheduleRefresh([id])
         }
     }
 
