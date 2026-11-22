@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Security-scoped bookmark primitives, injectable for tests.
@@ -56,7 +57,8 @@ public struct ExternalLocationAccess: Sendable {
 
 public enum ExternalLocationError: Error, Hashable, Sendable {
     case notADirectory
-    /// iCloud Drive / another File Provider backed location (DESIGN.md §6.7, Q2).
+    /// iCloud Drive / a cloud or third-party File Provider location (DESIGN.md §6.7, Q2).
+    /// "On My iPhone / iPad" (LocalStorage) is allowed.
     case cloudBacked
     case accessDenied
     case unresolvable(String)
@@ -146,23 +148,107 @@ public enum ExternalLocation {
         if values.isReadable == false || values.isWritable == false { throw ExternalLocationError.accessDenied }
     }
 
-    /// True for iCloud Drive and any location served by a File Provider
-    /// (including our own domain): content there can be dataless, so
-    /// Syncthing reading it would trigger downloads or fail.
+    /// True for iCloud Drive and any location served by a cloud / third-party
+    /// File Provider (including our own domain): content there can be
+    /// dataless, so Syncthing reading it would trigger downloads or fail.
+    /// "On My iPhone / iPad" (the system LocalStorage provider) is local disk
+    /// and allowed (DESIGN.md §6.7, Q2).
     public static func isFileProviderBacked(_ url: URL) -> Bool {
-        let path = url.standardizedFileURL.resolvingSymlinksInPath().path(percentEncoded: false)
-        let markers = [
-            "/Library/Mobile Documents/",          // iCloud Drive (macOS & iOS)
-            "/Library/CloudStorage/",              // macOS File Provider domains
-            "/File Provider Storage/",             // iOS File Provider extensions' storage
-            "/Containers/Shared/AppGroup/",        // other apps' group containers (incl. FP backing)
-            "/com~apple~CloudDocs/",
-        ]
-        if markers.contains(where: { (path + "/").contains($0) }) { return true }
-        if let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey]), values.isUbiquitousItem == true {
-            return true
+        classify(LocationFacts.probe(url)) == .cloud
+    }
+
+    public enum Kind: Hashable, Sendable { case local, cloud }
+
+    /// Observable properties of a picked directory; `probe` reads them from
+    /// the file system, tests build them directly.
+    public struct LocationFacts: Hashable, Sendable {
+        public var path: String
+        /// `URLResourceValues.isUbiquitousItem` (iCloud).
+        public var isUbiquitous: Bool
+        /// The directory or one of its direct children is a dataless
+        /// (not materialized) File Provider placeholder.
+        public var hasDatalessContent: Bool
+        /// Container-manager identifier of the `Containers/Shared/AppGroup/<UUID>`
+        /// container the path lives in, if any and readable.
+        public var groupContainerIdentifier: String?
+
+        public init(path: String, isUbiquitous: Bool = false, hasDatalessContent: Bool = false,
+                    groupContainerIdentifier: String? = nil) {
+            self.path = path
+            self.isUbiquitous = isUbiquitous
+            self.hasDatalessContent = hasDatalessContent
+            self.groupContainerIdentifier = groupContainerIdentifier
         }
-        return false
+
+        public static func probe(_ url: URL) -> LocationFacts {
+            let path = url.standardizedFileURL.resolvingSymlinksInPath().path(percentEncoded: false)
+            let ubiquitous = (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true
+            return LocationFacts(
+                path: path,
+                isUbiquitous: ubiquitous,
+                hasDatalessContent: ExternalLocation.hasDatalessContent(url),
+                groupContainerIdentifier: groupContainer(of: path).flatMap(ExternalLocation.containerIdentifier(atGroupPath:))
+            )
+        }
+    }
+
+    /// Group container of the system "On My iPhone / iPad" provider.
+    public static let localStorageGroup = "group.com.apple.FileProvider.LocalStorage"
+
+    public static func classify(_ facts: LocationFacts) -> Kind {
+        let path = facts.path.hasSuffix("/") ? facts.path : facts.path + "/"
+        let cloudMarkers = [
+            "/Library/Mobile Documents/",                 // iCloud Drive (macOS & iOS)
+            "/com~apple~CloudDocs/",
+            "/Library/CloudStorage/",                     // macOS File Provider domains
+            "/Library/Application Support/FileProvider/", // replicated (FPFS) domains, incl. ours
+        ]
+        if cloudMarkers.contains(where: path.contains) { return .cloud }
+        if facts.isUbiquitous || facts.hasDatalessContent { return .cloud }
+        // Inside another app's group container (where File Provider
+        // extensions keep "File Provider Storage"): only the system local
+        // storage provider is real local disk. Unknown owner → refuse.
+        if groupContainer(of: facts.path) != nil || path.contains("/File Provider Storage/") {
+            return facts.groupContainerIdentifier == localStorageGroup ? .local : .cloud
+        }
+        return .local
+    }
+
+    /// `…/Containers/Shared/AppGroup/<UUID>` prefix of `path`, if any.
+    static func groupContainer(of path: String) -> String? {
+        let marker = "/Containers/Shared/AppGroup/"
+        guard let r = path.range(of: marker) else { return nil }
+        let uuid = path[r.upperBound...].prefix(while: { $0 != "/" })
+        guard !uuid.isEmpty else { return nil }
+        return String(path[..<r.upperBound]) + uuid
+    }
+
+    /// Reads the container manager's identifier for a group container: the
+    /// `com.apple.containermanager.identifier` xattr, else its metadata plist.
+    static func containerIdentifier(atGroupPath group: String) -> String? {
+        let name = "com.apple.containermanager.identifier"
+        var buffer = [UInt8](repeating: 0, count: 512)
+        let n = getxattr(group, name, &buffer, buffer.count, 0, 0)
+        if n > 0 {
+            let id = String(decoding: buffer[..<n], as: UTF8.self).trimmingCharacters(in: .controlCharacters.union(.whitespaces))
+            if !id.isEmpty { return id }
+        }
+        let plist = URL(filePath: group).appending(path: ".com.apple.mobile_container_manager.metadata.plist")
+        guard let data = try? Data(contentsOf: plist),
+              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
+        return dict["MCMMetadataIdentifier"] as? String
+    }
+
+    /// True if `url` or one of its direct children carries `SF_DATALESS`.
+    static func hasDatalessContent(_ url: URL) -> Bool {
+        func dataless(_ path: String) -> Bool {
+            var st = stat()
+            return lstat(path, &st) == 0 && (st.st_flags & UInt32(SF_DATALESS)) != 0
+        }
+        let path = url.path(percentEncoded: false)
+        if dataless(path) { return true }
+        guard let children = try? FileManager.default.contentsOfDirectory(atPath: path) else { return false }
+        return children.prefix(256).contains { dataless((path as NSString).appendingPathComponent($0)) }
     }
 
     static func displayPath(for url: URL) -> String {

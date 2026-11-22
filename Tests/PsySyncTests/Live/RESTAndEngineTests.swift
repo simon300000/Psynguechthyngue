@@ -194,6 +194,7 @@ final class FakeSyncthing: @unchecked Sendable {
 
     func device(_ id: DeviceID) -> DeviceConfigDTO? { lock.withLock { devices.first { $0.deviceID == id.rawValue } } }
     var currentOptions: OptionsDTO { lock.withLock { options } }
+    func setListenAddresses(_ addresses: [String]?) { lock.withLock { options.listenAddresses = addresses } }
     func setLoadOptions(maxFolderConcurrency: Int, limitBandwidthInLan: Bool) {
         lock.withLock { options.maxFolderConcurrency = maxFolderConcurrency; options.limitBandwidthInLan = limitBandwidthInLan }
     }

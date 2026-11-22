@@ -86,11 +86,51 @@ import Testing
     @Test func detectsCloudLocations() {
         for p in ["/Users/x/Library/Mobile Documents/com~apple~CloudDocs/Sync",
                   "/Users/x/Library/CloudStorage/Dropbox/a",
+                  "/private/var/mobile/Library/Application Support/FileProvider/1234/x",
                   "/private/var/mobile/Containers/Shared/AppGroup/1234/File Provider Storage/x"] {
             #expect(ExternalLocation.isFileProviderBacked(URL(filePath: p)), "\(p)")
         }
         #expect(!ExternalLocation.isFileProviderBacked(URL(filePath: "/private/var/mobile/Containers/Data/Application/1/Documents")))
         #expect(!ExternalLocation.isFileProviderBacked(FileManager.default.temporaryDirectory))
+    }
+
+    @Test func classifiesLocalStorageAsLocalAndOtherProvidersAsCloud() {
+        typealias F = ExternalLocation.LocationFacts
+        let onMyPhone = "/private/var/mobile/Containers/Shared/AppGroup/9C72/File Provider Storage/Sync"
+        // "On My iPhone / iPad": the system LocalStorage group container.
+        #expect(ExternalLocation.classify(F(path: onMyPhone, groupContainerIdentifier: ExternalLocation.localStorageGroup)) == .local)
+        // Same shape, other owner (third-party / Photos / iCloud group) or unknown owner → refused.
+        #expect(ExternalLocation.classify(F(path: onMyPhone, groupContainerIdentifier: "group.com.example.cloud")) == .cloud)
+        #expect(ExternalLocation.classify(F(path: onMyPhone, groupContainerIdentifier: "group.com.apple.iCloudDrive")) == .cloud)
+        #expect(ExternalLocation.classify(F(path: onMyPhone)) == .cloud)
+        // Local storage but with dataless / ubiquitous content → refused.
+        #expect(ExternalLocation.classify(F(path: onMyPhone, hasDatalessContent: true, groupContainerIdentifier: ExternalLocation.localStorageGroup)) == .cloud)
+        #expect(ExternalLocation.classify(F(path: onMyPhone, isUbiquitous: true, groupContainerIdentifier: ExternalLocation.localStorageGroup)) == .cloud)
+        // iCloud / FPFS paths are cloud whatever the container says.
+        #expect(ExternalLocation.classify(F(path: "/private/var/mobile/Library/Mobile Documents/com~apple~CloudDocs/a",
+                                            groupContainerIdentifier: ExternalLocation.localStorageGroup)) == .cloud)
+        // Ordinary local directories.
+        #expect(ExternalLocation.classify(F(path: "/Users/x/Documents/Sync")) == .local)
+        #expect(ExternalLocation.classify(F(path: "/Users/x/Documents/Sync", hasDatalessContent: true)) == .cloud)
+    }
+
+    @Test func readsGroupContainerIdentifierFromMetadataPlist() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "psy-ext-\(UUID().uuidString)")
+        let group = root.appending(path: "Containers/Shared/AppGroup/ABCD")
+        let dir = group.appending(path: "File Provider Storage/Sync")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(ExternalLocation.isFileProviderBacked(dir))   // owner unknown
+        let plist = try PropertyListSerialization.data(fromPropertyList: ["MCMMetadataIdentifier": ExternalLocation.localStorageGroup],
+                                                       format: .xml, options: 0)
+        try plist.write(to: group.appending(path: ".com.apple.mobile_container_manager.metadata.plist"))
+        let facts = ExternalLocation.LocationFacts.probe(dir)
+        #expect(facts.groupContainerIdentifier == ExternalLocation.localStorageGroup)
+        #expect(!facts.hasDatalessContent)
+        #expect(!ExternalLocation.isFileProviderBacked(dir))
+        guard case .external = try ExternalLocation.makeLocation(for: dir, access: .unscoped) else {
+            Issue.record("expected external"); return
+        }
     }
 
     @Test func makeAndOpenUnscoped() throws {

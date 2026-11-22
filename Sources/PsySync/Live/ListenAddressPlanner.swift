@@ -33,22 +33,29 @@ public enum ListenAddressPlanner {
     }
 
     /// Port to use instead of 22000, or nil if 22000 is fine.
-    /// `stored` is a previously chosen port (kept for stable addresses).
+    /// `stored` is a previously chosen port: kept for stable addresses while
+    /// it is still free, otherwise (another process took it, e.g. a second
+    /// simulator / instance on the same host) a new one is chosen.
     public static func alternatePort(stored: Int?, defaultFree: Bool, preferAlternate: Bool,
                                      isFree: (Int) -> Bool) -> Int? {
-        if let stored { return stored }
+        if let stored {
+            if stored == 0 || isFree(stored) { return stored }
+            return alternatePorts.first(where: { $0 != stored && isFree($0) }) ?? 0
+        }
         guard preferAlternate || !defaultFree else { return nil }
         return alternatePorts.first(where: isFree) ?? 0
     }
 
     /// Rewrites `listenAddresses` to use `port`. Returns nil when nothing
     /// changes (already moved, or the user configured custom addresses).
-    public static func rewrite(_ addresses: [String], port: Int) -> [String]? {
+    /// `previous` is a port we chose earlier; addresses on it move too.
+    public static func rewrite(_ addresses: [String], port: Int, previous: Int? = nil) -> [String]? {
         var out: [String] = []
         for address in addresses {
             if address == "default" {
                 out += ["tcp://:\(port)", "quic://:\(port)", defaultRelay]
-            } else if let rewritten = replacingDefaultPort(address, with: port) {
+            } else if let rewritten = replacingPort(defaultPort, in: address, with: port)
+                        ?? previous.flatMap({ replacingPort($0, in: address, with: port) }) {
                 out.append(rewritten)
             } else {
                 out.append(address)
@@ -60,17 +67,23 @@ public enum ListenAddressPlanner {
     }
 
     /// `tcp://:22000`, `quic://0.0.0.0:22000`, `tcp://[::]:22000` → same with `port`.
-    static func replacingDefaultPort(_ address: String, with port: Int) -> String? {
-        guard let scheme = address.range(of: "://"),
+    static func replacingPort(_ old: Int, in address: String, with port: Int) -> String? {
+        guard old > 0, let scheme = address.range(of: "://"),
               ["tcp", "tcp4", "tcp6", "quic", "quic4", "quic6"].contains(String(address[..<scheme.lowerBound])),
-              address.hasSuffix(":\(defaultPort)") else { return nil }
-        return String(address.dropLast(String(defaultPort).count)) + String(port)
+              address.hasSuffix(":\(old)") else { return nil }
+        return String(address.dropLast(String(old).count)) + String(port)
     }
 
     private static func canBind(family: Int32, type: Int32, port: Int) -> Bool {
         let fd = socket(family, type, 0)
         guard fd >= 0 else { return true }   // family unavailable: not a conflict
         defer { close(fd) }
+        if type == SOCK_STREAM {
+            // Ignore our own TIME_WAIT leftovers from a previous run; a live
+            // listener (even with SO_REUSEPORT) still makes bind fail.
+            var on: Int32 = 1
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, socklen_t(MemoryLayout<Int32>.size))
+        }
         if family == AF_INET6 {
             var on: Int32 = 1
             setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, socklen_t(MemoryLayout<Int32>.size))
