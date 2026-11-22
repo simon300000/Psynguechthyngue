@@ -118,4 +118,35 @@ public enum IgnoreRulesGenerator {
         }
         return result
     }
+
+    /// Paths to keep local when a folder switches to on-demand: the highest
+    /// directory whose subtree has no remote-only file, else the file itself.
+    ///
+    /// One `!/path` per file costs upstream linear matching per file (20k
+    /// files: a full rescan went from 1.0 s to 4.3 s CPU on a Mac, quadratic
+    /// in the folder size). A fully local directory behaves like "Keep
+    /// Downloaded" on it: what is added there later downloads too. A
+    /// directory that also holds remote-only files stays file by file, so
+    /// those stay on demand.
+    public static func collapsedPresent(
+        local: some Sequence<RelativePath>, remoteOnly: some Sequence<RelativePath>
+    ) -> [RelativePath] {
+        var mixed = Set<String>()   // directories with a remote-only file below
+        for p in remoteOnly {
+            var d = p.parent
+            while !d.isRoot, mixed.insert(d.rawValue).inserted { d = d.parent }
+        }
+        var out = Set<RelativePath>()
+        for p in local {
+            let parts = p.rawValue.split(separator: "/", omittingEmptySubsequences: false)
+            var chosen = p
+            var prefix = ""
+            for part in parts.dropLast() {
+                prefix = prefix.isEmpty ? String(part) : prefix + "/" + part
+                if !mixed.contains(prefix) { chosen = RelativePath(rawValue: prefix); break }
+            }
+            out.insert(chosen)
+        }
+        return out.sorted { $0.rawValue < $1.rawValue }
+    }
 }

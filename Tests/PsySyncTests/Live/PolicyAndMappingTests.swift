@@ -352,6 +352,23 @@ import Testing
         #expect(!IgnoreRulesGenerator.isManaged(["foo"]))
     }
 
+    /// Review: per-file rules after a switch to on-demand made each scan
+    /// quadratic (20k files: 1.0 s → 4.3 s CPU per full scan on a Mac).
+    @Test func collapsesFullyLocalDirectoriesOnly() {
+        let r = { (s: String) in RelativePath(rawValue: s) }
+        let local = ["a/1.txt", "a/b/2.txt", "c/3.txt", "c/d/4.txt", "top.md"].map(r)
+        let remote = ["c/d/5.txt"].map(r)
+        // "a" is fully local → one rule; "c" and "c/d" hold a remote-only
+        // file → c/3.txt and c/d/4.txt stay per file; root files stay files.
+        #expect(IgnoreRulesGenerator.collapsedPresent(local: local, remoteOnly: remote).map(\.rawValue)
+                == ["a", "c/3.txt", "c/d/4.txt", "top.md"])
+        // Nothing remote: top-level entries only.
+        #expect(IgnoreRulesGenerator.collapsedPresent(local: local, remoteOnly: []).map(\.rawValue) == ["a", "c", "top.md"])
+        // 200 dirs × 100 files, all local → 200 rules.
+        let many = (0..<200).flatMap { i in (0..<100).map { r("d\(i)/f\($0)") } }
+        #expect(IgnoreRulesGenerator.collapsedPresent(local: many, remoteOnly: []).count == 200)
+    }
+
     @Test func dedupes() throws {
         let p = RelativePath(rawValue: "a")
         #expect(try IgnoreRulesGenerator.lines(present: [p, p]).filter { $0 == "!/a" }.count == 1)

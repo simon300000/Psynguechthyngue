@@ -430,9 +430,11 @@ final class FakeSyncthing: @unchecked Sendable {
     }
 
     /// Regression (dynamic E2E): switching "Everything" → "On demand" kept
-    /// whole top-level directories un-ignored, so everything later added under
-    /// them still downloaded. Present files are kept file by file; the user's
-    /// rules still round-trip through .stignore-user.
+    /// whole top-level directories un-ignored, so their remote-only files
+    /// (and everything added later) still downloaded. Directories holding a
+    /// remote-only file are kept file by file; fully local ones get one rule
+    /// (review: per-file rules made scans quadratic). The user's rules still
+    /// round-trip through .stignore-user.
     @Test func switchingToOnDemandKeepsPresentFilesOnly() async throws {
         let h = try makeHarness()
         defer { try? FileManager.default.removeItem(at: h.root) }
@@ -446,13 +448,17 @@ final class FakeSyncthing: @unchecked Sendable {
             try Data("x".utf8).write(to: f)
         }
         try await h.engine.setUserIgnoreRules(id, ["*.tmp"])
+        // "报告 1/子目录" also has a file that is not on this device.
+        h.bridge.indexEntries = [GlobalIndexEntry(
+            name: RelativePath(rawValue: "报告 1/子目录/remote.txt"), type: .file, size: 1, modified: Date(),
+            deleted: false, invalid: false, sequence: 1, version: "v", blocksHash: "", localPresent: false)]
         var folder = try #require(try await h.engine.folders().first { $0.id == id })
         folder.contentMode = .onDemand
         try await h.engine.updateFolder(folder)
 
         let lines = h.fake.ignores["sw"] ?? []
         #expect(IgnoreRulesGenerator.isManaged(lines))
-        #expect(IgnoreRulesGenerator.presentPaths(from: lines) == Set(["报告 1/子目录/a b.txt", "top.md", "d/[x].txt"].map(RelativePath.init(rawValue:))))
+        #expect(IgnoreRulesGenerator.presentPaths(from: lines) == Set(["报告 1/子目录/a b.txt", "top.md", "d"].map(RelativePath.init(rawValue:))))
         #expect(!lines.contains("!/报告 1"))
         #expect(lines.last == "*")
         #expect(try await h.engine.userIgnoreRules(id) == ["*.tmp"])

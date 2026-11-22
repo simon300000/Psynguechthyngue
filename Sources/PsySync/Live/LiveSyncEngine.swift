@@ -730,9 +730,23 @@ public actor LiveSyncEngine: SyncEngine {
                     try await client.setIgnores(id, lines: IgnoreRulesGenerator.everythingLines(user: user))
                     try Self.writeHelperFile(Data(Self.joinLines(user).utf8), to: dir.appending(path: IgnoreRulesGenerator.userFile))
                 }
-                // Keep what is already local, file by file: an un-ignored
-                // directory would keep downloading everything added under it.
-                let present = Self.presentFiles(in: dir)
+                // Keep what is already local: file by file where a directory
+                // also holds remote-only files (those stay on demand), one
+                // directory rule where everything below is local (per-file
+                // rules for a large folder made every scan quadratic).
+                var remoteOnly: [RelativePath] = []
+                var indexRead = true
+                do {
+                    for try await page in globalIndex(folder.id, pageSize: 2000) {
+                        for e in page where e.type == .file && !e.deleted && !e.invalid && !e.localPresent {
+                            remoteOnly.append(e.name)
+                        }
+                    }
+                } catch {
+                    indexRead = false
+                }
+                let local = Self.presentFiles(in: dir)
+                let present = indexRead ? IgnoreRulesGenerator.collapsedPresent(local: local, remoteOnly: remoteOnly) : local
                 try await client.setIgnores(id, lines: try IgnoreRulesGenerator.lines(present: present))
             case .everything:
                 // The user's rules come back from .stignore-user into
