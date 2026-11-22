@@ -230,9 +230,18 @@ struct ContentHarness {
         let h = try ContentHarness()
         try h.project([FilesFixtures.file("c", local: false)])
         let noPeer = FakeFetchBridge(error: EngineError.bridge(code: "no_peer", detail: "x"))
-        await #expect(throws: FilesContentError.openAppRequired(.noPeer)) {
+        // On-demand: the user's request is kept for later (presence intent).
+        await #expect(throws: FilesContentError.openAppRequired(.queuedNoPeer)) {
             _ = try await h.provider(bridge: noPeer).provideContents(for: h.id("c"), requestedVersion: nil, progress: Progress())
         }
+        #expect(try h.store.pendingPresence() == [PresenceRequest(folderID: f1, path: RelativePath(rawValue: "c"), present: true)])
+        // "Everything" downloads anyway: plain no-peer, nothing queued.
+        let all = try ContentHarness(mode: .everything)
+        try all.project([FilesFixtures.file("c", local: false)])
+        await #expect(throws: FilesContentError.openAppRequired(.noPeer)) {
+            _ = try await all.provider(bridge: noPeer).provideContents(for: all.id("c"), requestedVersion: nil, progress: Progress())
+        }
+        #expect(try all.store.pendingPresence().isEmpty)
         await #expect(throws: FilesContentError.openAppRequired(.unavailable)) {
             _ = try await h.provider(bridge: nil).provideContents(for: h.id("c"), requestedVersion: nil, progress: Progress())
         }
@@ -266,6 +275,29 @@ struct ContentHarness {
         #expect(bridge.calls == 0)
         #expect(engine.recordedCalls.contains("presence true d/remote.txt"))
         #expect(engine.recordedCalls.contains("prio f1 d/remote.txt"))
+    }
+
+    /// User request: an open while no device is reachable must not leave
+    /// Files spinning for the 10-minute delegation timeout, and must not be
+    /// lost — the presence rule stays so the engine downloads it later.
+    @Test func delegatedOpenWithNoPeerIsQueuedAndFailsFast() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("q.txt", size: 6, local: false)])
+        let appLease = try #require(await h.lock.acquire(owner: .app, timeout: .seconds(1)))
+        defer { appLease.release() }
+        let engine = FilesFakeEngine()
+        let peer = DeviceID(rawValue: "PEER")
+        engine.folderList = [Folder(id: f1, label: "F", contentMode: .onDemand, devices: [peer])]
+        engine.connectionList = [DeviceConnection(deviceID: peer, state: .disconnected)]
+        let server = ContentRequestServer(engine: engine, store: h.store, layout: h.layout, pollInterval: .milliseconds(200)) { _ in }
+        await server.start()
+        defer { Task { await server.stop() } }
+        let started = ContinuousClock.now
+        await #expect(throws: FilesContentError.openAppRequired(.queuedNoPeer)) {
+            _ = try await h.provider(bridge: FakeFetchBridge()).provideContents(for: h.id("q.txt"), requestedVersion: nil, progress: Progress())
+        }
+        #expect(ContinuousClock.now - started < .seconds(10))
+        #expect(engine.recordedCalls.contains("presence true q.txt"))
     }
 
     @Test func delegationNotAcceptedFallsBackToRestrictedFetchAfterAppReleasesLock() async throws {

@@ -38,13 +38,15 @@ final class FilesFakeEngine: SyncEngine, @unchecked Sendable {
     func snapshot() async throws -> EngineStatus { throw EngineError.notRunning }
     var localDeviceID: DeviceID? { get async { nil } }
     func devices() async throws -> [Device] { [] }
-    func connections() async throws -> [DeviceConnection] { [] }
+    var connectionList: [DeviceConnection] = []
+    var folderList: [Folder] = []
+    func connections() async throws -> [DeviceConnection] { lock.withLock { connectionList } }
     func addDevice(_ device: Device) async throws {}
     func updateDevice(_ device: Device) async throws {}
     func removeDevice(_ id: DeviceID) async throws {}
     func pendingDevices() async throws -> [PendingDevice] { [] }
     func dismissPendingDevice(_ id: DeviceID) async throws {}
-    func folders() async throws -> [Folder] { [] }
+    func folders() async throws -> [Folder] { lock.withLock { folderList } }
     func folderStatus(_ id: FolderID) async throws -> FolderStatus { throw EngineError.notRunning }
     func addFolder(_ folder: Folder) async throws {}
     func updateFolder(_ folder: Folder) async throws {}

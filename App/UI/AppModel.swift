@@ -38,6 +38,11 @@ final class AppModel {
     private(set) var connections: [DeviceID: DeviceConnection] = [:]
     private(set) var folders: [Folder] = []
     private(set) var statuses: [FolderID: FolderStatus] = [:]
+    /// Files list being built per folder (FilesIntegration); see `status(of:)`.
+    private(set) var listings: [FolderID: FilesListingProgress] = [:]
+    /// When each folder's status last came from an event; `refreshAll` does
+    /// not overwrite a newer one with its older snapshot.
+    @ObservationIgnored private var statusEventAt: [FolderID: Date] = [:]
     private(set) var pendingDevices: [PendingDevice] = []
     private(set) var pendingFolders: [PendingFolder] = []
     private(set) var transfers: [String: ActiveTransfer] = [:]
@@ -113,6 +118,11 @@ final class AppModel {
             engineState = state
             if case .running = state { engineStarts += 1; scheduleRefresh() }
             if case .stopped = state { engineStops += 1; transfers.removeAll() }
+            if !isRunning {
+                // Nothing the engine said is current any more.
+                connections.removeAll()
+                listings.removeAll()
+            }
         case let .deviceConnectionChanged(c):
             connections[c.deviceID] = c
             // DeviceConnected events carry no LAN flag: pull it from REST.
@@ -125,6 +135,7 @@ final class AppModel {
             debugAutoAccept()
         case let .folderStatusChanged(status):
             statuses[status.folderID] = status
+            statusEventAt[status.folderID] = Date()
             if status.state == .syncing { debugContinueIfRequested() }
         case .configurationChanged:
             scheduleRefresh()
@@ -155,6 +166,7 @@ final class AppModel {
         engineState = await engine.state
         localID = await engine.localDeviceID
         guard case .running = engineState else { return }
+        let started = Date()
         do {
             devices = try await engine.devices()
             connections = Dictionary(uniqueKeysWithValues: try await engine.connections().map { ($0.deviceID, $0) })
@@ -164,7 +176,11 @@ final class AppModel {
             debugAutoAccept()
             debugFileOpsIfRequested()
             let snap = try await engine.snapshot()
-            statuses = Dictionary(uniqueKeysWithValues: snap.folders.map { ($0.folderID, $0) })
+            var merged = Dictionary(uniqueKeysWithValues: snap.folders.map { ($0.folderID, $0) })
+            for (id, at) in statusEventAt where at > started {
+                if let newer = statuses[id], merged[id] != nil { merged[id] = newer }
+            }
+            statuses = merged
             localID = snap.localDeviceID ?? localID
             engineOptions = try? await engine.options()
             let version = await engine.syncthingVersion
@@ -192,11 +208,21 @@ final class AppModel {
         statuses.values.flatMap(\.issues).sorted { $0.occurredAt > $1.occurredAt }
     }
     var pendingCount: Int { pendingDevices.count + pendingFolders.count }
-    var syncingFolders: [Folder] { folders.filter { statuses[$0.id]?.state == .syncing } }
+    var syncingFolders: [Folder] { folders.filter { status(of: $0).state == .syncing } }
     var isRunning: Bool { if case .running = engineState { true } else { false } }
 
+    /// Engine status plus App-side work (FolderStatusComposer): never
+    /// "up to date" while the file list is arriving or Files' list is being
+    /// built, and never current while the engine is stopped.
     func status(of folder: Folder) -> FolderStatus {
-        statuses[folder.id] ?? FolderStatus(folderID: folder.id, state: isRunning ? .upToDate : .offline)
+        FolderStatusComposer.compose(
+            folderID: folder.id, engine: statuses[folder.id], engineRunning: isRunning, listing: listings[folder.id])
+    }
+
+    func listing(of folder: Folder) -> FilesListingProgress? { listings[folder.id] }
+
+    func setListing(_ folder: FolderID, _ progress: FilesListingProgress?) {
+        listings[folder] = progress
     }
 
     func deviceName(_ id: DeviceID) -> String {

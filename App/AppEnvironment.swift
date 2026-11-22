@@ -71,6 +71,7 @@ final class AppEnvironment {
             // additionally closes files.sqlite right before stop (I2).
             files.attach()
             model.filesStatus = FilesLocationStatusProvider(files: files)
+            files.onListing = { [weak model] folder, progress in model?.setListing(folder, progress) }
             host.onEngineStarted = { [weak model] in await model?.refreshFilesLocation() }
             host.onEngineWillStop = { await files.engineWillStop() }
         } else {

@@ -18,6 +18,9 @@ public enum FilesContentError: Error, Hashable, Sendable {
         case appBusy
         /// Too little jetsam headroom left to start the restricted core.
         case lowMemory
+        /// No device is reachable now; the download was queued (on-demand
+        /// presence rule) and runs as soon as one is ("will download later").
+        case queuedNoPeer
     }
 
     case noSuchItem
@@ -215,6 +218,7 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         case "cancelled": return .cancelled
         case BridgeContract.Code.tooLarge.rawValue: return .openAppRequired(.tooLarge)
         case BridgeContract.Code.noPeer.rawValue, BridgeContract.Code.deadline.rawValue: return .openAppRequired(.noPeer)
+        case ContentRequest.queuedNoPeerCode: return .openAppRequired(.queuedNoPeer)
         case BridgeContract.Code.hashMismatch.rawValue, BridgeContract.Code.versionMismatch.rawValue,
             BridgeContract.Code.fileNotFound.rawValue:
             return .openAppRequired(.staleIndex)
@@ -285,7 +289,11 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
             }
         } catch {
             log.error("restricted fetch failed: \(String(describing: error), privacy: .public)")
-            throw Self.mapBridgeError(error, cancelled: progress.isCancelled || cancelFlag.isSet)
+            let mapped = Self.mapBridgeError(error, cancelled: progress.isCancelled || cancelFlag.isSet)
+            if mapped == .openAppRequired(.noPeer), try queueForLater(record) {
+                throw FilesContentError.openAppRequired(.queuedNoPeer)
+            }
+            throw mapped
         }
 
         // Commit order (contract change WP-A record-fetched-file), all under the lock:
@@ -316,6 +324,18 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         var fresh = try reader.item(record.itemID) ?? record
         fresh.isLocal = true
         return (try cloneToTemporary(destination), fresh, .restrictedFetch)
+    }
+
+    /// The user asked for this file and no device is reachable: keep the
+    /// request (a presence intent the App turns into a `!/path` rule) so the
+    /// engine downloads it once a device is back, and Files gets it through
+    /// FilesMaterializer. Only on-demand folders need it ("everything"
+    /// downloads anyway). Returns whether it was queued.
+    private func queueForLater(_ record: FileItemRecord) throws -> Bool {
+        guard try store.folderInfo(folder)?.contentMode == .onDemand else { return false }
+        try store.requestPresence(folder, path: record.path, present: true)
+        DarwinNotifier.post(DarwinNotification.filesRequestPosted)
+        return true
     }
 
     /// Adds `!/path` to a managed on-demand `.stignore` (same generator the

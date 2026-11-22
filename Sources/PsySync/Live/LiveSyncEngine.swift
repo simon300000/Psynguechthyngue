@@ -57,6 +57,10 @@ public actor LiveSyncEngine: SyncEngine {
     /// when an event mentions a `.sync-conflict-` path).
     private var conflicts: [FolderID: [FolderStatusInputs.Conflict]] = [:]
     private var conflictScans: [FolderID: Task<Void, Never>] = [:]
+    /// Last RemoteIndexUpdated per folder (StatusMapper: still receiving the
+    /// file list), and the refresh that ends that state once it settles.
+    private var lastRemoteIndex: [FolderID: Date] = [:]
+    private var indexSettleTasks: [FolderID: Task<Void, Never>] = [:]
 
     public init(
         bridge: any SyncthingBridge,
@@ -352,8 +356,26 @@ public actor LiveSyncEngine: SyncEngine {
             if StatusMapper.isConflictCopy(p.rawValue) { scheduleConflictScan(f) }
         case .indexChanged(let f, let paths):
             if paths?.contains(where: { StatusMapper.isConflictCopy($0.rawValue) }) == true { scheduleConflictScan(f) }
+            if paths == nil { noteRemoteIndex(f) }
         default:
             break
+        }
+    }
+
+    /// A peer sent index data: the folder shows "Getting file list…" until no
+    /// batch has arrived for `StatusMapper.indexSettleInterval`, then one more
+    /// status refresh settles it.
+    private func noteRemoteIndex(_ id: FolderID) {
+        lastRemoteIndex[id] = Date()
+        scheduleRefresh([id])
+        indexSettleTasks[id]?.cancel()
+        indexSettleTasks[id] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(StatusMapper.indexSettleInterval + 0.3))
+            guard !Task.isCancelled else { return }
+            await self?.scheduleRefresh([id])
+            try? await Task.sleep(for: .seconds(StatusMapper.indexActiveInterval - StatusMapper.indexSettleInterval))
+            guard !Task.isCancelled else { return }
+            await self?.scheduleRefresh([id])
         }
     }
 
@@ -607,6 +629,8 @@ public actor LiveSyncEngine: SyncEngine {
             needBytes: status.needBytes,
             needItems: status.needTotalItems,
             inProgressBytes: inProgress[id]?.values.reduce(0, +) ?? 0,
+            globalItems: (status.globalFiles ?? 0) + (status.globalDirectories ?? 0) + (status.globalSymlinks ?? 0),
+            lastRemoteIndexAt: lastRemoteIndex[id],
             remotes: remotes,
             folderErrors: errors.map { .init(path: $0.path, error: $0.error) },
             conflicts: conflicts[id] ?? [],

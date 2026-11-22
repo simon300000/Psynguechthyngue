@@ -39,6 +39,102 @@
         }
       }
     },
+    "%lld files waiting for a device" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld file waiting for a device"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld files waiting for a device"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件等待设备连接"
+          }
+        }
+      }
+    },
+    "%lld items received so far" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item received so far"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items received so far"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已收到 %lld 项"
+          }
+        }
+      }
+    },
+    "%lld of %lld items listed for Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已为“文件”列出 %1$lld / %2$lld 项"
+          }
+        }
+      }
+    },
+    "All folders are paused" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有文件夹都已暂停"
+          }
+        }
+      }
+    },
+    "Getting file lists…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在获取文件列表…"
+          }
+        }
+      }
+    },
+    "Getting file list…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在获取文件列表…"
+          }
+        }
+      }
+    },
     "On this device" : {
       "localizations" : {
         "zh-Hans" : {
@@ -65,6 +161,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设备过热时暂停"
+          }
+        }
+      }
+    },
+    "Preparing file lists…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成文件列表…"
+          }
+        }
+      }
+    },
+    "Preparing file list…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成文件列表…"
           }
         }
       }

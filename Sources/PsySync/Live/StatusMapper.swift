@@ -31,6 +31,11 @@ public struct FolderStatusInputs: Hashable, Sendable {
     public var needBytes: Int64
     public var needItems: Int64
     public var inProgressBytes: Int64
+    /// Global files + directories + symlinks (0 when unknown).
+    public var globalItems: Int64
+    /// Last upstream RemoteIndexUpdated for this folder: a peer is still
+    /// sending its file list (index batches arrive back to back).
+    public var lastRemoteIndexAt: Date?
     /// Shared devices (excluding self), keyed by device.
     public var remotes: [DeviceID: RemoteCompletion]
     public struct FileError: Hashable, Sendable {
@@ -63,6 +68,8 @@ public struct FolderStatusInputs: Hashable, Sendable {
         needBytes: Int64 = 0,
         needItems: Int64 = 0,
         inProgressBytes: Int64 = 0,
+        globalItems: Int64 = 0,
+        lastRemoteIndexAt: Date? = nil,
         remotes: [DeviceID: RemoteCompletion] = [:],
         folderErrors: [FileError] = [],
         conflicts: [Conflict] = [],
@@ -80,6 +87,8 @@ public struct FolderStatusInputs: Hashable, Sendable {
         self.needBytes = needBytes
         self.needItems = needItems
         self.inProgressBytes = inProgressBytes
+        self.globalItems = globalItems
+        self.lastRemoteIndexAt = lastRemoteIndexAt
         self.remotes = remotes
         self.folderErrors = folderErrors
         self.conflicts = conflicts
@@ -103,7 +112,8 @@ public enum StatusMapper {
             needBytes: i.needBytes,
             needItems: i.needItems,
             inProgressBytes: i.inProgressBytes,
-            remoteCompletion: validRemotes.mapValues(\.completion)
+            remoteCompletion: validRemotes.mapValues(\.completion),
+            globalItems: i.globalItems
         )
         let fileErrors = i.folderErrors.filter { !isTransientDisconnectError($0.error) }
         let state = state(i, validRemotes: validRemotes, fileErrors: fileErrors)
@@ -149,6 +159,23 @@ public enum StatusMapper {
            Int64(fileErrors.count) >= i.needItems, isIdleLike(i.upstreamState) {
             return .error
         }
+        // Index batches still arriving and nothing actually transferring:
+        // upstream's needs are transient (the puller has not applied the
+        // ignore rules to the new entries yet — an on-demand folder showed
+        // "Syncing, 5,000 items left, 0 KB of 83 KB"); the honest state is
+        // that the file list is still coming in.
+        // Over a slow link batches arrive tens of seconds apart (simulator,
+        // 60k entries at 30 KB/s: "Syncing, 7,127 items, 0 KB" between
+        // batches), hence the longer window here.
+        let indexArriving = i.lastRemoteIndexAt.map { i.now.timeIntervalSince($0) < indexActiveInterval } ?? false
+        if indexArriving, localNeeds, anyConnected, i.inProgressBytes == 0, i.upstreamState != "scanning" {
+            return .fetchingIndex
+        }
+        // Upstream works through the new list before pulling anything: an
+        // on-demand folder spent minutes in sync-preparing over 38k entries
+        // its rules ignore (count falling ~200/s, 0 bytes moving). That is
+        // still the file list being processed, not a transfer.
+        if i.upstreamState == "sync-preparing", i.inProgressBytes == 0 { return .fetchingIndex }
         switch i.upstreamState {
         case "scanning", "scan-waiting":
             return .scanning
@@ -160,10 +187,32 @@ public enum StatusMapper {
         if localNeeds {
             return anyConnected ? .syncing : .waitingForDevices
         }
+        // A connected peer shares the folder but its index is not in yet
+        // (upstream remoteState "unknown" until the first index arrives), or
+        // index batches are still arriving: the folder may look empty or
+        // complete while most of it is unknown (seen on a re-added folder:
+        // "Up to date, 0 KB" while 1059 files were still on their way).
+        let awaitingIndex = i.remotes.values.contains { $0.connected && $0.remoteState == "unknown" }
+        if awaitingIndex { return .fetchingIndex }
+        if let at = i.lastRemoteIndexAt, i.now.timeIntervalSince(at) < indexSettleInterval, anyConnected {
+            return .fetchingIndex
+        }
         if connectedRemoteBehind { return .syncing }
         if anyRemoteBehind && !anyConnected { return .waitingForDevices }
+        // Never heard from anyone and nobody is connected: an empty folder is
+        // unknown, not up to date.
+        let knowsAnything = i.globalBytes > 0 || i.globalItems > 0 || i.remotes.values.contains { $0.remoteState == "valid" }
+        if !i.remotes.isEmpty && !anyConnected && !knowsAnything { return .waitingForDevices }
         return .upToDate
     }
+
+    /// How long after the last RemoteIndexUpdated a folder still counts as
+    /// receiving its file list. LiveSyncEngine refreshes the status once this
+    /// has passed.
+    public static let indexSettleInterval: TimeInterval = 3
+    /// While needs exist but nothing transfers, a folder that received index
+    /// data this recently is still getting its file list (not "syncing").
+    public static let indexActiveInterval: TimeInterval = 30
 
     private static func isIdleLike(_ s: String) -> Bool {
         ["idle", "sync-waiting", "clean-waiting", "cleaning", ""].contains(s)

@@ -11,11 +11,15 @@ public actor FilesProjector {
     /// One line per pass (source, entries, rows swept, outcome); the App
     /// writes it to the DEBUG diagnostics log.
     public typealias Trace = @Sendable (String) -> Void
+    /// Progress of the running pass per folder (nil when it ends), for the
+    /// App's honest status ("Preparing file list… N of M").
+    public typealias Listing = @Sendable (FolderID, FilesListingProgress?) -> Void
 
     private let engine: any SyncEngine
     private let store: FilesStore
     private let signal: Signal
     private let trace: Trace?
+    private let listing: Listing?
     private let debounce: Duration
     private let pageSize: Int
     private var folders: Set<FolderID> = []
@@ -28,9 +32,10 @@ public actor FilesProjector {
     public private(set) var passCount = 0
 
     public init(engine: any SyncEngine, store: FilesStore, debounce: Duration = .seconds(2), pageSize: Int = 1000,
-                trace: Trace? = nil, signal: @escaping Signal)
+                trace: Trace? = nil, listing: Listing? = nil, signal: @escaping Signal)
     {
         self.trace = trace
+        self.listing = listing
         self.engine = engine
         self.store = store
         self.debounce = debounce
@@ -122,12 +127,16 @@ public actor FilesProjector {
         let before = (try? store.currentAnchor()) ?? 0
         let started = ContinuousClock.now
         var count = 0
+        let listedAtStart = (try? store.itemCount(folder)) ?? 0
+        listing?(folder, FilesListingProgress(processed: 0, listedAtStart: listedAtStart))
+        defer { listing?(folder, nil) }
         do {
             try store.beginFullSync(folder)
             for try await page in engine.globalIndex(folder, pageSize: pageSize) {
                 try Task.checkCancellation()
                 _ = try store.applyIndexBatch(folder, entries: page)
                 count += page.count
+                listing?(folder, FilesListingProgress(processed: count, listedAtStart: listedAtStart))
             }
             // A cancelled consumer sees the stream *end* (next() returns nil),
             // not throw. Sweeping then would delete every row the pass had not

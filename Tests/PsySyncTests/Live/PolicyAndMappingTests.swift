@@ -155,7 +155,8 @@ import Testing
         #expect(state { $0.upstreamState = "scanning" } == .scanning)
         #expect(state { $0.upstreamState = "scan-waiting" } == .scanning)
         #expect(state { $0.upstreamState = "syncing" } == .syncing)
-        #expect(state { $0.upstreamState = "sync-preparing" } == .syncing)
+        #expect(state { $0.upstreamState = "sync-preparing" } == .fetchingIndex)
+        #expect(state { $0.upstreamState = "sync-preparing"; $0.inProgressBytes = 1 } == .syncing)
         #expect(state { _ in } == .upToDate)
     }
 
@@ -198,6 +199,85 @@ import Testing
             $0.needItems = 2
             $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
         } == .syncing)
+    }
+
+    /// Honest status (user report: a re-added folder showed "Up to date,
+    /// 0 KB" while the peer's 1059-file index was still arriving).
+    @Test func neverUpToDateWhileTheFileListIsArriving() {
+        let now = Date()
+        // Peer connected, shares the folder, its index not in yet.
+        #expect(state {
+            $0.remotes = [a: .init(completion: 0, remoteState: "unknown", connected: true)]
+        } == .fetchingIndex)
+        // Index batches arrived just now (on-demand: nothing to pull, so no
+        // "syncing" either).
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-1); $0.globalItems = 400
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .fetchingIndex)
+        // Upstream briefly reports needs while it applies the new entries;
+        // nothing is moving, so it is still the file list arriving.
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-1)
+            $0.upstreamState = "sync-preparing"; $0.needItems = 5000; $0.needBytes = 33_000
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .fetchingIndex)
+        // Slow link: last batch 20 s ago, still nothing moving.
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-20)
+            $0.upstreamState = "syncing"; $0.needItems = 7127; $0.needBytes = 7000
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .fetchingIndex)
+        // Long after the index: real needs are syncing.
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-(StatusMapper.indexActiveInterval + 1))
+            $0.upstreamState = "syncing"; $0.needItems = 3
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .syncing)
+        // Real transfer under way while more index arrives: syncing.
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-1)
+            $0.upstreamState = "syncing"; $0.needItems = 5; $0.inProgressBytes = 4096
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .syncing)
+        // Settled.
+        #expect(state {
+            $0.now = now; $0.lastRemoteIndexAt = now.addingTimeInterval(-(StatusMapper.indexSettleInterval + 1))
+            $0.globalItems = 1059
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .upToDate)
+        // Nothing known and nobody connected: waiting, not "up to date 0 B".
+        #expect(state {
+            $0.remotes = [a: .init(completion: 0, remoteState: "unknown", connected: false)]
+        } == .waitingForDevices)
+        // A genuinely empty folder the peer has indexed is up to date.
+        #expect(state {
+            $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true)]
+        } == .upToDate)
+        // No peers at all (local-only folder) stays up to date.
+        #expect(state { _ in } == .upToDate)
+        // Item count reaches the progress.
+        var i = FolderStatusInputs(folderID: f); i.globalItems = 7
+        #expect(StatusMapper.map(i).progress.globalItems == 7)
+    }
+
+    @Test func composerAddsAppWorkAndNeverCallsAStoppedEngineCurrent() {
+        let up = FolderStatus(folderID: f, state: .upToDate, progress: .init(globalBytes: 10, globalItems: 1000))
+        // No status yet: unknown, not up to date.
+        #expect(FolderStatusComposer.compose(folderID: f, engine: nil, engineRunning: true, listing: nil).state == .fetchingIndex)
+        // Files list being filled behind the index.
+        #expect(FolderStatusComposer.compose(
+            folderID: f, engine: up, engineRunning: true, listing: .init(processed: 300, listedAtStart: 0)).state == .preparingFiles)
+        // A re-read over a complete list is not shown.
+        #expect(FolderStatusComposer.compose(
+            folderID: f, engine: up, engineRunning: true, listing: .init(processed: 300, listedAtStart: 1000)).state == .upToDate)
+        // Engine work wins over the listing.
+        var syncing = up; syncing.state = .syncing
+        #expect(FolderStatusComposer.compose(
+            folderID: f, engine: syncing, engineRunning: true, listing: .init(processed: 1, listedAtStart: 0)).state == .syncing)
+        // Stopped / failed engine: offline, last numbers kept.
+        let off = FolderStatusComposer.compose(folderID: f, engine: up, engineRunning: false, listing: nil)
+        #expect(off.state == .offline && off.progress.globalBytes == 10)
     }
 
     @Test func blockedByFileErrors() {

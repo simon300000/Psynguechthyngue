@@ -115,12 +115,28 @@ public actor ContentRequestServer {
                 }
                 if try completeIfLocal(request) { continue }
                 try await engine.prioritize(request.folderID, path: request.path)
+                // Nobody to download from: do not keep Files waiting (up to
+                // `requestTimeout`). The presence rule stays, so the engine
+                // fetches it when a device connects; the extension says so.
+                if try await noPeerConnected(for: request.folderID) {
+                    fail(request.id, code: ContentRequest.queuedNoPeerCode)
+                    continue
+                }
                 log.info("accepted request \(request.id, privacy: .public) path=\(request.path.rawValue, privacy: .private)")
             } catch {
                 fail(request.id, code: Self.code(for: error))
             }
         }
         if changed { DarwinNotifier.post(DarwinNotification.filesRequestUpdated) }
+    }
+
+    /// True only when the folder is known and none of its devices is
+    /// connected (unknown folder / engine data: keep waiting as before).
+    private func noPeerConnected(for folder: FolderID) async throws -> Bool {
+        guard let config = try await engine.folders().first(where: { $0.id == folder }), !config.devices.isEmpty
+        else { return false }
+        let connected = Set(try await engine.connections().filter { $0.state == .connected }.map(\.deviceID))
+        return connected.isDisjoint(with: config.devices)
     }
 
     /// Completes when the file is present and the engine considers it local.

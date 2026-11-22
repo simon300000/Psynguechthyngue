@@ -200,6 +200,9 @@ struct DBStatusDTO: Decodable {
     var localBytes: Int64
     var needBytes: Int64
     var needTotalItems: Int64
+    var globalFiles: Int64?
+    var globalDirectories: Int64?
+    var globalSymlinks: Int64?
     var inSyncBytes: Int64?
     var pullErrors: Int64?
 }

@@ -120,6 +120,9 @@ public protocol LocalMutationJournal: Sendable {
 // MARK: - Content requests (extension fetchContents)
 
 public struct ContentRequest: Hashable, Codable, Sendable, Identifiable {
+    /// Failure code: no device sharing the folder is connected; the App kept
+    /// the download (presence rule) and the engine fetches it later.
+    public static let queuedNoPeerCode = "no_peer_queued"
     public enum State: String, Codable, Sendable {
         case posted       // written by extension
         case accepted     // App engine took it (un-ignored + prio)

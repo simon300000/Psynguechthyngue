@@ -26,6 +26,9 @@ final class FilesIntegration {
     private var configTask: Task<Void, Never>?
     private let log = Logger(subsystem: FilesLog.subsystem, category: "integration")
 
+    /// Files list progress per folder (FolderStatusComposer), set by the host.
+    var onListing: (@MainActor (FolderID, FilesListingProgress?) -> Void)?
+
     init(engine: any SyncEngine, layout: AppGroupLayout) {
         self.engine = engine
         self.layout = layout
@@ -72,7 +75,15 @@ final class FilesIntegration {
             let materializer = FilesMaterializer(store: store, trace: materializeTrace) { folder, id in
                 try await DomainManager.requestDownload(folder, item: id)
             }
-            let projector = FilesProjector(engine: engine, store: store, trace: trace) { folder in
+            // Hops to the main actor may reorder; a sequence number drops
+            // stale updates (a late "N of M" after the pass ended would
+            // leave the folder stuck as "preparing").
+            let sequence = listingSequence
+            let listing: FilesProjector.Listing = { [weak self] folder, progress in
+                let n = sequence.next()
+                Task { @MainActor in self?.deliverListing(folder, progress, n) }
+            }
+            let projector = FilesProjector(engine: engine, store: store, trace: trace, listing: listing) { folder in
                 await DomainManager.signal(folder)
                 await materializer.refresh(folder)
             }
@@ -89,13 +100,31 @@ final class FilesIntegration {
             let events = engine.events()
             configTask = Task { [weak self] in
                 for await event in events {
-                    if case .configurationChanged = event { await self?.foldersChanged() }
+                    switch event {
+                    case .configurationChanged:
+                        await self?.foldersChanged()
+                    case .deviceConnectionChanged(let c) where c.state == .connected:
+                        // Files backs off after "server unreachable" until
+                        // told otherwise; a device is back, so retry now.
+                        await self?.deviceConnected()
+                    default:
+                        break
+                    }
                 }
             }
             log.info("files integration started")
         } catch {
             log.error("files integration failed to start: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    private var listingSeen: [FolderID: UInt64] = [:]
+    private let listingSequence = ListingSequence()   // survives engine restarts, like listingSeen
+
+    private func deliverListing(_ folder: FolderID, _ progress: FilesListingProgress?, _ n: UInt64) {
+        guard n > listingSeen[folder, default: 0] else { return }
+        listingSeen[folder] = n
+        onListing?(folder, progress)
     }
 
     func engineWillStop() async {
@@ -130,6 +159,12 @@ final class FilesIntegration {
         (try? store?.unmaterializedLocalFileCount(folder)) ?? 0
     }
 
+    private func deviceConnected() async {
+        let folders = (try? await engine.folders()) ?? []
+        let managed = folders.filter { if case .managed = $0.location { return true } else { return false } }
+        await DomainManager.resolveErrors(managed.map(\.id))
+    }
+
     func foldersChanged() async {
         guard let store, let projector else { return }
         do {
@@ -153,4 +188,11 @@ final class FilesIntegration {
             log.error("folders() failed: \(String(describing: error), privacy: .public)")
         }
     }
+}
+
+/// Monotonic counter shared by the projector's listing callbacks.
+private final class ListingSequence: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: UInt64 = 0
+    func next() -> UInt64 { lock.withLock { value += 1; return value } }
 }
