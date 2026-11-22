@@ -97,7 +97,10 @@ final class AppEnvironment {
         #if DEBUG
         scheduler.installDebugTrigger()
         #endif
-        if !isFixture { policyMonitor.start() }
+        if !isFixture {
+            policyMonitor.start()
+            SearchAlias.register()
+        }
         model.startObserving()
     }
 }
