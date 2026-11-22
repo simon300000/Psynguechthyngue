@@ -132,7 +132,10 @@ final class BackgroundScheduler {
             let need = status.folders.reduce(Int64(0)) { $0 + max($1.progress.needBytes, 0) }
             progress.totalUnitCount = max(total, 1)
             progress.completedUnitCount = max(total - need, 0)
-            let active = status.folders.contains { $0.state == .syncing || $0.state == .scanning }
+            // Receiving a peer's file list is progress too (a folder with a
+            // long history spends minutes on index batches before any byte
+            // moves; this ended the task as "stalled" after 2 s on device).
+            let active = status.folders.contains { [.syncing, .scanning, .fetchingIndex].contains($0.state) }
             if !active {
                 // Up to date, or waiting for devices / on hold: nothing more to do in background.
                 reason = need == 0 ? "done" : "stalled"

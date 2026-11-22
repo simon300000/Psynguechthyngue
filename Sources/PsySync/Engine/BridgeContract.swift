@@ -95,7 +95,13 @@ public protocol SyncthingBridge: Sendable {
     func onMemoryWarning()
 
     /// Engine.OpenIndexStream + Next/Close; `next` returns [] when exhausted.
+    /// Deleted entries are left out (IndexStream.SetLiveOnly): every consumer
+    /// skips them, and a long-lived folder holds far more of them than files.
     func openIndexStream(folder: FolderID) throws -> any GlobalIndexCursor
+
+    /// Engine.FolderIndexState: DB counters (valid while paused) and whether
+    /// each peer's index is still arriving. nil = not available (fakes).
+    func folderIndexState(folder: FolderID) throws -> FolderIndexState?
 
     /// psybridge.NewIgnoreMatcher: upstream ignore semantics for `lines`
     /// as a .stignore at `folderRoot`. nil = not available (fakes).
@@ -104,6 +110,59 @@ public protocol SyncthingBridge: Sendable {
 
 extension SyncthingBridge {
     public func ignoreMatcher(folderRoot: URL, lines: [String]) throws -> (any IgnoreMatching)? { nil }
+    public func folderIndexState(folder: FolderID) throws -> FolderIndexState? { nil }
+}
+
+/// Mirror of FolderIndexStateJSON (psybridge/indexstate.go).
+public struct FolderIndexState: Hashable, Codable, Sendable {
+    public struct Peer: Hashable, Codable, Sendable {
+        public var device: String
+        /// receiving / awaiting / complete / disconnected
+        public var phase: String
+        /// Entries received on this connection.
+        public var received: Int64
+        /// The peer's index entries stored here (deletions included).
+        public var entries: Int64
+        public var deleted: Int64
+        /// Highest sequence of the peer's index we hold.
+        public var sequence: Int64
+
+        public init(device: String, phase: String, received: Int64 = 0, entries: Int64 = 0, deleted: Int64 = 0,
+                    sequence: Int64 = 0)
+        {
+            self.device = device
+            self.phase = phase
+            self.received = received
+            self.entries = entries
+            self.deleted = deleted
+            self.sequence = sequence
+        }
+    }
+
+    public var globalFiles: Int64 = 0
+    public var globalDirectories: Int64 = 0
+    public var globalSymlinks: Int64 = 0
+    public var globalDeleted: Int64 = 0
+    public var globalBytes: Int64 = 0
+    public var localFiles: Int64 = 0
+    public var localDirectories: Int64 = 0
+    public var localSymlinks: Int64 = 0
+    public var localDeleted: Int64 = 0
+    public var localBytes: Int64 = 0
+    public var localSequence: Int64 = 0
+    public var peers: [Peer] = []
+
+    public init() {}
+
+    public var globalItems: Int64 { globalFiles + globalDirectories + globalSymlinks }
+
+    /// Changes whenever the folder's global index can have changed (any
+    /// device's sequence): the Files projection skips passes over an
+    /// unchanged index.
+    public var indexFingerprint: String {
+        let remote = peers.map { "\($0.device)=\($0.sequence)" }.sorted().joined(separator: ",")
+        return "\(localSequence)|\(remote)"
+    }
 }
 
 /// Whether a folder-relative path is ignored by a set of rules.

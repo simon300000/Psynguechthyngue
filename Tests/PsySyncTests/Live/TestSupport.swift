@@ -131,6 +131,9 @@ final class FakeBridge: SyncthingBridge, @unchecked Sendable {
     var startError: Error?
     /// When set, every index stream returns these entries as one page.
     var indexEntries: [GlobalIndexEntry]?
+    /// Returned by folderIndexState (nil: not available).
+    var indexState: FolderIndexState?
+    func folderIndexState(folder: FolderID) throws -> FolderIndexState? { lock.withLock { indexState } }
 
     init(endpoint: RESTEndpoint) { self.endpoint = endpoint }
 

@@ -60,6 +60,7 @@ public actor LiveSyncEngine: SyncEngine {
     /// Last RemoteIndexUpdated per folder (StatusMapper: still receiving the
     /// file list), and the refresh that ends that state once it settles.
     private var lastRemoteIndex: [FolderID: Date] = [:]
+    private var indexRecheckTasks: [FolderID: Task<Void, Never>] = [:]
     private var indexSettleTasks: [FolderID: Task<Void, Never>] = [:]
 
     public init(
@@ -362,6 +363,19 @@ public actor LiveSyncEngine: SyncEngine {
         }
     }
 
+    private func scheduleIndexRecheck(_ id: FolderID) {
+        guard indexRecheckTasks[id] == nil else { return }
+        indexRecheckTasks[id] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            await self?.finishIndexRecheck(id)
+        }
+    }
+
+    private func finishIndexRecheck(_ id: FolderID) {
+        indexRecheckTasks[id] = nil
+        scheduleRefresh([id])
+    }
+
     /// A peer sent index data: the folder shows "Getting file list…" until no
     /// batch has arrived for `StatusMapper.indexSettleInterval`, then one more
     /// status refresh settles it.
@@ -617,6 +631,23 @@ public actor LiveSyncEngine: SyncEngine {
         }
         let status = try await statusTask
         let errors = (try? await errorsTask) ?? []
+        let bridge = self.bridge
+        let index = try? await executor.run { try bridge.folderIndexState(folder: id) }
+        // A paused folder's REST summary is all zero (upstream answers
+        // ErrFolderPaused); its DB counters are still there.
+        var globalBytes = status.globalBytes, localBytes = status.localBytes
+        var globalItems = (status.globalFiles ?? 0) + (status.globalDirectories ?? 0) + (status.globalSymlinks ?? 0)
+        if folder.paused, let index, globalBytes == 0, localBytes == 0 {
+            globalBytes = index.globalBytes
+            localBytes = index.localBytes
+            globalItems = index.globalItems
+        }
+        let indexPeers = index.map { state in
+            Dictionary(state.peers.compactMap { p -> (DeviceID, FolderStatusInputs.IndexPeer)? in
+                guard let phase = FolderStatusInputs.IndexPeer.Phase(rawValue: p.phase) else { return nil }
+                return (DeviceID(rawValue: p.device), .init(phase: phase, entries: p.entries, deletions: p.deleted))
+            }, uniquingKeysWith: { a, _ in a })
+        }
         let inputs = FolderStatusInputs(
             folderID: id,
             engineRunning: true,
@@ -624,19 +655,23 @@ public actor LiveSyncEngine: SyncEngine {
             policyHeld: appState.decision.hold != nil,
             upstreamState: status.state,
             upstreamError: status.error ?? "",
-            globalBytes: status.globalBytes,
-            localBytes: status.localBytes,
+            globalBytes: globalBytes,
+            localBytes: localBytes,
             needBytes: status.needBytes,
             needItems: status.needTotalItems,
             inProgressBytes: inProgress[id]?.values.reduce(0, +) ?? 0,
-            globalItems: (status.globalFiles ?? 0) + (status.globalDirectories ?? 0) + (status.globalSymlinks ?? 0),
+            globalItems: globalItems,
             lastRemoteIndexAt: lastRemoteIndex[id],
+            indexPeers: indexPeers,
             remotes: remotes,
             folderErrors: errors.map { .init(path: $0.path, error: $0.error) },
             conflicts: conflicts[id] ?? [],
             stateChanged: SyncthingDate.parseNonZero(status.stateChanged)
         )
         var result = StatusMapper.map(inputs)
+        // The tracker's phases also end by time (a peer with nothing to
+        // send never says so): look again while any index is arriving.
+        if result.progress.sizeIsPartial { scheduleIndexRecheck(id) }
         if let s = stats[id.rawValue] {
             result.lastScan = SyncthingDate.parseNonZero(s.lastScan)
             if let name = s.lastFile?.filename, !name.isEmpty { result.lastSyncedFile = RelativePath(rawValue: name) }
@@ -1160,6 +1195,14 @@ public actor LiveSyncEngine: SyncEngine {
     /// The user's own ignore rules for `folder` (never the on-demand `*`),
     /// matched with upstream semantics; nil when there are none or the bridge
     /// cannot match (fakes). A rule error leaves entries unmarked.
+    public func indexFingerprint(_ folder: FolderID) async -> String? {
+        guard case .running = engineState, let dto = try? await folderConfig(folder) else { return nil }
+        let bridge = bridge
+        guard let state = try? await executor.run({ try bridge.folderIndexState(folder: folder) }) else { return nil }
+        let rules = IgnoreRulesGenerator.userRules(folderRoot: URL(filePath: dto.path, directoryHint: .isDirectory))
+        return state.indexFingerprint + "|" + rules.joined(separator: "\n")
+    }
+
     private func userIgnoreMatcher(_ folder: FolderID) async -> (any IgnoreMatching)? {
         guard let dto = try? await folderConfig(folder) else { return nil }
         let root = URL(filePath: dto.path, directoryHint: .isDirectory)

@@ -2817,6 +2817,70 @@
           }
         }
       }
+    },
+    "%lld entries received so far, %lld of them deletions" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld entries received so far, %2$lld of them deletions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已收到 %1$lld 条记录，其中 %2$lld 条是删除记录"
+          }
+        }
+      }
+    },
+    "%lld entries received so far" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld entry received so far"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld entries received so far"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已收到 %lld 条记录"
+          }
+        }
+      }
+    },
+    "Waiting for the other device’s file list…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待对方设备发送文件列表…"
+          }
+        }
+      }
+    },
+    "At least %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少 %@"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

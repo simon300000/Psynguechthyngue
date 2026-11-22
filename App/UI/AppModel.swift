@@ -292,7 +292,9 @@ final class AppModel {
     /// are made only while the app is in the foreground, once per burst
     /// (AutoContinueGate), and the task finishes when transfers end.
     private func autoContinueIfNeeded() {
-        let transfersActive = !syncingFolders.isEmpty
+        // Index exchange counts: stopping the engine on every app switch
+        // restarted it from the last full batch each time.
+        let transfersActive = !syncingFolders.isEmpty || folders.contains { status(of: $0).state == .fetchingIndex }
         if !transfersActive { autoContinueFailed = false }
         guard autoContinueGate.shouldRequest(
             enabled: settings.autoContinueInBackground, appActive: isActive, canContinue: canContinueInBackground,
