@@ -131,6 +131,58 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(try reader.changes(since: anchor, limit: 10).updated.count == 1)
     }
 
+    /// Regression (iPhone, on-demand folder showed 3 of ~20 root entries): the
+    /// system enumerates the root, more index pages are projected, and the
+    /// working-set change enumeration runs *before* the system reports the
+    /// root as materialized. Those children were filtered out while the anchor
+    /// moved past them, so Files never showed them. Becoming materialized must
+    /// re-announce the directory's children.
+    @Test func childrenProjectedBeforeMaterializationAreReannounced() throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        try store.upsertFolder(FilesFolderInfo(folderID: f1, label: "big-folder", isReadOnly: false, contentMode: .onDemand))
+        let reader = store.reader(folder: f1)
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("config.yaml", local: false), FilesFixtures.dir("h3-archive")])
+        // System: working-set anchor, then the root listing (2 items).
+        var systemAnchor = try reader.currentAnchor()
+        var seen = Set(try reader.children(of: reader.rootID, after: nil, limit: 100).items.map(\.path.rawValue))
+        // Next index page lands; working-set changes run before materialization.
+        let late = ["2026-11-04 05-27-39.mkv", "角色摄影", "lens-sim-intro-v11-4k.mp4", "p 文件夹"]
+        _ = try store.applyIndexBatch(f1, entries: [
+            FilesFixtures.file(late[0], size: 314_572_800, local: false), FilesFixtures.dir(late[1]),
+            FilesFixtures.file(late[2], local: false), FilesFixtures.file("\(late[3])/x.txt", local: false),
+        ])
+        var page = try reader.changes(since: systemAnchor, limit: 100, workingSetOnly: true)
+        seen.formUnion(page.updated.map(\.path.rawValue))
+        systemAnchor = page.newAnchor
+        #expect(seen.isDisjoint(with: late))  // the window: filtered, anchor moved on
+
+        // The system now reports the root as materialized → re-announced.
+        #expect(try store.setMaterialized(f1, ids: [reader.rootID]))
+        page = try reader.changes(since: systemAnchor, limit: 100, workingSetOnly: true)
+        seen.formUnion(page.updated.map(\.path.rawValue))
+        #expect(seen.isSuperset(of: late + ["config.yaml", "h3-archive"]))
+        // Unchanged materialized set: nothing to re-announce.
+        #expect(try !store.setMaterialized(f1, ids: [reader.rootID]))
+    }
+
+    /// Existing installs already lost those items (root is materialized, the
+    /// system is past their anchors): a one-time repair re-announces them.
+    @Test func workingSetRepairRunsOnce() throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        try store.upsertFolder(FilesFolderInfo(folderID: f1, label: "big-folder", isReadOnly: false, contentMode: .onDemand))
+        let reader = store.reader(folder: f1)
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("a", local: false), FilesFixtures.file("d/b", local: false), FilesFixtures.file("d/e/c", local: false)])
+        let d = try #require(try reader.item(at: RelativePath(rawValue: "d")))
+        try store.setMaterialized(f1, ids: [reader.rootID, d.itemID])
+        let systemAnchor = try reader.currentAnchor()
+        #expect(try reader.changes(since: systemAnchor, limit: 100, workingSetOnly: true).updated.isEmpty)
+
+        #expect(try store.repairWorkingSetIfNeeded() == [f1])
+        let updated = try reader.changes(since: systemAnchor, limit: 100, workingSetOnly: true).updated.map(\.path.rawValue)
+        #expect(Set(updated) == ["a", "d", "d/b", "d/e"])
+        #expect(try store.repairWorkingSetIfNeeded().isEmpty)
+    }
+
     @Test func anchorExpiresAfterTombstonePruning() throws {
         let store = try FilesFixtures.store(FilesFixtures.tempDir())
         store.tombstoneRetention = 5

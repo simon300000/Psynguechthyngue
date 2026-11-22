@@ -34,6 +34,12 @@ enum DomainManager {
             // signal the system only saw them after the next index change.
             if ((try? store.currentAnchor()) ?? 0) != before { touched.append(folder.id) }
         }
+        // Installs that lost items to the materialization window (see
+        // FilesStore.setMaterialized) recover once here.
+        if let repaired = try? store.repairWorkingSetIfNeeded(), !repaired.isEmpty {
+            log.info("working-set repair folders=\(repaired.count)")
+            for id in repaired where !touched.contains(id) { touched.append(id) }
+        }
         let wanted = Dictionary(uniqueKeysWithValues: managed.map { ($0.id.rawValue, $0) })
         let existing: [NSFileProviderDomain]
         do {
