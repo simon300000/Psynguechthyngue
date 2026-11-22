@@ -114,6 +114,37 @@ import Testing
         #expect(ExternalLocation.classify(F(path: "/Users/x/Documents/Sync", hasDatalessContent: true)) == .cloud)
     }
 
+    @Test func deviceSandboxFallsBackToBookmarkProvider() {
+        typealias F = ExternalLocation.LocationFacts
+        let onMyPad = "/private/var/mobile/Containers/Shared/AppGroup/27FC/File Provider Storage/psy-test-extloc"
+        // iPad (iOS 27): container identifier unreadable (EPERM), bookmark names the provider.
+        #expect(ExternalLocation.classify(F(path: onMyPad, fileProviderIdentifier: ExternalLocation.localStorageProvider)) == .local)
+        #expect(ExternalLocation.classify(F(path: onMyPad, fileProviderIdentifier: "com.example.cloud.FileProvider")) == .cloud)
+        // A readable container identifier wins over the bookmark.
+        #expect(ExternalLocation.classify(F(path: onMyPad, groupContainerIdentifier: "group.com.example.cloud",
+                                            fileProviderIdentifier: ExternalLocation.localStorageProvider)) == .cloud)
+        // Dataless content is refused even in local storage.
+        #expect(ExternalLocation.classify(F(path: onMyPad, hasDatalessContent: true,
+                                            fileProviderIdentifier: ExternalLocation.localStorageProvider)) == .cloud)
+    }
+
+    @Test func parsesFileProviderTokenFromBookmark() {
+        func bookmark(_ strings: [String]) -> Data {
+            var d = Data([0x62, 0x6F, 0x6F, 0x6B, 0, 0, 0, 0])
+            for s in strings { d.append(contentsOf: [UInt8(s.utf8.count), 0, 0, 0]); d.append(Data(s.utf8)); d.append(0) }
+            return d
+        }
+        let token = "fp:/G_LmeoH6O4qawwdgZJ+nyCIXhqmb7AdHCGy8VxPch7U=/com.apple.FileProvider.LocalStorage//fid=14372829"
+        #expect(ExternalLocation.fileProviderIdentifier(bookmark: bookmark(["private", "File Provider Storage", token]))
+                == ExternalLocation.localStorageProvider)
+        #expect(ExternalLocation.fileProviderIdentifier(bookmark: bookmark(["fp:/a/b=/com.example.Provider//fid=1"]))
+                == "com.example.Provider")
+        // A folder merely named like the provider is not a token.
+        #expect(ExternalLocation.fileProviderIdentifier(bookmark: bookmark(["com.apple.FileProvider.LocalStorage", "x"])) == nil)
+        #expect(ExternalLocation.fileProviderIdentifier(bookmark: bookmark(["fp:/no-separator"])) == nil)
+        #expect(ExternalLocation.fileProviderIdentifier(bookmark: Data()) == nil)
+    }
+
     @Test func readsGroupContainerIdentifierFromMetadataPlist() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "psy-ext-\(UUID().uuidString)")
         let group = root.appending(path: "Containers/Shared/AppGroup/ABCD")

@@ -20,6 +20,14 @@ enum ExternalDirectorySelection {
     static func make(from url: URL) -> Result<ExternalSelection, ExternalDirectoryError> {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        #if DEBUG
+        // Device acceptance: what the sandbox can observe about the pick.
+        let facts = ExternalLocation.LocationFacts.probe(url)
+        LifecycleLog.shared.record("extloc-facts", "path=\(facts.path) ubiquitous=\(facts.isUbiquitous) "
+            + "dataless=\(facts.hasDatalessContent) group=\(facts.groupContainerIdentifier ?? "nil") "
+            + "provider=\(facts.fileProviderIdentifier ?? "nil") "
+            + "kind=\(ExternalLocation.classify(facts))")
+        #endif
         let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey])
         if values?.isUbiquitousItem == true || url.path.contains("/Mobile Documents/") || url.path.contains("/CloudStorage/") {
             return .failure(.cloudLocation)
