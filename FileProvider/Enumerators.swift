@@ -58,6 +58,9 @@ class BaseEnumerator: NSObject, NSFileProviderEnumerator {
             let page = try context.reader.changes(since: since, limit: limit, workingSetOnly: workingSet)
             let updated = page.updated.filter(filter).map(context.item(for:))
             if !updated.isEmpty { observer.didUpdate(updated) }
+            #if DEBUG
+            FootprintProbe.file?.append("enumerateChanges folder=\(context.folder.rawValue) workingSet=\(workingSet) since=\(since) updated=\(updated.count) deleted=\(page.deleted.count) more=\(page.more)")
+            #endif
             let deleted = page.deleted.map { NSFileProviderItemIdentifier($0.rawValue) }
             if !deleted.isEmpty { observer.didDeleteItems(withIdentifiers: deleted) }
             observer.finishEnumeratingChanges(upTo: AnchorCoding.encode(page.newAnchor), moreComing: page.more)
@@ -79,6 +82,9 @@ final class DirectoryEnumerator: BaseEnumerator {
     override func enumerateItems(for observer: NSFileProviderEnumerationObserver, startingAt page: NSFileProviderPage) {
         do {
             let result = try context.reader.children(of: parent, after: pageCursor(page), limit: pageLimit(observer))
+            #if DEBUG
+            FootprintProbe.file?.append("enumerateItems folder=\(context.folder.rawValue) parent=\(parent.rawValue) count=\(result.items.count) policies=\(Self.policySummary(result.items.map(context.item(for:))))")
+            #endif
             observer.didEnumerate(result.items.map(context.item(for:)))
             observer.finishEnumerating(upTo: result.next.map { NSFileProviderPage(Data($0.utf8)) })
         } catch {
@@ -91,6 +97,16 @@ final class DirectoryEnumerator: BaseEnumerator {
         reportChanges(observer, from: anchor, workingSet: false) { $0.parentID == parent && $0.itemID != parent }
     }
 }
+
+#if DEBUG
+extension DirectoryEnumerator {
+    static func policySummary(_ items: [FileProviderItem]) -> String {
+        guard #available(iOS 27.0, *) else { return "-" }
+        let dirs = items.filter { $0.record.isDirectory }
+        return dirs.map { "\($0.record.path.lastComponent):\($0.namespacePolicy.rawValue)" }.joined(separator: ",")
+    }
+}
+#endif
 
 /// Working set: pinned + pending + materialized (and their children) items
 /// (+ local files in on-demand folders) — never the whole index.

@@ -4,6 +4,15 @@ import PsySync
 /// Maps internal errors to what the File Provider framework understands.
 enum ErrorMapping {
     static func map(_ error: Error) -> Error {
+        let mapped = mapUnlogged(error)
+        #if DEBUG
+        let ns = mapped as NSError
+        FootprintProbe.file?.append("error-returned \(ns.domain)/\(ns.code) from \(error)")
+        #endif
+        return mapped
+    }
+
+    private static func mapUnlogged(_ error: Error) -> Error {
         switch error {
         case let error as NSFileProviderError:
             return error

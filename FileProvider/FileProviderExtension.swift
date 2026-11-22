@@ -48,7 +48,13 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
     ) -> Progress {
         do {
             let context = try context()
-            completionHandler(context.item(for: try context.record(identifier)), nil)
+            let item = context.item(for: try context.record(identifier))
+            #if DEBUG
+            if identifier == .rootContainer, #available(iOS 27.0, *) {
+                FootprintProbe.file?.append("item root folder=\(context.folder.rawValue) namespacePolicy=\(item.namespacePolicy.rawValue)")
+            }
+            #endif
+            completionHandler(item, nil)
         } catch {
             completionHandler(nil, ErrorMapping.map(error))
         }
@@ -81,6 +87,9 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
         let versionData = requestedVersion?.contentVersion
         let task = Task { [log] in
             do {
+                #if DEBUG
+                FootprintProbe.file?.append("fetchContents request id=\(itemIdentifier.rawValue)")
+                #endif
                 FootprintProbe.log("fetch-start")
                 defer { FootprintProbe.log("fetch-end") }
                 let context = try self.context()
@@ -91,6 +100,10 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 #if DEBUG
                 FootprintProbe.file?.append("fetchContents source=\(result.source) size=\(result.record.size)")
                 #endif
+                if result.source == .restrictedFetch {
+                    // A peer answered: lift any back-off from earlier serverUnreachable answers.
+                    context.manager?.signalErrorResolved(NSFileProviderError(.serverUnreachable)) { _ in }
+                }
                 completion.value(result.url, context.item(for: result.record), nil)
             } catch {
                 log.error("fetchContents id=\(itemIdentifier.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
