@@ -96,6 +96,19 @@ public protocol SyncthingBridge: Sendable {
 
     /// Engine.OpenIndexStream + Next/Close; `next` returns [] when exhausted.
     func openIndexStream(folder: FolderID) throws -> any GlobalIndexCursor
+
+    /// psybridge.NewIgnoreMatcher: upstream ignore semantics for `lines`
+    /// as a .stignore at `folderRoot`. nil = not available (fakes).
+    func ignoreMatcher(folderRoot: URL, lines: [String]) throws -> (any IgnoreMatching)?
+}
+
+extension SyncthingBridge {
+    public func ignoreMatcher(folderRoot: URL, lines: [String]) throws -> (any IgnoreMatching)? { nil }
+}
+
+/// Whether a folder-relative path is ignored by a set of rules.
+public protocol IgnoreMatching: Sendable {
+    func isIgnored(_ path: RelativePath) -> Bool
 }
 
 public protocol GlobalIndexCursor: AnyObject {
@@ -123,6 +136,14 @@ public struct GlobalIndexEntry: Hashable, Codable, Sendable {
     /// Content-only token; empty for directories.
     public var blocksHash: String
     public var localPresent: Bool
+    /// Set by LiveSyncEngine (not the bridge): excluded by the user's own
+    /// ignore rules on this device — not the on-demand `*` rule. Such paths
+    /// never sync here, so they are kept out of the Files list.
+    public var userIgnored = false
+
+    private enum CodingKeys: String, CodingKey {
+        case name, type, size, modified, deleted, invalid, sequence, version, blocksHash, localPresent
+    }
 
     public init(
         name: RelativePath,

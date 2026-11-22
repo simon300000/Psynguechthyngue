@@ -226,6 +226,21 @@ struct ContentHarness {
         #expect(LiveContentProvider.mapBridgeError(Described(description: "psy:cancelled"), cancelled: false) == .cancelled)
     }
 
+    @Test func excludedByTheUsersRulesIsRefusedNotFetched() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("x.skip", local: false)])
+        let bridge = FakeFetchBridge()
+        var config = LiveContentProvider.Configuration()
+        config.isUserIgnored = { $0.rawValue.hasSuffix(".skip") }
+        let provider = LiveContentProvider(
+            layout: h.layout, store: h.store, folder: f1, engineLock: FlockEngineLock(layout: h.layout), fetchBridge: bridge,
+            identity: { nil }, temporaryDirectory: h.root.appending(path: "tmp"), configuration: config)
+        await #expect(throws: FilesContentError.excludedByIgnoreRules) {
+            _ = try await provider.provideContents(for: h.id("x.skip"), requestedVersion: nil, progress: Progress())
+        }
+        #expect(bridge.calls == 0)
+    }
+
     @Test func restrictedFetchErrorsMapToOpenApp() async throws {
         let h = try ContentHarness()
         try h.project([FilesFixtures.file("c", local: false)])

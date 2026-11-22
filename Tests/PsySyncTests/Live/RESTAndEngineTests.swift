@@ -496,6 +496,31 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.stop(deadline: .seconds(1))
     }
 
+    /// Report risk #1: paths excluded by the user's own rules were listed in
+    /// Files. The index stream marks them — using the user's rules only, not
+    /// the on-demand `*` (remote-only items must stay listed).
+    @Test func indexMarksPathsExcludedByTheUsersOwnRules() async throws {
+        let h = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        try await h.engine.start(context: .foreground)
+        let id = FolderID(rawValue: "ui")
+        try await h.engine.addFolder(Folder(id: id, label: "UI", contentMode: .onDemand))
+        let dir = AppGroupLayout(root: h.root).managedFolder(id)
+        try Data("*.skip\n".utf8).write(to: dir.appending(path: IgnoreRulesGenerator.userFile))
+        func entry(_ p: String) -> GlobalIndexEntry {
+            GlobalIndexEntry(name: RelativePath(rawValue: p), type: .file, size: 1, modified: Date(), deleted: false,
+                             invalid: false, sequence: 1, version: "v", blocksHash: "", localPresent: false)
+        }
+        h.bridge.indexEntries = [entry("a.skip"), entry("b.txt")]
+        var marked: [String: Bool] = [:]
+        for try await page in h.engine.globalIndex(id, pageSize: 10) {
+            for e in page { marked[e.name.rawValue] = e.userIgnored }
+        }
+        #expect(marked == ["a.skip": true, "b.txt": false])
+        #expect(h.bridge.ignoreLinesSeen == ["*.skip"])   // never the managed `*`
+        try await h.engine.stop(deadline: .seconds(1))
+    }
+
     @Test func rejectsInvalidRequests() async throws {
         let h = try makeHarness()
         defer { try? FileManager.default.removeItem(at: h.root) }

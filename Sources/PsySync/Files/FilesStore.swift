@@ -825,12 +825,15 @@ extension FilesStore: FilesMetadataWriter {
                 let path = entry.name
                 guard Self.isValidPath(path), !Self.isHidden(path), entry.type != .symlink else { continue }
                 let existing = try Self.fetchRecord(ctx.db, folder: folder, path: path)
-                if tracking && !entry.deleted && !entry.invalid {
+                if tracking && !entry.deleted && !entry.invalid && !entry.userIgnored {
                     var p = path
                     while !p.isRoot, seen.insert(p.rawValue).inserted { p = p.parent }
                 }
                 if let existing, existing.pendingUpload { continue }
-                if entry.deleted || entry.invalid {
+                // Excluded by the user's own rules on this device: never syncs
+                // here, so not offered in Files (an open fetched it into the
+                // folder where it stayed unsynced).
+                if entry.deleted || entry.invalid || entry.userIgnored {
                     if existing != nil { try Self.deleteSubtree(ctx, folder: folder, path: path) }
                     continue
                 }

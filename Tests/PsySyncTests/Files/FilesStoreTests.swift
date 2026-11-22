@@ -364,3 +364,18 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(FilesAnchor.decode("x:1") == nil)
     }
 }
+
+@Suite struct UserIgnoredProjectionTests {
+    let f1 = FolderID(rawValue: "f1")
+
+    @Test func pathsTheUserExcludedLeaveTheFilesList() throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir(), mode: .onDemand)
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("a.skip", local: false), FilesFixtures.file("b.txt", local: false)])
+        #expect(try store.record(folder: f1, path: RelativePath(rawValue: "a.skip")) != nil)
+        var ignored = FilesFixtures.file("a.skip", local: false)
+        ignored.userIgnored = true
+        _ = try store.applyIndexBatch(f1, entries: [ignored, FilesFixtures.file("b.txt", local: false)])
+        #expect(try store.record(folder: f1, path: RelativePath(rawValue: "a.skip")) == nil)
+        #expect(try store.record(folder: f1, path: RelativePath(rawValue: "b.txt")) != nil)
+    }
+}
