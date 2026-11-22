@@ -55,7 +55,7 @@ struct FoldersView: View {
                     }
                 }
             }
-            .sheet(isPresented: $creating) { NewFolderView().bannerOverlay() }
+            .sheet(isPresented: $creating) { NewFolderView().bannerOverlay().environment(model) }
             .onChange(of: model.pendingCommand, initial: true) { _, command in
                 if command == .newFolder { model.pendingCommand = nil; creating = true }
             }

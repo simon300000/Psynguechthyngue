@@ -129,7 +129,7 @@ struct EngineOptionsSection: View {
     var body: some View {
         if let options = model.engineOptions {
             Group {
-                TextField("Device name", text: $name, prompt: Text(UIDevice.current.name))
+                TextField("Device name", text: $name, prompt: Text(DefaultDeviceName.current))
                     .submitLabel(.done)
                     .onSubmit { commitName() }
                     .accessibilityIdentifier("settings.devicename")

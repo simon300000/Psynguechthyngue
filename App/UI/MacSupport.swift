@@ -63,3 +63,12 @@ enum ClosureConfirmation {
         }
     }
 }
+
+/// Default local device name. On Mac (Designed for iPad) `UIDevice.current.name`
+/// is the generic "iPad", which is what peers would see; use "Mac" instead.
+@MainActor
+enum DefaultDeviceName {
+    static var current: String {
+        ProcessInfo.processInfo.isiOSAppOnMac ? "Mac" : UIDevice.current.name
+    }
+}

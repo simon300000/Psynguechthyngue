@@ -188,7 +188,7 @@ final class AppModel {
     }
 
     var displayName: String {
-        engineOptions?.deviceName.nilIfEmpty ?? UIDevice.current.name
+        engineOptions?.deviceName.nilIfEmpty ?? DefaultDeviceName.current
     }
 
     // MARK: Engine options / ignore rules

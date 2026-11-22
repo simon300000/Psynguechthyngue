@@ -49,7 +49,7 @@ final class AppEnvironment {
             bridge = nil
         } else {
             // Used only on the very first start; afterwards the name lives in the engine config.
-            let live = EngineFactory.makeLiveEngine(deviceName: UIDevice.current.name)
+            let live = EngineFactory.makeLiveEngine(deviceName: DefaultDeviceName.current)
             engine = live.engine
             bridge = live.bridge
             files = live.layout.map { FilesIntegration(engine: live.engine, layout: $0) }

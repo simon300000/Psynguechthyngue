@@ -80,8 +80,8 @@ struct OnboardingView: View {
                     Button("Skip") { settings.onboardingDone = true }.accessibilityIdentifier("onboarding.skip")
                 }
             }
-            .sheet(isPresented: $addingDevice) { AddDeviceView().bannerOverlay() }
-            .sheet(isPresented: $creatingFolder) { NewFolderView().bannerOverlay() }
+            .sheet(isPresented: $addingDevice) { AddDeviceView().bannerOverlay().environment(model) }
+            .sheet(isPresented: $creatingFolder) { NewFolderView().bannerOverlay().environment(model) }
         }
         .interactiveDismissDisabled()
         .onAppear { model.onboardingInProgress = true }
