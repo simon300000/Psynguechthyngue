@@ -79,7 +79,7 @@ final class AppModel {
         self.settings = settings
         self.notifier = notifier
         self.isFixture = isFixture
-        host.onFailure = { [weak self] error in self?.show(error: Self.message(for: error)) }
+        host.onFailure = { [weak self] error in self?.report(error) }
     }
 
     // MARK: Observation
@@ -164,7 +164,7 @@ final class AppModel {
             }
         } catch {
             if case EngineError.notRunning = error { return }
-            show(error: Self.message(for: error))
+            report(error)
         }
     }
 
@@ -210,7 +210,7 @@ final class AppModel {
 
     func userIgnoreRules(_ folder: Folder) async -> [String]? {
         do { return try await engine.userIgnoreRules(folder.id) } catch {
-            show(error: Self.message(for: error))
+            report(error)
             return nil
         }
     }
@@ -244,6 +244,20 @@ final class AppModel {
     // MARK: Banner
 
     func show(error message: String) { present(Banner(kind: .error, message: message)) }
+
+    /// Shows an engine/operation error, except cancellations: a task cancelled
+    /// because the app went to the background (or a view went away) is not a
+    /// failure the user can act on ("Swift.CancellationError error 1").
+    func report(_ error: Error) {
+        guard !Self.isCancellation(error) else { return }
+        show(error: Self.message(for: error))
+    }
+
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let ns = error as NSError
+        return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
+    }
     func show(info message: String) { present(Banner(kind: .info, message: message)) }
 
     private func present(_ banner: Banner) {
@@ -266,7 +280,7 @@ final class AppModel {
             try await work()
             return true
         } catch {
-            show(error: Self.message(for: error))
+            report(error)
             return false
         }
     }
