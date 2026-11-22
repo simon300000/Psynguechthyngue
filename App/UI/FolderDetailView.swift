@@ -211,6 +211,13 @@ struct StorageRow: View {
                 Text("\(Format.bytes(local)) of \(Format.bytes(total)) downloaded (\(fraction, format: .percent.precision(.fractionLength(0))))")
                     .font(.footnote).foregroundStyle(.secondary).monospacedDigit()
             }
+            if local > 0 {
+                // FilesMaterializer hands every local file to Files; until the
+                // system has taken them (App in background, just synced) Files
+                // may still show a cloud badge, but opening needs no network.
+                Text("Files on this device open offline in the Files app.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("folder.storage")

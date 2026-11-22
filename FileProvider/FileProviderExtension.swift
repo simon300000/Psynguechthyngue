@@ -337,6 +337,18 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             }
             DarwinNotifier.post(DarwinNotification.filesRequestPosted)
             context.manager?.signalEnumerator(for: .workingSet) { _ in }
+            if !keep, let manager = context.manager {
+                // The App drops the engine copy; drop the Files copy too, or
+                // the item stays "downloaded" in Files (FilesMaterializer
+                // clones local files into the replica).
+                for identifier in itemIdentifiers {
+                    manager.evictItem(identifier: identifier) { error in
+                        #if DEBUG
+                        if let error { FootprintProbe.file?.append("evict \(identifier.rawValue) failed: \(error)") }
+                        #endif
+                    }
+                }
+            }
             completionHandler(nil)
         } catch {
             #if DEBUG

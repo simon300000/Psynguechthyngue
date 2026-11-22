@@ -101,6 +101,14 @@ enum DomainManager {
         }
     }
 
+    /// Asks the system to download `item` now (FilesMaterializer). The
+    /// extension serves it with a local clone of the engine copy.
+    static func requestDownload(_ folder: FolderID, item: ItemIdentifier) async throws {
+        let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(folder.rawValue), displayName: "")
+        guard let manager = NSFileProviderManager(for: domain) else { return }
+        try await manager.requestDownloadForItem(withIdentifier: NSFileProviderItemIdentifier(item.rawValue))
+    }
+
     /// The extension answers `.serverUnreachable` / `.notAuthenticated` when it
     /// cannot serve contents (no peer, App busy, restricted core refused).
     /// The system then shows the domain as "paused" and backs off *until it is

@@ -941,6 +941,16 @@
         }
       }
     },
+    "Files on this device open offline in the Files app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机上的文件可在“文件”App 中离线打开。"
+          }
+        }
+      }
+    },
     "Files appear in the Files app and are downloaded when you open them." : {
       "localizations" : {
         "zh-Hans" : {
