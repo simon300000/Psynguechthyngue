@@ -53,12 +53,15 @@ final class AppModel {
     var isActive = false {
         didSet {
             if isActive && !oldValue { autoContinueIfNeeded() }
-            // Last chance (scene resigning active, still allowed to submit):
-            // work is under way and no task covers it yet.
-            if !isActive && oldValue && folders.contains(where: { Self.isBackgroundWork(status(of: $0).state) }) {
-                continueForUserAction("resign-active")
-            }
         }
+    }
+
+    /// Last chance (willResignActive: still in the foreground, unlike
+    /// didEnterBackground, where iOS refuses the request as "unavailable"):
+    /// work is under way and no task covers it yet.
+    func willResignActive() {
+        guard folders.contains(where: { Self.isBackgroundWork(status(of: $0).state) }) else { return }
+        continueForUserAction("resign-active", expectsWork: false)
     }
     /// Menu / keyboard command waiting to be handled by the UI.
     var pendingCommand: AppCommand?
@@ -343,9 +346,13 @@ final class AppModel {
     /// "Keep syncing in background automatically" on, request the task now,
     /// before any status says there is work (closing the app right after
     /// accepting lost it: the request waited for a later status event).
-    func continueForUserAction(_ reason: String, label: String? = nil) {
-        guard settings.autoContinueInBackground, canContinueInBackground, !isContinuingInBackground,
-              let scheduler else { return }
+    func continueForUserAction(_ reason: String, label: String? = nil, expectsWork: Bool = true) {
+        guard settings.autoContinueInBackground, canContinueInBackground, let scheduler else { return }
+        if expectsWork { scheduler.expectWork() }
+        guard !isContinuingInBackground else {
+            LifecycleLog.shared.record("continued-extend", "reason=\(reason)")
+            return
+        }
         LifecycleLog.shared.record("continued-auto-request", "reason=\(reason)")
         let title = label.map { "\(String(localized: "Getting file list")) · \($0)" } ?? String(localized: "Syncing files")
         Task {

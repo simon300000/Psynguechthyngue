@@ -44,6 +44,18 @@ final class BackgroundScheduler {
     /// (unavailable in the Simulator).
     var simulateContinuedProcessing = false
     private(set) var continuedRunning = false
+    private var submittingContinued = false
+    /// A user action (accept a share, add a folder or device) promises work
+    /// that has no status yet; the task does not end before this.
+    private var expectWorkUntil: ContinuousClock.Instant?
+
+    /// Device: accepting a device started the task, its folder was offered
+    /// 14 s later, and the task ended (10 s quiet) just as it was accepted.
+    func expectWork(for duration: Duration = .seconds(45)) {
+        let until = ContinuousClock.now.advanced(by: duration)
+        if let current = expectWorkUntil, current > until { return }
+        expectWorkUntil = until
+    }
     /// Set by AppModel: engine statuses plus App-side work (Files listing),
     /// and folder labels for the task's title.
     var composeStatuses: (@MainActor ([FolderStatus]) -> [FolderStatus])?
@@ -85,7 +97,17 @@ final class BackgroundScheduler {
     /// Returns false when the system refused (e.g. too busy, or unsupported).
     @discardableResult
     func continueInBackground(title: String, subtitle: String) async -> Bool {
-        guard !continuedRunning else { return true }
+        // One task at a time: a request still being submitted counts (device:
+        // the accept action and the next status event submitted two tasks
+        // 40 ms apart, both ran).
+        guard !continuedRunning, !submittingContinued else { return true }
+        // Held until the task launches (its handler runs after submit
+        // returns), or 10 s if it never does.
+        submittingContinued = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            self?.submittingContinued = false
+        }
         if simulateContinuedProcessing {
             log.record("continued-submit", "simulated")
             let progress = Progress(totalUnitCount: 100)
@@ -94,15 +116,17 @@ final class BackgroundScheduler {
             }
             return true
         }
-        guard let prefix = Self.continuedPrefix else { return false }
+        guard let prefix = Self.continuedPrefix else { submittingContinued = false; return false }
         let id = "\(prefix).sync-\(UUID().uuidString.prefix(8))"
         let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main,
                                                          launchHandler: Self.continuedLaunchHandler(self))
         log.record("bgtask-register", "\(id) ok=\(registered)")
-        guard registered else { return false }
+        guard registered else { submittingContinued = false; return false }
         let request = BGContinuedProcessingTaskRequest(identifier: id, title: title, subtitle: subtitle)
         request.strategy = .fail
-        return await submitRequest(request, kind: "continued")
+        let ok = await submitRequest(request, kind: "continued")
+        if !ok { submittingContinued = false }
+        return ok
     }
 
     private nonisolated static func continuedLaunchHandler(_ scheduler: BackgroundScheduler) -> @Sendable (BGTask) -> Void {
@@ -134,6 +158,7 @@ final class BackgroundScheduler {
     private func runContinued(progress: Progress, isExpired: @escaping () -> Bool,
                               retitle: @escaping (String, String) -> Void, finish: @escaping (Bool) -> Void) async {
         continuedRunning = true
+        submittingContinued = false
         host.beginContinuedProcessing()
         let started = ContinuousClock.now
         var tracker = ContinuedWorkTracker()
@@ -157,7 +182,7 @@ final class BackgroundScheduler {
                 shownTitle = title + subtitle
                 retitle(title, subtitle)
             }
-            if step.finished {
+            if step.finished, expectWorkUntil.map({ ContinuousClock.now >= $0 }) ?? true {
                 reason = step.stalled ? "stalled" : "done"
                 break
             }
