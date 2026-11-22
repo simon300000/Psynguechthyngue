@@ -48,6 +48,10 @@ public actor FilesProjector {
         let new = Set(ids)
         for removed in folders.subtracting(new) {
             scheduled.removeValue(forKey: removed)?.cancel()
+            // A pass still running would write rows for a folder whose rows
+            // were just removed (finding A8).
+            running.removeValue(forKey: removed)?.cancel()
+            reasons[removed] = nil
         }
         let added = new.subtracting(folders)
         folders = new

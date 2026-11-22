@@ -1122,7 +1122,9 @@ public struct FolderFilesReader: FilesMetadataReader {
         // anchors carry no generation).
         if anchor > (try store.currentAnchor()) { throw FilesStoreError.anchorExpired }
         let onDemand = try store.folderInfo(folder)?.contentMode == .onDemand
-        return try store.read { db in
+        // One snapshot (finding A7): the App process commits concurrently; an
+        // anchor read after the row query could cover rows it never saw.
+        return try store.read { db in try db.readTransaction {
             let filter = workingSetOnly ? "AND (\(Self.workingSetPredicate(onDemand: onDemand)))" : ""
             let s = try db.prepare(
                 """
@@ -1152,7 +1154,7 @@ public struct FolderFilesReader: FilesMetadataReader {
             let current = try db.scalarInt64("SELECT value FROM meta WHERE key='anchor'") ?? 0
             let newAnchor = more ? (rows.last?.2 ?? anchor) : max(current, anchor)
             return (updated, deleted, newAnchor, more)
-        }
+        } }
     }
 
     private static func workingSetPredicate(onDemand: Bool) -> String {

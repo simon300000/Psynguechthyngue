@@ -387,6 +387,22 @@ struct ContentHarness {
     /// pass was streaming a large index; `stop()` cancelled the pass, the
     /// cancelled stream *ended* instead of throwing, and the sweep deleted
     /// every row not yet reached. Files then showed only a few root items.
+    /// Finding A8: removing a folder while its pass runs left the pass
+    /// writing rows for the removed folder (orphans in files.sqlite).
+    @Test func removingAFolderCancelsItsRunningPass() async throws {
+        let h = try ContentHarness(mode: .onDemand)
+        let engine = FilesFakeEngine()
+        engine.setIndex(f1, (0..<30).map { FilesFixtures.file("f\($0)") })
+        engine.pageDelay = .milliseconds(150)
+        let projector = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(10), pageSize: 3) { _ in }
+        await projector.setFolders([f1])
+        #expect(await eventually { engine.pagesServed >= 1 })
+        await projector.setFolders([])
+        _ = try h.store.removeFolder(f1)
+        try await Task.sleep(for: .milliseconds(800))
+        #expect(try h.store.itemCount(f1) == 0)
+    }
+
     @Test func stopMidPassDoesNotSweepUnreadRows() async throws {
         let h = try ContentHarness(mode: .onDemand)
         let engine = FilesFakeEngine()

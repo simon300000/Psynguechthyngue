@@ -85,6 +85,22 @@ final class SQLiteConnection {
 
     var changes: Int { handle.map { Int(sqlite3_changes($0)) } ?? 0 }
 
+    /// One read snapshot (WAL: fixed at the first read) for several
+    /// statements, without taking the write lock.
+    func readTransaction<T>(_ body: () throws -> T) throws -> T {
+        try execute("BEGIN DEFERRED")
+        do {
+            let value = try body()
+            resetStatements()
+            try execute("COMMIT")
+            return value
+        } catch {
+            resetStatements()
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
     func transaction<T>(_ body: () throws -> T) throws -> T {
         try execute("BEGIN IMMEDIATE")
         do {

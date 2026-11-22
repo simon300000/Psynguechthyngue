@@ -130,7 +130,9 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             let context = try context()
             let parent = try context.record(itemTemplate.parentItemIdentifier)
             guard parent.isDirectory, !parent.isReadOnly else { throw CocoaError(.fileWriteNoPermission) }
-            let name = itemTemplate.filename
+            // Upstream normalizes names to NFC (autoNormalize); match it so the
+            // identity does not change after the scan (finding A9).
+            let name = itemTemplate.filename.precomposedStringWithCanonicalMapping
             guard PathContainment.isValidFilename(name) else { throw CocoaError(.fileWriteInvalidFileName) }
             let path = parent.path.appending(name)
             let isDirectory = itemTemplate.contentType == .folder || itemTemplate.contentType?.conforms(to: .directory) == true
@@ -146,7 +148,14 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             }
             let target = try context.containment.url(for: path)
             let fm = FileManager.default
-            if isDirectory {
+            if isDirectory, let url {
+                // A package (Pages, .rtfd, …) conforms to .directory and comes
+                // with contents: copying only the folder lost the document
+                // (finding A5). Synced as the directory tree it is.
+                if fm.fileExists(atPath: target.path(percentEncoded: false)) { throw NSFileProviderError(.filenameCollision) }
+                try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: url, to: target)
+            } else if isDirectory {
                 try fm.createDirectory(at: target, withIntermediateDirectories: true)
             } else {
                 if fm.fileExists(atPath: target.path(percentEncoded: false)) { throw NSFileProviderError(.filenameCollision) }
@@ -200,7 +209,8 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 let parent = changedFields.contains(.parentItemIdentifier)
                     ? try context.record(item.parentItemIdentifier) : try context.reader.item(record.parentID)
                 guard let parent, parent.isDirectory, !record.path.isRoot else { throw CocoaError(.fileWriteNoPermission) }
-                let name = changedFields.contains(.filename) ? item.filename : record.path.lastComponent
+                let name = (changedFields.contains(.filename) ? item.filename : record.path.lastComponent)
+                    .precomposedStringWithCanonicalMapping
                 guard PathContainment.isValidFilename(name) else { throw CocoaError(.fileWriteInvalidFileName) }
                 let newPath = parent.path.appending(name)
                 if newPath != record.path {
@@ -343,7 +353,10 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             completionHandler()
             return
         }
-        let collector = MaterializedCollector(context: context) { [log] ids in
+        let collector = MaterializedCollector(context: context, failed: { [log] error in
+            log.error("materialized enumeration failed, keeping the previous set: \(String(describing: error), privacy: .public)")
+            completionHandler()
+        }) { [log] ids in
             do {
                 let reannounced = try context.store.setMaterialized(context.folder, ids: ids)
                 log.info("materialized set updated count=\(ids.count) reannounced=\(reannounced)")
@@ -418,11 +431,13 @@ extension FileProviderExtension: @unchecked Sendable {}
 private final class MaterializedCollector: NSObject, NSFileProviderEnumerationObserver, @unchecked Sendable {
     private let context: ExtensionContext
     private let done: ([ItemIdentifier]) -> Void
+    private let failed: (Error) -> Void
     private var ids: [ItemIdentifier] = []
     private var enumerator: NSFileProviderEnumerator?
 
-    init(context: ExtensionContext, done: @escaping ([ItemIdentifier]) -> Void) {
+    init(context: ExtensionContext, failed: @escaping (Error) -> Void, done: @escaping ([ItemIdentifier]) -> Void) {
         self.context = context
+        self.failed = failed
         self.done = done
     }
 
@@ -443,7 +458,13 @@ private final class MaterializedCollector: NSObject, NSFileProviderEnumerationOb
         }
     }
 
-    func finishEnumeratingWithError(_ error: Error) { finish() }
+    /// A partial list would replace the whole materialized set (finding A6);
+    /// keep the previous one instead.
+    func finishEnumeratingWithError(_ error: Error) {
+        enumerator?.invalidate()
+        enumerator = nil
+        failed(error)
+    }
 
     private func finish() {
         enumerator?.invalidate()
