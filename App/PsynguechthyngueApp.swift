@@ -48,22 +48,23 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { _ = Task { await env.host.handle(.memoryWarning) } }
             }
-            // Mac (Designed for iPad): closing the last window terminates the app ~5 s
-            // later without a background transition. Stop the engine gracefully now.
+            // Mac (Designed for iPad): keep the closure confirmation in step with the
+            // number of windows while transfers run.
             center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated {
                     ClosureConfirmation.update(transfersActive: env.model.hasActiveTransfers, isOnMac: env.model.isOnMac)
                 }
             }
+            // Closing one of several windows: the remaining one may now need the confirmation.
             center.addObserver(forName: UIScene.didDisconnectNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated {
                     ClosureConfirmation.update(transfersActive: env.model.hasActiveTransfers, isOnMac: env.model.isOnMac)
-                    let remaining = UIApplication.shared.connectedScenes.filter { $0.activationState != .unattached }
-                    guard env.model.isOnMac, remaining.isEmpty else { return }
-                    LifecycleLog.shared.record("last-window-closed", "isiOSAppOnMac: stopping engine before termination")
-                    Task { await env.host.handle(.willTerminate) }
                 }
             }
+            // Closing the last window on Mac terminates the app without a
+            // `UIScene.didDisconnectNotification`; `willTerminate` is delivered and
+            // drains the engine (measured on macOS 27: drain ≈0.8 s, then exit;
+            // Docs/REWRITE/notes/accept-mac/README.md).
             center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { _ = Task { await env.host.handle(.willTerminate) } }
             }

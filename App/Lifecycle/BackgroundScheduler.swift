@@ -16,9 +16,16 @@ final class BackgroundScheduler {
     private let defaults: UserDefaults
     private let log = LifecycleLog.shared
 
-    init(host: LiveEngineHost, defaults: UserDefaults = .standard) {
+    /// Mac (Designed for iPad): BGTaskScheduler rejects every request with
+    /// `notPermitted`, and the engine keeps running while a window exists, so
+    /// nothing is scheduled there.
+    private let isOnMac: Bool
+
+    init(host: LiveEngineHost, defaults: UserDefaults = .standard,
+         isOnMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac) {
         self.host = host
         self.defaults = defaults
+        self.isOnMac = isOnMac
     }
 
     nonisolated static var refreshIdentifier: String? {
@@ -42,6 +49,10 @@ final class BackgroundScheduler {
 
     /// Must be called before `application(_:didFinishLaunchingWithOptions:)` returns.
     func register() {
+        guard !isOnMac else {
+            log.record("bgtask-register", "skipped: isiOSAppOnMac")
+            return
+        }
         if let id = Self.refreshIdentifier {
             let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: Self.launchHandler(self, kind: .appRefresh))
             log.record("bgtask-register", "\(id) ok=\(ok)")
@@ -61,7 +72,7 @@ final class BackgroundScheduler {
     /// Whether "Keep syncing in background" can be offered (not on Mac).
     var canContinueInBackground: Bool {
         if simulateContinuedProcessing { return true }
-        guard !ProcessInfo.processInfo.isiOSAppOnMac, Self.continuedPrefix != nil else { return false }
+        guard !isOnMac, Self.continuedPrefix != nil else { return false }
         return true
     }
 
@@ -187,6 +198,7 @@ final class BackgroundScheduler {
 
     /// Called when the app enters the background and whenever the setting changes.
     func scheduleNext() {
+        guard !isOnMac else { return }
         let scheduler = BGTaskScheduler.shared
         guard isEnabled else {
             scheduler.cancelAllTaskRequests()

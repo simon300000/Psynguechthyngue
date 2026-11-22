@@ -59,7 +59,7 @@ final class AppEnvironment {
         let host = LiveEngineHost(engine: engine, tasks: UIKitBackgroundTaskRunner(), isOnMac: onMac)
         host.preferences = settings.policyPreferences
         self.host = host
-        scheduler = BackgroundScheduler(host: host, defaults: defaults)
+        scheduler = BackgroundScheduler(host: host, defaults: defaults, isOnMac: onMac)
         policyMonitor = PolicyMonitor(host: host)
         model = AppModel(engine: engine, host: host, settings: settings,
                          notifier: AppNotifier(enabled: !fixture), isFixture: fixture, isOnMac: onMac)

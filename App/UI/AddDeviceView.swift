@@ -27,10 +27,18 @@ struct AddDeviceView: View {
                         .lineLimit(2...4)
                         .accessibilityIdentifier("adddevice.id")
                     HStack {
-                        PasteButton(payloadType: String.self) { strings in
-                            if let s = strings.first { idText = s }
+                        if model.isOnMac {
+                            // `PasteButton` is not rendered on Mac (Designed for iPad).
+                            Button {
+                                if let s = UIPasteboard.general.string { idText = s }
+                            } label: { Label("Paste", systemImage: "doc.on.clipboard") }
+                            .accessibilityIdentifier("adddevice.paste")
+                        } else {
+                            PasteButton(payloadType: String.self) { strings in
+                                if let s = strings.first { idText = s }
+                            }
+                            .accessibilityIdentifier("adddevice.paste")
                         }
-                        .accessibilityIdentifier("adddevice.paste")
                         if canScan {
                             Spacer()
                             Button { scanning = true } label: { Label("Scan QR Code", systemImage: "qrcode.viewfinder") }
@@ -47,6 +55,7 @@ struct AddDeviceView: View {
                 }
                 Section("Name") {
                     TextField("Optional", text: $name)
+                        .plainNameInput()
                         .accessibilityIdentifier("adddevice.name")
                 }
             }

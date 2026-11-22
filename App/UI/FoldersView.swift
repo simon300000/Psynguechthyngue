@@ -127,6 +127,7 @@ struct NewFolderView: View {
             Form {
                 Section("Name") {
                     TextField("Folder name", text: $name)
+                        .plainNameInput()
                         .accessibilityIdentifier("newfolder.name")
                 }
                 FolderOptionsSection(external: $external, mode: $mode)
@@ -183,7 +184,7 @@ struct AcceptFolderSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Folder name", text: $label).accessibilityIdentifier("acceptfolder.name")
+                    TextField("Folder name", text: $label).plainNameInput().accessibilityIdentifier("acceptfolder.name")
                 } header: { Text("Name") } footer: { Text("Shared by \(model.deviceName(pending.offeredBy))") }
                 FolderOptionsSection(external: $external, mode: $mode)
             }

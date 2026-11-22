@@ -122,6 +122,12 @@ extension View {
     /// Sheets cover RootView's banner, so errors from a sheet's own action
     /// (add device, new/accept folder) were invisible: repeat it on top.
     func bannerOverlay() -> some View { overlay(alignment: .top) { BannerView() } }
+
+    /// Names and labels (device names, folder labels) are identifiers people
+    /// type exactly: no automatic capitalization or autocorrection.
+    func plainNameInput() -> some View {
+        textInputAutocapitalization(.never).autocorrectionDisabled()
+    }
 }
 
 /// Global error / info overlay: visible on every tab, dismisses itself.

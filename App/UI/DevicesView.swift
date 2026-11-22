@@ -125,6 +125,7 @@ struct DeviceDetailView: View {
             Form {
                 Section("Name") {
                     TextField("Device name", text: $name)
+                        .plainNameInput()
                         .focused($nameFocused)
                         .submitLabel(.done)
                         .onSubmit { commitName(device) }

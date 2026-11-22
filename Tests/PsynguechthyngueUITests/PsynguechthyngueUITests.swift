@@ -346,6 +346,26 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertFalse(el("adddevice.scan").exists, "no QR scanning on Mac")
         XCTAssertTrue(el("adddevice.paste").exists)
     }
+
+    /// Mac has no cellular and no BGTaskScheduler: those settings are hidden,
+    /// the window-close hint takes their place.
+    func testMacSettingsHideCellularAndBackgroundSync() {
+        launch(extra: ["-PsySimulateMac"])
+        tab("Settings")
+        XCTAssertTrue(el("settings.lowpower").waitForExistence(timeout: 5))
+        XCTAssertFalse(el("settings.cellular").exists, "no cellular options on Mac")
+        XCTAssertFalse(el("settings.lowdata").exists)
+        XCTAssertTrue(scrollTo(el("settings.machint")), "Mac background hint")
+        XCTAssertFalse(el("settings.background").exists, "no background-sync toggle on Mac")
+    }
+
+    func testIOSSettingsKeepCellularAndBackgroundSync() {
+        launch()
+        tab("Settings")
+        XCTAssertTrue(el("settings.cellular").waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollTo(el("settings.background")))
+        XCTAssertFalse(el("settings.machint").exists)
+    }
 }
 
 final class EngineSettingsUITests: PsyUITestCase {

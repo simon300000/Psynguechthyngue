@@ -13,32 +13,42 @@ struct SettingsView: View {
         @Bindable var settings = settings
         NavigationStack {
             Form {
-                Section {
-                    Toggle("Sync over cellular", isOn: $settings.syncOnCellular)
-                        .accessibilityIdentifier("settings.cellular")
-                    Toggle("Respect Low Data Mode", isOn: $settings.respectLowDataMode)
-                        .accessibilityIdentifier("settings.lowdata")
-                    if settings.syncOnCellular {
-                        limitPicker("Cellular upload limit", value: $settings.cellularSendLimit)
-                        limitPicker("Cellular download limit", value: $settings.cellularReceiveLimit)
-                    }
-                } header: { Text("Network") }
+                // Mac (Designed for iPad): no cellular and no BGTaskScheduler, so the
+                // cellular and background-sync options would have no effect there.
+                if !model.isOnMac {
+                    Section {
+                        Toggle("Sync over cellular", isOn: $settings.syncOnCellular)
+                            .accessibilityIdentifier("settings.cellular")
+                        Toggle("Respect Low Data Mode", isOn: $settings.respectLowDataMode)
+                            .accessibilityIdentifier("settings.lowdata")
+                        if settings.syncOnCellular {
+                            limitPicker("Cellular upload limit", value: $settings.cellularSendLimit)
+                            limitPicker("Cellular download limit", value: $settings.cellularReceiveLimit)
+                        }
+                    } header: { Text("Network") }
+                }
 
                 Section {
                     Toggle("Pause in Low Power Mode", isOn: $settings.pauseInLowPowerMode)
                         .accessibilityIdentifier("settings.lowpower")
                 } header: { Text("Power") }
 
-                Section {
-                    Toggle("Background sync", isOn: $settings.backgroundSync)
-                        .accessibilityIdentifier("settings.background")
-                    LabeledContent("Last background sync") {
-                        if let d = settings.lastBackgroundRun { Text(Format.relative(d)) } else { Text("Never") }
+                if model.isOnMac {
+                    Section {
+                        Text("On Mac, syncing continues while the window is open or minimized. Closing the window quits the app and stops syncing.")
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("settings.machint")
+                    } header: { Text("Background") }
+                } else {
+                    Section {
+                        Toggle("Background sync", isOn: $settings.backgroundSync)
+                            .accessibilityIdentifier("settings.background")
+                        LabeledContent("Last background sync") {
+                            if let d = settings.lastBackgroundRun { Text(Format.relative(d)) } else { Text("Never") }
+                        }
+                    } header: { Text("Background") } footer: {
+                        Text("iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open.")
                     }
-                } header: { Text("Background") } footer: {
-                    Text(model.isOnMac
-                         ? "On Mac, syncing continues while the window is open or minimized. Closing the window quits the app and stops syncing."
-                         : "iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open.")
                 }
 
                 Section {
@@ -130,6 +140,7 @@ struct EngineOptionsSection: View {
         if let options = model.engineOptions {
             Group {
                 TextField("Device name", text: $name, prompt: Text(DefaultDeviceName.current))
+                    .plainNameInput()
                     .submitLabel(.done)
                     .onSubmit { commitName() }
                     .accessibilityIdentifier("settings.devicename")
