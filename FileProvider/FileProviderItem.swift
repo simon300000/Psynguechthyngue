@@ -79,8 +79,13 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
         }
     }
 
-    /// Used by the custom actions' activation rules (Info.plist).
+    /// Used by the custom actions' activation rules (Info.plist): "Keep
+    /// Downloaded" when `pinned != YES` (also true when the system's cached
+    /// item has no userInfo, e.g. it was cached by an older build and its
+    /// version has not changed since), "Remove Download" when `pinned == YES`
+    /// (pinning folds "|pinned" into metadataVersion, so the system always
+    /// re-reads it). Values are explicit NSNumber booleans.
     var userInfo: [AnyHashable: Any]? {
-        ["pinned": record.isPinned, "isFile": !record.isDirectory]
+        ["pinned": NSNumber(value: record.isPinned), "isFile": NSNumber(value: !record.isDirectory)]
     }
 }
