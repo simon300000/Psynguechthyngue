@@ -61,9 +61,16 @@ final class FilesIntegration {
         do {
             let store = try FilesStore(url: layout.filesDatabase)
             self.store = store
-            let projector = FilesProjector(engine: engine, store: store) { folder in await DomainManager.signal(folder) }
+            #if DEBUG
+            let trace: FilesProjector.Trace? = { LifecycleLog.shared.record("files-projection", $0) }
+            #else
+            let trace: FilesProjector.Trace? = nil
+            #endif
+            let projector = FilesProjector(engine: engine, store: store, trace: trace) { folder in
+                await DomainManager.signal(folder)
+            }
             let server = ContentRequestServer(engine: engine, store: store, layout: layout) { [projector] folder in
-                await projector.schedule(folder, after: .milliseconds(300))
+                await projector.schedule(folder, after: .milliseconds(300), reason: "content")
             }
             self.projector = projector
             self.server = server

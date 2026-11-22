@@ -420,10 +420,18 @@ public final class FilesStore: @unchecked Sendable {
         lock.withLock { activeSync[folder] = [] }
     }
 
+    /// Only call after the index stream ended normally: an interrupted pass
+    /// (cancelled, engine stopped) must `cancelFullSync`, or every row it had
+    /// not reached yet is swept as deleted.
     @discardableResult
     public func finishFullSync(_ folder: FolderID) throws -> Int64 {
+        try finishFullSyncCounting(folder).anchor
+    }
+
+    /// `finishFullSync` plus the number of rows swept (diagnostics).
+    public func finishFullSyncCounting(_ folder: FolderID) throws -> (anchor: Int64, swept: Int) {
         guard let seen = lock.withLock({ activeSync.removeValue(forKey: folder) }) else {
-            return try currentAnchor()
+            return (try currentAnchor(), 0)
         }
         return try write { ctx in
             var stale: [(String, String)] = []
@@ -435,11 +443,13 @@ public final class FilesStore: @unchecked Sendable {
                 if !seen.contains(path) { stale.append((s.text(at: 0), path)) }
             }
             let suppressed = try Self.suppressedPaths(ctx.db, folder: folder)
+            var swept = 0
             for (id, path) in stale where !Self.isUnder(RelativePath(rawValue: path), suppressed.pending) {
                 try Self.deleteRow(ctx, folder: folder, id: id)
+                swept += 1
             }
             try Self.pruneTombstones(ctx, retention: tombstoneRetention)
-            return ctx.anchor
+            return (ctx.anchor, swept)
         }
     }
 
