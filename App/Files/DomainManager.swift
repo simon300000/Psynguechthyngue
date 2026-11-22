@@ -40,6 +40,12 @@ enum DomainManager {
             log.info("working-set repair folders=\(repaired.count)")
             for id in repaired where !touched.contains(id) { touched.append(id) }
         }
+        // Item capabilities changed (FilesItemPolicy.capabilityRevision):
+        // re-announce every row once so the system re-reads them.
+        if let changed = try? store.reannounceForCapabilitiesIfNeeded(), !changed.isEmpty {
+            log.info("capability re-announce folders=\(changed.count)")
+            for id in changed where !touched.contains(id) { touched.append(id) }
+        }
         let wanted = Dictionary(uniqueKeysWithValues: managed.map { ($0.id.rawValue, $0) })
         let existing: [NSFileProviderDomain]
         do {

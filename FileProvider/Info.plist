@@ -30,6 +30,9 @@
         <string>com.apple.fileprovider-nonui</string>
         <key>NSExtensionPrincipalClass</key>
         <string>$(PRODUCT_MODULE_NAME).FileProviderExtension</string>
+        <!-- Our "Remove Download" action also drops the Syncthing copy; hide the system's. -->
+        <key>NSExtensionFileProviderAllowsUserControlledEviction</key>
+        <false/>
         <key>NSExtensionFileProviderDocumentGroup</key>
         <string>$(APP_GROUP_IDENTIFIER)</string>
 		<key>NSExtensionFileProviderSupportsEnumeration</key>

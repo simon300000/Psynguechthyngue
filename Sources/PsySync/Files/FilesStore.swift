@@ -676,6 +676,29 @@ public final class FilesStore: @unchecked Sendable {
         }
     }
 
+    /// Gives every row a new anchor once per `FilesItemPolicy.capabilityRevision`
+    /// so the system re-reads items whose capabilities changed (it caches
+    /// them per version and only learns about new versions through change
+    /// enumeration). Returns the folders to signal; empty when already done.
+    public func reannounceForCapabilitiesIfNeeded() throws -> [FolderID] {
+        try write { ctx in
+            let done = try ctx.db.scalarInt64("SELECT value FROM meta WHERE key='capability_revision'") ?? 0
+            guard done < FilesItemPolicy.capabilityRevision else { return [] }
+            var rows: [(String, String)] = []
+            let s = try ctx.db.prepare("SELECT item_id, folder_id FROM items ORDER BY folder_id, change_anchor")
+            while try s.step() == SQLITE_ROW { rows.append((s.text(at: 0), s.text(at: 1))) }
+            var folders: [String] = []
+            for (id, folder) in rows {
+                try ctx.db.run("UPDATE items SET change_anchor=? WHERE item_id=?", [.int(ctx.nextAnchor()), .text(id)])
+                if folders.last != folder { folders.append(folder) }
+            }
+            try ctx.db.run(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES ('capability_revision', ?)",
+                [.int(FilesItemPolicy.capabilityRevision)])
+            return folders.map(FolderID.init(rawValue:))
+        }
+    }
+
     // MARK: Presence requests (pin / remove download)
 
     public func requestPresence(_ folder: FolderID, path: RelativePath, present: Bool) throws {
