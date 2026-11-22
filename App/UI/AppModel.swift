@@ -45,7 +45,7 @@ final class AppModel {
     /// Counts of engine start/stop transitions (fixture diagnostics for UI tests).
     private(set) var engineStarts = 0
     private(set) var engineStops = 0
-    var isActive = false
+    var isActive = false { didSet { if isActive && !oldValue { autoContinueIfNeeded() } } }
     /// Menu / keyboard command waiting to be handled by the UI.
     var pendingCommand: AppCommand?
     /// Transfers in progress (Mac closure confirmation, accessory).
@@ -169,6 +169,7 @@ final class AppModel {
             if !settings.onboardingDone && !onboardingInProgress && (!devices.isEmpty || !folders.isEmpty) {
                 settings.onboardingDone = true
             }
+            autoContinueIfNeeded()
         } catch {
             if case EngineError.notRunning = error { return }
             // The engine stopped (backgrounding) or died while we were
