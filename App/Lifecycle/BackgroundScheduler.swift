@@ -141,9 +141,12 @@ final class BackgroundScheduler {
             try? await Task.sleep(for: .seconds(1))
         }
         log.record("continued-finished", "reason=\(reason)")
-        finish(reason == "done")
         continuedRunning = false
+        // Drain first, then complete the task: setTaskCompleted ends the
+        // task's background time, and a suspension while the engine still
+        // holds the App Group lock is killed with 0xdead10cc.
         await host.endContinuedProcessing(reason: reason)
+        finish(reason == "done")
     }
 
     /// Built outside the main actor so the closure carries no actor-isolation
