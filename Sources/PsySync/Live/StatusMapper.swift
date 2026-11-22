@@ -36,6 +36,28 @@ public struct FolderStatusInputs: Hashable, Sendable {
     /// Last upstream RemoteIndexUpdated for this folder: a peer is still
     /// sending its file list (index batches arrive back to back).
     public var lastRemoteIndexAt: Date?
+    /// Per peer: is its index (file list) still arriving? From the bridge's
+    /// protocol-level tracker (psybridge indexstate.go: upstream sends its
+    /// backlog in full batches and the one that drains it is short). nil when
+    /// unavailable; the timing heuristics then apply.
+    public var indexPeers: [DeviceID: IndexPeer]?
+    public struct IndexPeer: Hashable, Sendable {
+        public enum Phase: String, Hashable, Sendable {
+            case receiving, awaiting, complete, disconnected
+            /// Offline, and what we hold of its index is known to be partial.
+            case interrupted
+        }
+        public var phase: Phase
+        /// The peer's index entries stored here (deletions included).
+        public var entries: Int64
+        public var deletions: Int64
+        public init(phase: Phase, entries: Int64 = 0, deletions: Int64 = 0) {
+            self.phase = phase
+            self.entries = entries
+            self.deletions = deletions
+        }
+        public var isArriving: Bool { phase == .receiving || phase == .awaiting }
+    }
     /// Shared devices (excluding self), keyed by device.
     public var remotes: [DeviceID: RemoteCompletion]
     public struct FileError: Hashable, Sendable {
@@ -70,6 +92,7 @@ public struct FolderStatusInputs: Hashable, Sendable {
         inProgressBytes: Int64 = 0,
         globalItems: Int64 = 0,
         lastRemoteIndexAt: Date? = nil,
+        indexPeers: [DeviceID: IndexPeer]? = nil,
         remotes: [DeviceID: RemoteCompletion] = [:],
         folderErrors: [FileError] = [],
         conflicts: [Conflict] = [],
@@ -89,6 +112,7 @@ public struct FolderStatusInputs: Hashable, Sendable {
         self.inProgressBytes = inProgressBytes
         self.globalItems = globalItems
         self.lastRemoteIndexAt = lastRemoteIndexAt
+        self.indexPeers = indexPeers
         self.remotes = remotes
         self.folderErrors = folderErrors
         self.conflicts = conflicts
@@ -106,6 +130,7 @@ public struct FolderStatusInputs: Hashable, Sendable {
 public enum StatusMapper {
     public static func map(_ i: FolderStatusInputs) -> FolderStatus {
         let validRemotes = relevantRemotes(i)
+        let arriving = arrivingIndexPeers(i)
         let progress = SyncProgress(
             globalBytes: i.globalBytes,
             localBytes: i.localBytes,
@@ -113,7 +138,10 @@ public enum StatusMapper {
             needItems: i.needItems,
             inProgressBytes: i.inProgressBytes,
             remoteCompletion: validRemotes.mapValues(\.completion),
-            globalItems: i.globalItems
+            globalItems: i.globalItems,
+            indexEntriesReceived: arriving.values.reduce(0) { $0 + $1.entries },
+            indexDeletionsReceived: arriving.values.reduce(0) { $0 + $1.deletions },
+            sizeIsPartial: !arriving.isEmpty || !interruptedIndexPeers(i).isEmpty
         )
         let fileErrors = i.folderErrors.filter { !isTransientDisconnectError($0.error) }
         let state = state(i, validRemotes: validRemotes, fileErrors: fileErrors)
@@ -139,6 +167,18 @@ public enum StatusMapper {
         i.remotes.filter { _, r in
             r.remoteState == "valid" || (!r.connected && r.remoteState != "notSharing")
         }
+    }
+
+    /// Peers whose index is still arriving (and that share the folder).
+    static func arrivingIndexPeers(_ i: FolderStatusInputs) -> [DeviceID: FolderStatusInputs.IndexPeer] {
+        guard i.engineRunning, !i.folderPaused, let peers = i.indexPeers else { return [:] }
+        return peers.filter { id, p in p.isArriving && i.remotes[id]?.remoteState != "notSharing" }
+    }
+
+    /// Offline peers whose index we hold only in part.
+    static func interruptedIndexPeers(_ i: FolderStatusInputs) -> [DeviceID: FolderStatusInputs.IndexPeer] {
+        guard i.engineRunning, !i.folderPaused, let peers = i.indexPeers else { return [:] }
+        return peers.filter { _, p in p.phase == .interrupted }
     }
 
     static func state(_ i: FolderStatusInputs, validRemotes: [DeviceID: FolderStatusInputs.RemoteCompletion],
@@ -167,9 +207,18 @@ public enum StatusMapper {
         // Over a slow link batches arrive tens of seconds apart (simulator,
         // 60k entries at 30 KB/s: "Syncing, 7,127 items, 0 KB" between
         // batches), hence the longer window here.
-        let indexArriving = i.lastRemoteIndexAt.map { i.now.timeIntervalSince($0) < indexActiveInterval } ?? false
-        if indexArriving, localNeeds, anyConnected, i.inProgressBytes == 0, i.upstreamState != "scanning" {
-            return .fetchingIndex
+        if i.indexPeers != nil {
+            // The real signal: a peer's index is complete only once its
+            // sender drained its backlog. Until then nothing is "up to date"
+            // and no size is final; a transfer already running still shows.
+            if !arrivingIndexPeers(i).isEmpty, i.inProgressBytes == 0, i.upstreamState != "scanning" {
+                return .fetchingIndex
+            }
+        } else {
+            let indexArriving = i.lastRemoteIndexAt.map { i.now.timeIntervalSince($0) < indexActiveInterval } ?? false
+            if indexArriving, localNeeds, anyConnected, i.inProgressBytes == 0, i.upstreamState != "scanning" {
+                return .fetchingIndex
+            }
         }
         // Upstream works through the new list before pulling anything: an
         // on-demand folder spent minutes in sync-preparing over 38k entries
@@ -192,10 +241,12 @@ public enum StatusMapper {
         // index batches are still arriving: the folder may look empty or
         // complete while most of it is unknown (seen on a re-added folder:
         // "Up to date, 0 KB" while 1059 files were still on their way).
-        let awaitingIndex = i.remotes.values.contains { $0.connected && $0.remoteState == "unknown" }
-        if awaitingIndex { return .fetchingIndex }
-        if let at = i.lastRemoteIndexAt, i.now.timeIntervalSince(at) < indexSettleInterval, anyConnected {
-            return .fetchingIndex
+        if i.indexPeers == nil {
+            let awaitingIndex = i.remotes.values.contains { $0.connected && $0.remoteState == "unknown" }
+            if awaitingIndex { return .fetchingIndex }
+            if let at = i.lastRemoteIndexAt, i.now.timeIntervalSince(at) < indexSettleInterval, anyConnected {
+                return .fetchingIndex
+            }
         }
         if connectedRemoteBehind { return .syncing }
         if anyRemoteBehind && !anyConnected { return .waitingForDevices }
@@ -203,6 +254,9 @@ public enum StatusMapper {
         // unknown, not up to date.
         let knowsAnything = i.globalBytes > 0 || i.globalItems > 0 || i.remotes.values.contains { $0.remoteState == "valid" }
         if !i.remotes.isEmpty && !anyConnected && !knowsAnything { return .waitingForDevices }
+        // A transfer cut off (app switched away, engine stopped) and the peer
+        // not back yet: the list is partial, not up to date.
+        if !interruptedIndexPeers(i).isEmpty { return .waitingForDevices }
         return .upToDate
     }
 

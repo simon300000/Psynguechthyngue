@@ -261,6 +261,61 @@ import Testing
         #expect(StatusMapper.map(i).progress.globalItems == 7)
     }
 
+    /// Real-device report: re-added "big-folder" (670k deletions beside 263
+    /// files) showed "Up to date, 87.4 MB" 20 s in, while the peer was still
+    /// sending its index. With the bridge's protocol-level phases the timing
+    /// heuristics no longer decide anything.
+    @Test func indexPhasesFromTheBridgeDecide() {
+        let now = Date()
+        let valid = [a: FolderStatusInputs.RemoteCompletion(completion: 100, remoteState: "valid", connected: true)]
+        func map(_ phase: FolderStatusInputs.IndexPeer.Phase, _ build: (inout FolderStatusInputs) -> Void = { _ in })
+            -> FolderStatus
+        {
+            var i = FolderStatusInputs(folderID: f)
+            i.now = now
+            i.remotes = valid
+            i.globalBytes = 87_400_000
+            i.globalItems = 19
+            i.indexPeers = [a: .init(phase: phase, entries: 37_000, deletions: 36_981)]
+            build(&i)
+            return StatusMapper.map(i)
+        }
+        // Batches still full, last one long ago (slow phone): still arriving.
+        let receiving = map(.receiving) { $0.lastRemoteIndexAt = now.addingTimeInterval(-120) }
+        #expect(receiving.state == .fetchingIndex)
+        #expect(receiving.progress.sizeIsPartial)
+        #expect(receiving.progress.indexEntriesReceived == 37_000)
+        #expect(receiving.progress.indexDeletionsReceived == 36_981)
+        // Before the first batch, even with a "valid" remote state.
+        #expect(map(.awaiting).state == .fetchingIndex)
+        // Drained (short last batch): up to date at once, even 1 s after
+        // the last batch (the 3 s settle window no longer applies).
+        let done = map(.complete) { $0.lastRemoteIndexAt = now.addingTimeInterval(-1) }
+        #expect(done.state == .upToDate)
+        #expect(!done.progress.sizeIsPartial)
+        // remoteState "unknown" alone no longer means "fetching".
+        #expect(map(.complete) {
+            $0.remotes = [a: .init(completion: 0, remoteState: "unknown", connected: true)]
+        }.state == .upToDate)
+        // A transfer already running shows as syncing, sizes still partial.
+        let pulling = map(.receiving) { $0.upstreamState = "syncing"; $0.needBytes = 10; $0.needItems = 1; $0.inProgressBytes = 5 }
+        #expect(pulling.state == .syncing)
+        #expect(pulling.progress.sizeIsPartial)
+        // A peer that does not share the folder back is not waited for.
+        #expect(map(.awaiting) {
+            $0.remotes = [a: .init(completion: 0, remoteState: "notSharing", connected: true)]
+        }.state == .upToDate)
+        // Cut off mid-transfer and the peer not back yet: partial, waiting.
+        let cut = map(.interrupted) {
+            $0.remotes = [a: .init(completion: 100, remoteState: "unknown", connected: false)]
+        }
+        #expect(cut.state == .waitingForDevices)
+        #expect(cut.progress.sizeIsPartial)
+        // Paused: no index work shown.
+        #expect(map(.receiving) { $0.folderPaused = true }.state == .paused)
+        #expect(!map(.receiving) { $0.folderPaused = true }.progress.sizeIsPartial)
+    }
+
     @Test func composerAddsAppWorkAndNeverCallsAStoppedEngineCurrent() {
         let up = FolderStatus(folderID: f, state: .upToDate, progress: .init(globalBytes: 10, globalItems: 1000))
         // No status yet: unknown, not up to date.

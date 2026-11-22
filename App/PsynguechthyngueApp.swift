@@ -37,6 +37,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                     }
                 }
             }
+            center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { env.model.willResignActive() }
+            }
             center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated {
                     env.model.isActive = false

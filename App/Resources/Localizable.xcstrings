@@ -2817,6 +2817,128 @@
           }
         }
       }
+    },
+    "%lld entries received so far, %lld of them deletions" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld entries received so far, %2$lld of them deletions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已收到 %1$lld 条记录，其中 %2$lld 条是删除记录"
+          }
+        }
+      }
+    },
+    "%lld entries received so far" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld entry received so far"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld entries received so far"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已收到 %lld 条记录"
+          }
+        }
+      }
+    },
+    "Waiting for the other device’s file list…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待对方设备发送文件列表…"
+          }
+        }
+      }
+    },
+    "At least %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少 %@"
+          }
+        }
+      }
+    },
+    "File list incomplete; it continues when the device is back" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件列表尚不完整，设备重新连接后继续接收"
+          }
+        }
+      }
+    },
+    "Getting file list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在获取文件列表"
+          }
+        }
+      }
+    },
+    "Preparing file list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成文件列表"
+          }
+        }
+      }
+    },
+    "%@ and %lld more" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ and %2$lld more"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ and %2$lld more"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 等 %2$lld 个"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

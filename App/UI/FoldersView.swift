@@ -227,10 +227,23 @@ struct FolderWorkProgress: View {
         case .fetchingIndex:
             VStack(alignment: .leading, spacing: 4) {
                 ProgressView().progressViewStyle(.linear)
-                if status.progress.globalItems > 0 {
-                    Text("\(status.progress.globalItems) items received so far")
-                        .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
+                // Entries, not live items: a folder with a long history sends
+                // mostly deletions (670k beside 263 files), and "19 items"
+                // said nothing about how far along the list was. The peer
+                // does not announce a total, so there is no "of N".
+                let p = status.progress
+                Group {
+                    if p.indexEntriesReceived > 0 && p.indexDeletionsReceived > 0 {
+                        Text("\(p.indexEntriesReceived) entries received so far, \(p.indexDeletionsReceived) of them deletions")
+                    } else if p.indexEntriesReceived > 0 {
+                        Text("\(p.indexEntriesReceived) entries received so far")
+                    } else if p.sizeIsPartial {
+                        Text("Waiting for the other device’s file list…")
+                    } else if p.globalItems > 0 {
+                        Text("\(p.globalItems) items received so far")
+                    }
                 }
+                .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
             }
             .accessibilityIdentifier("folder.work")
         case .preparingFiles:
@@ -242,6 +255,12 @@ struct FolderWorkProgress: View {
                     .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
             }
             .accessibilityIdentifier("folder.work")
+        case .waitingForDevices where status.progress.sizeIsPartial:
+            // The peer's file list was cut off (app switched away) and the
+            // device is not back yet.
+            Text("File list incomplete; it continues when the device is back")
+                .font(compact ? .caption : .footnote).foregroundStyle(.secondary)
+                .accessibilityIdentifier("folder.work")
         case .waitingForDevices where status.progress.needItems > 0:
             // Downloads the user asked for (opened in Files, Keep Downloaded)
             // or that the folder needs: kept, and they start on reconnect.

@@ -271,10 +271,26 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
         lock.unlock()
         guard let engine else { throw PsyBridgeError(code: .notRunning, detail: "engine is not running") }
         do {
-            return IndexCursor(try engine.openIndexStream(folder.rawValue))
+            let stream = try engine.openIndexStream(folder.rawValue)
+            stream.setLiveOnly(true)
+            return IndexCursor(stream)
         } catch {
             throw PsyBridgeError(error)
         }
+    }
+
+    public func folderIndexState(folder: FolderID) throws -> FolderIndexState? {
+        lock.lock()
+        let engine = self.engine
+        lock.unlock()
+        guard let engine else { throw PsyBridgeError(code: .notRunning, detail: "engine is not running") }
+        let data: Data
+        do {
+            data = try engine.folderIndexState(folder.rawValue)
+        } catch {
+            throw PsyBridgeError(error)
+        }
+        return try JSONDecoder().decode(FolderIndexState.self, from: data)
     }
 
     public func ignoreMatcher(folderRoot: URL, lines: [String]) throws -> (any IgnoreMatching)? {

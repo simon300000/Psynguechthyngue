@@ -29,7 +29,14 @@ struct FolderDetailView: View {
                         Text("\(Format.bytes(status.progress.needBytes)) left · \(status.progress.needItems) items")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
-                    LabeledContent("Size") { Text(Format.bytes(status.progress.globalBytes)) }
+                    LabeledContent("Size") {
+                        // Not final while the file list is arriving.
+                        if status.progress.sizeIsPartial {
+                            Text("At least \(Format.bytes(status.progress.globalBytes))")
+                        } else {
+                            Text(Format.bytes(status.progress.globalBytes))
+                        }
+                    }
                     StorageRow(progress: status.progress, onDemand: folder.contentMode == .onDemand)
                     if let scan = status.lastScan {
                         LabeledContent("Last scan") { Text(Format.relative(scan)) }
@@ -220,7 +227,7 @@ struct StorageRow: View {
             LabeledContent("On this device") {
                 Text(Format.bytes(local)).monospacedDigit()
             }
-            if onDemand && total > 0 {
+            if onDemand && total > 0 && !progress.sizeIsPartial {
                 ProgressView(value: min(fraction, 1))
                 Text("\(Format.bytes(local)) of \(Format.bytes(total)) downloaded (\(fraction, format: .percent.precision(.fractionLength(0))))")
                     .font(.footnote).foregroundStyle(.secondary).monospacedDigit()

@@ -72,8 +72,8 @@ final class FilesIntegration {
             let trace: FilesProjector.Trace? = nil
             let materializeTrace: FilesMaterializer.Trace? = nil
             #endif
-            let materializer = FilesMaterializer(store: store, trace: materializeTrace) { folder, id in
-                try await DomainManager.requestDownload(folder, item: id)
+            let materializer = FilesMaterializer(store: store, width: 4, trace: materializeTrace) { folder, id in
+                try await DomainManager.materialize(folder, item: id)
             }
             // Hops to the main actor may reorder; a sequence number drops
             // stale updates (a late "N of M" after the pass ended would

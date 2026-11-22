@@ -82,6 +82,10 @@ public protocol SyncEngine: AnyObject, Sendable {
     func apply(_ decision: PolicyDecision) async throws
     /// Global index stream for the File Provider projection (bridge `IndexStream`).
     func globalIndex(_ folder: FolderID, pageSize: Int) -> AsyncThrowingStream<[GlobalIndexEntry], Error>
+    /// Changes whenever `globalIndex` (including its `userIgnored` marks)
+    /// can have changed; nil = unknown. The Files projection skips passes
+    /// over an index it already projected.
+    func indexFingerprint(_ folder: FolderID) async -> String?
 
     // MARK: Settings (contract change WP-D engine options)
 
@@ -101,6 +105,8 @@ public protocol SyncEngine: AnyObject, Sendable {
 /// dev harnesses, test fakes). `LiveSyncEngine` and `FakeSyncEngine`
 /// implement the real behaviour.
 public extension SyncEngine {
+    func indexFingerprint(_ folder: FolderID) async -> String? { nil }
+
     func options() async throws -> EngineOptions {
         throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "options")
     }

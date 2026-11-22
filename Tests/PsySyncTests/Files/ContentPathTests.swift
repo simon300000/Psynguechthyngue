@@ -44,6 +44,30 @@ final class FakeFetchBridge: RestrictedFetchBridge, @unchecked Sendable {
     }
 }
 
+/// A restricted fetch that runs until it is cancelled (a large download).
+final class BlockingFetchBridge: RestrictedFetchBridge, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _calls = 0
+    private var _cancelled = false
+    var calls: Int { lock.withLock { _calls } }
+    var cancelled: Bool { lock.withLock { _cancelled } }
+
+    func fetch(
+        homeDirectory: URL, identity: DeviceIdentity, folder: FolderID, path: RelativePath, expectedVersion: String?,
+        destination: URL, budget: RestrictedFetchBudget, progress: @escaping @Sendable (Int64, Int64) -> Void,
+        isCancelled: @escaping @Sendable () -> Bool
+    ) throws -> RestrictedFetchResult {
+        lock.withLock { _calls += 1 }
+        while !isCancelled() { Thread.sleep(forTimeInterval: 0.02) }
+        lock.withLock { _cancelled = true }
+        throw EngineError.bridge(code: BridgeContract.Code.cancelled.rawValue, detail: "cancelled")
+    }
+
+    func recordFetchedFile(
+        homeDirectory: URL, identity: DeviceIdentity, folder: FolderID, path: RelativePath, version: String
+    ) throws {}
+}
+
 struct ContentHarness {
     let root: URL
     let layout: AppGroupLayout
@@ -263,6 +287,55 @@ struct ContentHarness {
         #expect(h.lock.currentHolder() == nil)
     }
 
+    /// Device report: opening the App while Files downloaded through the
+    /// restricted fetch showed "Sync is busy" (the App waited 5 s for the
+    /// lock and never asked the extension to yield). Now the App asks, the
+    /// fetch stops, and the same fetchContents is served by the App.
+    @Test func restrictedFetchYieldsToAStartingApp() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("big.mov", size: 6, local: false)])
+        let bridge = BlockingFetchBridge()
+        let provider = h.provider(bridge: bridge)
+        let id = try h.id("big.mov")
+        let fetch = Task { try await provider.provideContents(for: id, requestedVersion: nil, progress: Progress()) }
+        #expect(await eventually { h.lock.currentHolder() == .fileProviderExtension })
+
+        // The App starts: it gets the lock within the yield window.
+        let yield = EngineYield(lockURL: h.layout.engineLock)
+        let started = ContinuousClock.now
+        let appLease = try #require(await yield.acquireForApp(h.lock, timeout: .seconds(1)))
+        defer { appLease.release() }
+        #expect(ContinuousClock.now - started < .seconds(10))
+        #expect(bridge.cancelled)
+        #expect(!yield.appWantsLock())  // cleared once acquired
+
+        // The App's engine serves the hand-over through the request inbox.
+        let engine = FilesFakeEngine()
+        let folderURL = h.layout.managedFolder(f1)
+        engine.onPrioritize = { [weak engine] folder, path in
+            Task {
+                try? Data("pulled".utf8).write(to: folderURL.appending(path: path.rawValue))
+                engine?.emit(.itemFinished(folderID: folder, path: path, error: nil))
+            }
+        }
+        let server = ContentRequestServer(engine: engine, store: h.store, layout: h.layout, pollInterval: .milliseconds(200)) { _ in }
+        await server.start()
+        defer { Task { await server.stop() } }
+        let result = try await fetch.value
+        #expect(result.source == .delegatedToApp)
+        #expect(try String(contentsOf: result.url, encoding: .utf8) == "pulled")
+        #expect(bridge.calls == 1)
+    }
+
+    @Test func noYieldWhenTheLockIsFree() async throws {
+        let h = try ContentHarness()
+        let yield = EngineYield(lockURL: h.layout.engineLock)
+        let lease = try #require(await yield.acquireForApp(h.lock, timeout: .seconds(1)))
+        #expect(lease.owner == .app)
+        #expect(!yield.appWantsLock())
+        lease.release()
+    }
+
     @Test func delegatedToAppWhenEngineRunning() async throws {
         let h = try ContentHarness()
         try h.project([FilesFixtures.file("d/remote.txt", size: 6, local: false)])
@@ -441,6 +514,49 @@ struct ContentHarness {
         #expect(try h.store.currentAnchor() == anchor)
         #expect(traces.value.last?.contains("cancelled") == true, "\(traces.value)")
         #expect(!traces.value.contains { $0.contains("swept=") && !$0.contains("swept=0") }, "\(traces.value)")
+    }
+
+    /// Real device: every return to the foreground re-walked every folder
+    /// twice ("folders" then "start", 2.5 s each for 8k entries) although
+    /// nothing had changed. An unchanged engine fingerprint skips the pass;
+    /// explicit requests still run.
+    @Test func unchangedIndexIsNotProjectedAgain() async throws {
+        let h = try ContentHarness(mode: .onDemand)
+        let engine = FilesFakeEngine()
+        engine.setIndex(f1, [FilesFixtures.file("a")])
+        engine.fingerprint = "seq-1"
+        let traces = LockedBox<[String]>([])
+        let projector = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(10), pageSize: 3,
+                                       trace: { line in traces.mutate { $0.append(line) } }) { _ in }
+        await projector.setFolders([f1])
+        #expect(await eventually { traces.value.contains { $0.contains("swept=") } })
+        await projector.start()
+        #expect(await eventually { traces.value.contains { $0.contains("unchanged") } }, "\(traces.value)")
+        #expect(engine.streamsOpened == 1)
+
+        engine.emit(.indexChanged(folderID: f1, paths: nil))
+        #expect(await eventually { traces.value.filter { $0.contains("unchanged") }.count >= 2 }, "\(traces.value)")
+        #expect(engine.streamsOpened == 1)
+
+        // The index changed: projected.
+        engine.setIndex(f1, [FilesFixtures.file("a"), FilesFixtures.file("b")])
+        engine.fingerprint = "seq-2"
+        engine.emit(.indexChanged(folderID: f1, paths: nil))
+        #expect(await eventually { traces.value.filter { $0.contains("swept=") }.count == 2 })
+        #expect(try h.store.itemCount(f1) == 3)  // root + a + b
+        // A new projector (App relaunch) finds the stored fingerprint.
+        await projector.stop()
+        let again = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(10), pageSize: 3,
+                                   trace: { line in traces.mutate { $0.append(line) } }) { _ in }
+        let before = engine.streamsOpened
+        traces.mutate { $0.removeAll() }
+        await again.setFolders([f1])
+        #expect(await eventually { traces.value.last?.contains("unchanged") == true })
+        #expect(engine.streamsOpened == before)
+        // Explicit requests always run.
+        await again.projectNow(f1)
+        #expect(engine.streamsOpened == before + 1)
+        await again.stop()
     }
 
     /// Regression: two requests waiting on the same running pass both started

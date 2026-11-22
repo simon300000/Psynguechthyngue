@@ -42,6 +42,15 @@ public struct SyncProgress: Hashable, Codable, Sendable {
     /// `globalFiles + globalDirectories + globalSymlinks`): "N items received"
     /// while the index arrives, and the total for the Files list progress.
     public var globalItems: Int64
+    /// While a peer's index is arriving: its index entries stored here so far
+    /// (files, directories and deletions), and how many of them are
+    /// deletions. A folder with a long history is mostly deletions (seen:
+    /// 670k beside 263 files), so live items alone ("19 items") said nothing
+    /// about how far along the list was.
+    public var indexEntriesReceived: Int64
+    public var indexDeletionsReceived: Int64
+    /// Sizes are not final: the file list is still arriving.
+    public var sizeIsPartial: Bool
 
     public init(
         globalBytes: Int64 = 0,
@@ -50,9 +59,15 @@ public struct SyncProgress: Hashable, Codable, Sendable {
         needItems: Int64 = 0,
         inProgressBytes: Int64 = 0,
         remoteCompletion: [DeviceID: Double] = [:],
-        globalItems: Int64 = 0
+        globalItems: Int64 = 0,
+        indexEntriesReceived: Int64 = 0,
+        indexDeletionsReceived: Int64 = 0,
+        sizeIsPartial: Bool = false
     ) {
         self.globalItems = globalItems
+        self.indexEntriesReceived = indexEntriesReceived
+        self.indexDeletionsReceived = indexDeletionsReceived
+        self.sizeIsPartial = sizeIsPartial
         self.globalBytes = globalBytes
         self.localBytes = localBytes
         self.needBytes = needBytes

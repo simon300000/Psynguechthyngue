@@ -50,6 +50,20 @@ type IndexStream struct {
 	errFn  func() error
 	closed bool
 	done   bool
+	// liveOnly: deleted entries are skipped without any lookup (see
+	// SetLiveOnly).
+	liveOnly bool
+}
+
+// SetLiveOnly makes the stream skip deleted entries (tombstones). A folder
+// with a long history holds far more tombstones than files (seen: 670k
+// deletes beside 263 files), and each entry costs two DB lookups plus JSON;
+// consumers that mark-and-sweep (the Files projection) gain nothing from
+// them. Call before the first Next.
+func (s *IndexStream) SetLiveOnly(liveOnly bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.liveOnly = liveOnly
 }
 
 // dbQueries is the subset of upstream's (internal) db.DB interface the bridge
@@ -149,6 +163,9 @@ func (s *IndexStream) Next(maxEntries int64) ([]byte, error) {
 				return nil, newError(CodeDatabase, "iterate global index: %v", err)
 			}
 			break
+		}
+		if s.liveOnly && md.Deleted {
+			continue
 		}
 		entry, err := s.entry(md)
 		if err != nil {

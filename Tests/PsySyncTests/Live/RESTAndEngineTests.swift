@@ -537,6 +537,27 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.stop(deadline: .seconds(1))
     }
 
+    /// Real-device report: a paused folder showed "Size 0 KB, on this
+    /// device 0 KB" with 435 MB on the device (upstream's summary is all zero
+    /// for a paused folder); the DB counters still know.
+    @Test func pausedFolderKeepsItsSizes() async throws {
+        let h = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        var state = FolderIndexState()
+        state.globalFiles = 1059
+        state.globalBytes = 553_100_000
+        state.localBytes = 435_100_000
+        h.bridge.indexState = state
+        try await h.engine.start(context: .foreground)
+        try await h.engine.addFolder(Folder(id: FolderID(rawValue: "f"), label: "f", paused: true))
+        let paused = try await h.engine.folderStatus(FolderID(rawValue: "f"))
+        #expect(paused.state == .paused)
+        #expect(paused.progress.globalBytes == 553_100_000)
+        #expect(paused.progress.localBytes == 435_100_000)
+        #expect(paused.progress.globalItems == 1059)
+        try await h.engine.stop(deadline: .seconds(1))
+    }
+
     /// Simulator acceptance found that conflict copies never reached the UI with
     /// the live engine: the engine now lists them from the global index.
     @Test func folderStatusListsConflictCopiesFromGlobalIndex() async throws {

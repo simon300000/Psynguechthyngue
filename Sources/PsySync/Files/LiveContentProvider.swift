@@ -48,6 +48,8 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         public var delegationTimeout: Duration = .seconds(600)
         /// How long to wait for the engine lock before giving up.
         public var lockTimeout: Duration = .seconds(15)
+        /// After yielding the lock: how long to wait for the App to hold it.
+        public var handOverTimeout: Duration = .seconds(30)
         public var pollInterval: Duration = .milliseconds(500)
         public var fetchBudget: RestrictedFetchBudget = .default
         /// Runs after every restricted fetch (success or failure), on the
@@ -116,6 +118,10 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
             return (clone, record, .localClone)
         }
 
+        // The App is starting and asked for the lock: hand this to it.
+        if engineLock.currentHolder() != .app, yieldMarker.appWantsLock() {
+            return try await handOverToApp(record, progress: progress)
+        }
         if engineLock.currentHolder() == .app {
             switch try await delegate(record, progress: progress) {
             case .completed(let fresh):
@@ -129,9 +135,44 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
             }
         }
 
-        let result = try await gate.run { try await self.restrictedFetch(record, progress: progress) }
+        let result: (url: URL, record: FileItemRecord, source: ContentSource)
+        do {
+            result = try await gate.run { try await self.restrictedFetch(record, progress: progress) }
+        } catch YieldedToApp.yielded {
+            return try await handOverToApp(record, progress: progress)
+        }
         log.info("fetchContents source=restrictedFetch id=\(record.itemID.rawValue, privacy: .public)")
         return result
+    }
+
+    /// The restricted fetch was cancelled because the App asked for the lock.
+    enum YieldedToApp: Error { case yielded }
+
+    private var yieldMarker: EngineYield { EngineYield(lockURL: layout.engineLock) }
+
+    /// Waits for the starting App to hold the lock, then delegates the same
+    /// fetch to it: Files sees one download, not a failure and a retry.
+    private func handOverToApp(_ record: FileItemRecord, progress: Progress) async throws
+        -> (url: URL, record: FileItemRecord, source: ContentSource)
+    {
+        log.info("fetchContents: handing over to the starting app id=\(record.itemID.rawValue, privacy: .public)")
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: configuration.handOverTimeout)
+        while engineLock.currentHolder() != .app {
+            if progress.isCancelled || Task.isCancelled { throw FilesContentError.cancelled }
+            guard clock.now < deadline else { throw FilesContentError.openAppRequired(.appBusy) }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        switch try await delegate(record, progress: progress) {
+        case .completed(let fresh):
+            let url = try containment.url(for: fresh.path)
+            guard Self.fileExists(url) else { throw FilesContentError.openAppRequired(.staleIndex) }
+            progress.completedUnitCount = progress.totalUnitCount
+            log.info("fetchContents source=delegatedToApp (after yield) id=\(record.itemID.rawValue, privacy: .public)")
+            return (try cloneToTemporary(url), fresh, .delegatedToApp)
+        case .notAccepted:
+            throw FilesContentError.openAppRequired(.appBusy)
+        }
     }
 
     // MARK: Local
@@ -252,6 +293,8 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         }
         guard let identity = try identity() else { throw FilesContentError.openAppRequired(.unavailable) }
 
+        // Queued behind a fetch that yielded: the App is taking over.
+        if yieldMarker.appWantsLock() { throw YieldedToApp.yielded }
         if engineLock.currentHolder() == .app {
             DarwinNotifier.post(DarwinNotification.engineYieldRequested)
         }
@@ -297,6 +340,10 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
                     isCancelled: { progress.isCancelled || cancelFlag.isSet })
             }
         } catch {
+            if cancelFlag.isSet && !progress.isCancelled {
+                log.info("restricted fetch yielded to the app")
+                throw YieldedToApp.yielded
+            }
             log.error("restricted fetch failed: \(String(describing: error), privacy: .public)")
             let mapped = Self.mapBridgeError(error, cancelled: progress.isCancelled || cancelFlag.isSet)
             if mapped == .openAppRequired(.noPeer), try queueForLater(record) {

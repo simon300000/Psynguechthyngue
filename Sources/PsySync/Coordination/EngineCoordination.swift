@@ -62,3 +62,62 @@ public enum DarwinNotification {
     /// Either side: engine lock released.
     public static let engineLockReleased = "app.psynguechthyngue.engine.lock-released"
 }
+
+/// App start while the extension's restricted fetch holds the lock (device:
+/// opening the App during a Files download failed with "Sync is busy").
+///
+/// The App marks that it wants the lock (a file next to the lock, fresh for
+/// `freshness`) and repeats `engineYieldRequested` while it waits. The
+/// extension cancels its restricted fetch on the notification, and while the
+/// mark is fresh it does not take the lock again: it waits for the App and
+/// hands the same `fetchContents` to it (delegated path), so Files sees no
+/// failed download.
+public struct EngineYield: Sendable {
+    public static let freshness: TimeInterval = 30
+    public let marker: URL
+
+    public init(lockURL: URL) {
+        marker = lockURL.deletingLastPathComponent().appending(path: lockURL.lastPathComponent + ".app-wants")
+    }
+
+    public func markAppWantsLock() {
+        FileManager.default.createFile(atPath: marker.path(percentEncoded: false), contents: Data())
+    }
+
+    public func clear() {
+        try? FileManager.default.removeItem(at: marker)
+    }
+
+    public func appWantsLock(now: Date = Date()) -> Bool {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: marker.path(percentEncoded: false)),
+              let modified = attrs[.modificationDate] as? Date else { return false }
+        return now.timeIntervalSince(modified) < Self.freshness
+    }
+
+    /// App side: acquire, asking an extension holder to yield. Waits up to
+    /// `yieldTimeout` when the extension holds the lock, `timeout` otherwise.
+    public func acquireForApp(_ lock: any EngineLock, timeout: Duration, yieldTimeout: Duration = .seconds(15))
+        async -> (any EngineLockLease)?
+    {
+        guard lock.currentHolder() == .fileProviderExtension else {
+            if let lease = await lock.acquire(owner: .app, timeout: timeout) { return lease }
+            guard lock.currentHolder() == .fileProviderExtension else { return nil }
+            return await acquireForApp(lock, timeout: timeout, yieldTimeout: yieldTimeout)
+        }
+        markAppWantsLock()
+        defer { clear() }
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: max(timeout, yieldTimeout))
+        while clock.now < deadline, !Task.isCancelled {
+            // Repeated: an extension still acquiring when the first one went
+            // out only starts observing after it holds the lock.
+            if lock.currentHolder() == .fileProviderExtension {
+                DarwinNotifier.post(DarwinNotification.engineYieldRequested)
+            }
+            if let lease = await lock.acquire(owner: .app, timeout: min(.seconds(1), clock.now.duration(to: deadline))) {
+                return lease
+            }
+        }
+        return nil
+    }
+}

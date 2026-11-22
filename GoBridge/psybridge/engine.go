@@ -88,6 +88,7 @@ type Engine struct {
 	endpoint *APIEndpoint
 	stopping bool
 	streams  map[*IndexStream]struct{}
+	index    *indexTracker
 }
 
 // NewEngine validates the configuration but does not touch the network or DB.
@@ -289,6 +290,21 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 	if !ok {
 		return nil, newError(CodeDatabase, "upstream DB lacks expected query methods")
 	}
+	// Bridge-side goroutines end with the runtime (stopAsync, also on the
+	// error paths below).
+	peerCtx, peerCancel := context.WithCancel(context.Background())
+	rt.extraCancel = peerCancel
+	var tracker *indexTracker
+	if idb, ok := sdb.(indexDB); ok {
+		var running []string
+		for _, f := range cfg.FolderList() {
+			if !f.Paused {
+				running = append(running, f.ID)
+			}
+		}
+		tracker = newIndexTracker(idb, e.cfg.HomeDir, running)
+		tracker.subscribe(peerCtx, evLogger)
+	}
 	app, err := syncthing.New(cfg, sdb, evLogger, cert, syncthing.Options{
 		NoUpgrade:             true,
 		DBMaintenanceInterval: dbMaintenanceInterval,
@@ -305,12 +321,11 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 		return nil, err
 	}
 
-	peerCtx, peerCancel := context.WithCancel(context.Background())
-	rt.extraCancel = peerCancel
 	startPeerCacheWriter(peerCtx, e.cfg.HomeDir, baseURL, apiKey, myID, evLogger)
 
 	e.rt = rt
 	e.sdb = queries
+	e.index = tracker
 	e.wrapper = cfg
 	e.myID = myID
 	e.stopping = false
@@ -365,6 +380,7 @@ func (e *Engine) handleExit(rt *upstreamRuntime, appErr error, logs *sinkShared)
 		e.rt = nil
 		e.endpoint = nil
 		e.sdb = nil
+		e.index = nil
 		releaseProcess("engine")
 	}
 	e.mu.Unlock()
@@ -402,6 +418,7 @@ func (e *Engine) Stop(timeoutMillis int64) error {
 	e.rt = nil
 	e.endpoint = nil
 	e.sdb = nil
+	e.index = nil
 	if !ok {
 		return newError(CodeStopTimeout, "engine did not stop within %v; it keeps stopping in the background and Start will wait for it", timeout)
 	}

@@ -26,6 +26,10 @@ public actor FilesProjector {
     private var scheduled: [FolderID: Task<Void, Never>] = [:]
     private var reasons: [FolderID: String] = [:]
     private var running: [FolderID: Task<Void, Never>] = [:]
+    /// Duration of the folder's last pass: index-triggered passes wait at
+    /// least twice that, so a folder whose pass takes seconds is not
+    /// re-walked back to back while its index keeps arriving.
+    private var lastPassDuration: [FolderID: Duration] = [:]
     private var eventTask: Task<Void, Never>?
     private let log = Logger(subsystem: "app.psynguechthyngue.files", category: "projector")
     /// Completed passes (tests/diagnostics).
@@ -90,7 +94,7 @@ public actor FilesProjector {
         } else {
             reasons[folder] = reason
         }
-        let wait = delay ?? debounce
+        let wait = delay ?? max(debounce, min(.seconds(30), (lastPassDuration[folder] ?? .zero) * 2))
         scheduled[folder] = Task { [weak self] in
             if wait > .zero { try? await Task.sleep(for: wait) }
             guard !Task.isCancelled, let self else { return }
@@ -127,9 +131,26 @@ public actor FilesProjector {
         if running[folder] == task { running[folder] = nil }
     }
 
+    /// Reasons that only say "the index may have changed": a pass over an
+    /// index already projected (same fingerprint) is skipped. Explicit
+    /// requests always run.
+    private static func isSkippable(_ reason: String) -> Bool {
+        reason.split(separator: "+").allSatisfy { ["start", "folders", "index"].contains($0) }
+    }
+
     private func project(_ folder: FolderID, reason: String) async {
         let before = (try? store.currentAnchor()) ?? 0
         let started = ContinuousClock.now
+        // Taken before reading: a change during the pass makes the next
+        // fingerprint differ, so it is not lost.
+        let fingerprint = await engine.indexFingerprint(folder)
+        if Self.isSkippable(reason), let fingerprint, fingerprint == (try? store.projectedFingerprint(folder)) {
+            let line = Self.describe(folder, reason, 0, "unchanged", started)
+            log.info("projection \(line, privacy: .public)")
+            trace?(line)
+            return
+        }
+        defer { lastPassDuration[folder] = ContinuousClock.now - started }
         var count = 0
         let listedAtStart = (try? store.itemCount(folder)) ?? 0
         listing?(folder, FilesListingProgress(processed: 0, listedAtStart: listedAtStart))
@@ -148,6 +169,7 @@ public actor FilesProjector {
             // mid-pass did to large folders.
             try Task.checkCancellation()
             let (after, swept) = try store.finishFullSyncCounting(folder)
+            try? store.setProjectedFingerprint(folder, fingerprint)
             passCount += 1
             let line = Self.describe(folder, reason, count, "swept=\(swept) anchor=\(before)->\(after)", started)
             log.info("projected \(line, privacy: .public)")
