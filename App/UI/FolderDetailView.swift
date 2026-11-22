@@ -21,7 +21,10 @@ struct FolderDetailView: View {
                     }
                     .accessibilityIdentifier("folder.state")
                     FolderWorkProgress(status: status, listing: model.listing(of: folder))
-                    if status.state == .syncing || status.progress.needBytes > 0 {
+                    // While the file list is still arriving/being processed
+                    // upstream's needs are transient, not a transfer.
+                    if status.state == .syncing
+                        || (status.progress.needBytes > 0 && status.state != .fetchingIndex && status.state != .preparingFiles) {
                         ProgressView(value: status.progress.fractionCompleted)
                         Text("\(Format.bytes(status.progress.needBytes)) left · \(status.progress.needItems) items")
                             .font(.footnote).foregroundStyle(.secondary)
