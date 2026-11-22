@@ -27,6 +27,14 @@ final class ExtensionContext: @unchecked Sendable {
         let services = RestrictedFetchServices.make(layout: layout)
         var configuration = LiveContentProvider.Configuration()
         configuration.afterFetch = services.afterFetch
+        configuration.availableMemory = {
+            let available = UInt64(os_proc_available_memory())
+            #if DEBUG
+            let limit = RestrictedFetchBudget.default.fitted(availableBytes: available)?.memory.limitMiB ?? -1
+            FootprintProbe.file?.append("fetch-budget available=\(available >> 20)MiB gomemlimit=\(limit)MiB")
+            #endif
+            return available
+        }
         content = LiveContentProvider(
             layout: layout, store: store, folder: folder, engineLock: FlockEngineLock(layout: layout),
             fetchBridge: services.bridge, identity: services.identity, temporaryDirectory: temporary,

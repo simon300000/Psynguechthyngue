@@ -4,6 +4,15 @@ import PsySync
 /// Maps internal errors to what the File Provider framework understands.
 enum ErrorMapping {
     static func map(_ error: Error) -> Error {
+        let mapped = mapUnlogged(error)
+        #if DEBUG
+        let ns = mapped as NSError
+        FootprintProbe.file?.append("error-returned \(ns.domain)/\(ns.code) from \(error)")
+        #endif
+        return mapped
+    }
+
+    private static func mapUnlogged(_ error: Error) -> Error {
         switch error {
         case let error as NSFileProviderError:
             return error
@@ -37,7 +46,7 @@ enum ErrorMapping {
 
     static func openAppMessage(_ reason: FilesContentError.OpenAppReason) -> String {
         switch reason {
-        case .tooLarge:
+        case .tooLarge, .lowMemory:
             return String(localized: "FILES_ERROR_TOO_LARGE", defaultValue: "This file is too large to download here. Open Psynguechthyngue to download it.")
         case .staleIndex:
             return String(localized: "FILES_ERROR_STALE", defaultValue: "This file has changed on other devices. Open Psynguechthyngue to sync.")

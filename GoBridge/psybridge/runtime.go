@@ -16,8 +16,10 @@ const (
 	DefaultForegroundMemoryLimitMiB = 256
 	// BGTask / BGContinuedProcessingTask engine.
 	DefaultBackgroundMemoryLimitMiB = 160
-	// File Provider extension restricted fetch (must stay far below the
-	// extension's jetsam limit, which is undocumented and must be measured).
+	// File Provider extension restricted fetch: ceiling / fallback only. The
+	// measured jetsam limit is ≈ 20 MiB (iPhone 13 Pro, iPad Pro 4th gen), so
+	// Swift fits the request to os_proc_available_memory() − 4 MiB per fetch
+	// (RestrictedFetchBudget.fitted) and refuses below 6 MiB.
 	DefaultRestrictedMemoryLimitMiB = 40
 
 	DefaultGCPercent           = 100

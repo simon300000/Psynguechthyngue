@@ -95,6 +95,37 @@ enum DomainManager {
         }
     }
 
+    /// The extension answers `.serverUnreachable` / `.notAuthenticated` when it
+    /// cannot serve contents (no peer, App busy, restricted core refused).
+    /// The system then shows the domain as "paused" and backs off *until it is
+    /// signalled* (NSFileProviderReplicatedExtension.h, fetchContents) — a
+    /// plain `signalEnumerator` does not lift that. The App calls this
+    /// whenever the engine is running (it can now serve delegated fetches).
+    static func resolveErrors(_ folders: [FolderID]) async {
+        for folder in folders {
+            let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(folder.rawValue), displayName: "")
+            guard let manager = NSFileProviderManager(for: domain) else { continue }
+            for code in [NSFileProviderError.Code.serverUnreachable, .notAuthenticated] {
+                do {
+                    try await manager.signalErrorResolved(NSFileProviderError(code))
+                } catch {
+                    log.debug("signalErrorResolved \(folder.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+        LifecycleLog.shared.record("files-errors-resolved", "folders=\(folders.count)")
+    }
+
+    /// DEBUG/diagnostics: the system's view of each domain.
+    static func logDomainStates() async {
+        let domains = (try? await NSFileProviderManager.domains()) ?? []
+        for d in domains {
+            LifecycleLog.shared.record(
+                "files-domain",
+                "id=\(d.identifier.rawValue) enabled=\(d.userEnabled) replicated=\(d.isReplicated) testing=\(d.testingModes.rawValue)")
+        }
+    }
+
     /// Fresh install / reset (DESIGN.md §8.4).
     static func removeAll() async {
         try? await NSFileProviderManager.removeAllDomains()

@@ -119,6 +119,11 @@ final class FilesIntegration {
             }
             await projector.setFolders(managed.map(\.id))
             domainStatuses = await DomainManager.statuses(for: managed.map(\.id))
+            // Engine is running: lift any "paused" back-off from earlier failures.
+            await DomainManager.resolveErrors(managed.map(\.id))
+            #if DEBUG
+            await DomainManager.logDomainStates()
+            #endif
         } catch {
             log.error("folders() failed: \(String(describing: error), privacy: .public)")
         }

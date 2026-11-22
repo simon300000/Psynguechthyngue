@@ -12,6 +12,8 @@ final class FakeFetchBridge: RestrictedFetchBridge, @unchecked Sendable {
     private let lock = NSLock()
     private var _calls = 0
     var calls: Int { lock.withLock { _calls } }
+    private var _lastMemoryMiB: Int64?
+    var lastMemoryMiB: Int64? { lock.withLock { _lastMemoryMiB } }
 
     init(payload: Data = Data("fetched".utf8), error: Error? = nil) {
         self.payload = payload
@@ -23,7 +25,7 @@ final class FakeFetchBridge: RestrictedFetchBridge, @unchecked Sendable {
         destination: URL, budget: RestrictedFetchBudget, progress: @escaping @Sendable (Int64, Int64) -> Void,
         isCancelled: @escaping @Sendable () -> Bool
     ) throws -> RestrictedFetchResult {
-        lock.withLock { _calls += 1 }
+        lock.withLock { _calls += 1; _lastMemoryMiB = budget.memory.limitMiB }
         #expect(Thread.isMainThread == false)
         if let error { throw error }
         try payload.write(to: destination)
@@ -57,8 +59,11 @@ struct ContentHarness {
         lock = FlockEngineLock(layout: layout)
     }
 
-    func provider(bridge: (any RestrictedFetchBridge)?, accept: Duration = .seconds(2)) -> LiveContentProvider {
+    func provider(
+        bridge: (any RestrictedFetchBridge)?, accept: Duration = .seconds(2), availableMemory: UInt64? = nil
+    ) -> LiveContentProvider {
         var config = LiveContentProvider.Configuration()
+        if let availableMemory { config.availableMemory = { availableMemory } }
         config.acceptTimeout = accept
         config.lockTimeout = .seconds(2)
         config.pollInterval = .milliseconds(50)
@@ -140,6 +145,40 @@ struct ContentHarness {
         #expect(try h.store.pending(limit: 10).map(\.kind) == [.modified])
         #expect(h.lock.currentHolder() == nil)
         #expect(bridge.recorded.count == 1)
+    }
+
+    @Test func fittedBudgetFollowsJetsamHeadroom() {
+        let base = RestrictedFetchBudget.default
+        #expect(base.memory.limitMiB == 40)
+        #expect(base.fitted(availableBytes: 0) == base)  // unknown → static ceiling
+        #expect(base.fitted(availableBytes: 200 << 20)?.memory.limitMiB == 40)  // capped
+        #expect(base.fitted(availableBytes: 14 << 20)?.memory.limitMiB == 10)  // device: ≈14 MiB left
+        #expect(base.fitted(availableBytes: (10 << 20) + 123)?.memory.limitMiB == 6)  // floor exactly
+        #expect(base.fitted(availableBytes: 9 << 20) == nil)
+        #expect(base.fitted(availableBytes: 1 << 20) == nil)
+        #expect(base.fitted(availableBytes: 14 << 20)?.memory.gcPercent == base.memory.gcPercent)
+    }
+
+    @Test func restrictedFetchUsesFittedMemoryLimit() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("m.bin", size: 7, local: false)])
+        let bridge = FakeFetchBridge()
+        let result = try await h.provider(bridge: bridge, availableMemory: 13 << 20)
+            .provideContents(for: h.id("m.bin"), requestedVersion: nil, progress: Progress())
+        #expect(result.source == .restrictedFetch)
+        #expect(bridge.lastMemoryMiB == 9)
+    }
+
+    @Test func restrictedFetchRefusedWhenHeadroomTooSmall() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("m.bin", size: 7, local: false)])
+        let bridge = FakeFetchBridge()
+        await #expect(throws: FilesContentError.openAppRequired(.lowMemory)) {
+            _ = try await h.provider(bridge: bridge, availableMemory: 8 << 20)
+                .provideContents(for: h.id("m.bin"), requestedVersion: nil, progress: Progress())
+        }
+        #expect(bridge.calls == 0)
+        #expect(h.lock.currentHolder() == nil)
     }
 
     @Test func bridgeErrorDescriptionsMap() {
