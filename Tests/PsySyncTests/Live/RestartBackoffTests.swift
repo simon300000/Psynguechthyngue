@@ -24,6 +24,32 @@ import Testing
     }
 }
 
+@Suite struct AutoContinueGateTests {
+    @Test func oncePerBurstForegroundOnly() {
+        var g = AutoContinueGate()
+        let t0 = ContinuousClock.now
+        func ask(_ t: Duration, enabled: Bool = true, active: Bool = true, can: Bool = true,
+                 transfers: Bool = true, continuing: Bool = false) -> Bool {
+            g.shouldRequest(enabled: enabled, appActive: active, canContinue: can, transfersActive: transfers,
+                            alreadyContinuing: continuing, now: t0 + t)
+        }
+        #expect(!ask(.zero, transfers: false))
+        #expect(!ask(.zero, enabled: false))
+        #expect(!ask(.zero, active: false))          // must be submitted from the foreground
+        #expect(!ask(.zero, can: false))             // Mac / identifier not registered
+        #expect(!ask(.zero, continuing: true))
+        #expect(ask(.seconds(1)))                    // first request of the burst
+        #expect(!ask(.seconds(2)))                   // same burst
+        #expect(!ask(.seconds(90)))
+        #expect(!ask(.seconds(91), transfers: false)) // burst ends
+        #expect(ask(.seconds(92)))                   // new burst
+        #expect(!ask(.seconds(93), transfers: false))
+        #expect(!ask(.seconds(100)))                 // flapping burst within a minute: no spam
+        #expect(!ask(.seconds(101), transfers: false))
+        #expect(ask(.seconds(160)))
+    }
+}
+
 extension LiveSyncEngineTests {
     /// The bridge's exit callback marks a running engine failed at once (the
     /// host restarts on `.failed`), and a later start recovers.

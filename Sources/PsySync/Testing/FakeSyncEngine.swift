@@ -178,6 +178,10 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
     public func updateDevice(_ device: Device) async throws {
         try failIfScripted()
         record("updateDevice:\(device.id.short)")
+        // Like upstream's PATCH of an unknown device (404 → "rejected").
+        guard sync({ m in m.scenario.devices.contains { $0.id == device.id } }) else {
+            throw EngineError.rest(status: 404, body: "no such device")
+        }
         sync { m in
             if let i = m.scenario.devices.firstIndex(where: { $0.id == device.id }) { m.scenario.devices[i] = device }
             if let i = m.scenario.connections.firstIndex(where: { $0.deviceID == device.id }) {

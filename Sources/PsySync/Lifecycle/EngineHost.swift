@@ -68,6 +68,33 @@ public enum LifecycleBudget {
     public static let foregroundStartTimeout: Duration = .seconds(20)
 }
 
+/// Decides when "Keep syncing in background automatically" submits the
+/// BGContinuedProcessingTask request: once per sync burst (transfers
+/// becoming active), only in the foreground (the system requires the request
+/// to come from the foreground), never while one is already running, and at
+/// most once per `minimumInterval` so a burst that flaps between files does
+/// not spam requests.
+public struct AutoContinueGate: Hashable, Sendable {
+    public var minimumInterval: Duration = .seconds(60)
+    private var burstHandled = false
+    private var lastRequest: ContinuousClock.Instant?
+
+    public init() {}
+
+    public mutating func shouldRequest(enabled: Bool, appActive: Bool, canContinue: Bool, transfersActive: Bool,
+                                       alreadyContinuing: Bool, now: ContinuousClock.Instant) -> Bool {
+        guard transfersActive else {
+            burstHandled = false   // burst over: the next one may request again
+            return false
+        }
+        guard enabled, appActive, canContinue, !alreadyContinuing, !burstHandled else { return false }
+        if let lastRequest, now - lastRequest < minimumInterval { return false }
+        burstHandled = true
+        lastRequest = now
+        return true
+    }
+}
+
 /// Exponential backoff for restarting an engine that died or failed to start
 /// while the app is in the foreground: 1, 2, 4 … 60 s. A run that lasted at
 /// least `stableAfter` resets the sequence.

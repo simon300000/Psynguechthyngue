@@ -187,7 +187,11 @@ struct HomeView: View {
                     Label("Syncing continues in the background", systemImage: "arrow.down.app")
                         .font(.footnote).foregroundStyle(.secondary)
                         .accessibilityIdentifier("home.continuing")
-                } else if model.canContinueInBackground && !model.syncingFolders.isEmpty {
+                } else if model.canContinueInBackground && !model.syncingFolders.isEmpty
+                            && (!model.settings.autoContinueInBackground || model.autoContinueFailed) {
+                    // With the automatic setting on, the request is made for
+                    // the user and the line above appears; the button is only
+                    // offered again if the system refused it.
                     Button { Task { await model.continueInBackground() } } label: {
                         Label("Keep Syncing in Background", systemImage: "arrow.down.app")
                             .frame(maxWidth: .infinity)

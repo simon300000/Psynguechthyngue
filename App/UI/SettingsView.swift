@@ -47,11 +47,16 @@ struct SettingsView: View {
                     Section {
                         Toggle("Background sync", isOn: $settings.backgroundSync)
                             .accessibilityIdentifier("settings.background")
+                        Toggle("Keep syncing in background automatically", isOn: $settings.autoContinueInBackground)
+                            .accessibilityIdentifier("settings.autocontinue")
                         LabeledContent("Last background sync") {
                             if let d = settings.lastBackgroundRun { Text(Format.relative(d)) } else { Text("Never") }
                         }
                     } header: { Text("Background") } footer: {
-                        Text("iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open.")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open.")
+                            Text("When transfers start, keep them going after you leave the app, with the system’s progress indicator.")
+                        }
                     }
                 }
 
@@ -139,6 +144,8 @@ struct EngineOptionsSection: View {
     @State private var name = ""
     @State private var listen = ""
     @State private var loadedFrom: EngineOptions?
+    private enum Field { case name, listen }
+    @FocusState private var focused: Field?
 
     var body: some View {
         if let options = model.engineOptions {
@@ -146,6 +153,7 @@ struct EngineOptionsSection: View {
                 TextField("Device name", text: $name, prompt: Text(DefaultDeviceName.current))
                     .plainNameInput()
                     .submitLabel(.done)
+                    .focused($focused, equals: .name)
                     .onSubmit { commitName() }
                     .accessibilityIdentifier("settings.devicename")
                 Toggle("Global discovery", isOn: Binding(
@@ -167,6 +175,7 @@ struct EngineOptionsSection: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
+                        .focused($focused, equals: .listen)
                         .onSubmit { commitListen() }
                         .accessibilityIdentifier("settings.listen")
                     Text("Separate several addresses with commas, e.g. tcp://:22000. “default” lets Syncthing choose.")
@@ -182,11 +191,20 @@ struct EngineOptionsSection: View {
         }
     }
 
+    /// Takes the engine's values, except for a field the user is editing
+    /// (focused and changed since the last load): toggling an option reloads
+    /// `options` and must not discard unsaved typing.
     private func load(_ options: EngineOptions) {
         guard options != loadedFrom else { return }
+        let previous = loadedFrom
         loadedFrom = options
-        name = options.deviceName
-        listen = options.listenAddresses.joined(separator: ", ")
+        let shownListen = previous?.listenAddresses.joined(separator: ", ")
+        if focused != .name || previous == nil || name == previous?.deviceName {
+            name = options.deviceName
+        }
+        if focused != .listen || previous == nil || listen == shownListen {
+            listen = options.listenAddresses.joined(separator: ", ")
+        }
     }
 
     private func commitName() {
