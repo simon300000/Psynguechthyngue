@@ -654,8 +654,19 @@ public actor LiveSyncEngine: SyncEngine {
             let dir = config.layout.managedFolder(folder.id)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             path = dir.standardizedFileURL.path(percentEncoded: false)
+            // The directory may survive "Stop Syncing, Keep Files": its old
+            // rules and files must match the mode chosen now.
+            let stignore = dir.appending(path: ".stignore")
+            let previous = (FileManager.default.contents(atPath: stignore.path(percentEncoded: false)))
+                .map { Self.splitLines(String(decoding: $0, as: UTF8.self)) } ?? []
             if folder.contentMode == .onDemand {
-                try writeOnDemandRulesToDisk(dir, present: [])
+                // Kept files stay local (an empty list ignored them all).
+                try writeOnDemandRulesToDisk(dir, present: Self.presentFiles(in: dir))
+            } else if IgnoreRulesGenerator.isManaged(previous) {
+                // Leftover on-demand rules (`*`) would keep an "Everything"
+                // folder from downloading anything, while it looks up to date.
+                try Self.writeHelperFile(
+                    Data(Self.joinLines(IgnoreRulesGenerator.everythingLines(user: Self.readUserFile(dir))).utf8), to: stignore)
             }
         case .external(let bookmark, let displayPath):
             guard folder.contentMode == .everything else {

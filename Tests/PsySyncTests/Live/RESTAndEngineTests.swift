@@ -463,6 +463,33 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.stop(deadline: .seconds(1))
     }
 
+    /// Dynamic E2E: "Stop Syncing, Keep Files" then accepting the same folder
+    /// again left the old on-demand `.stignore` in force: as "Everything" it
+    /// downloaded nothing new yet looked up to date; as "On demand" the kept
+    /// files became ignored.
+    @Test func reAddingAKeptFolderMatchesTheChosenMode() async throws {
+        let h = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        try await h.engine.start(context: .foreground)
+        let id = FolderID(rawValue: "re")
+        let dir = AppGroupLayout(root: h.root).managedFolder(id)
+        try FileManager.default.createDirectory(at: dir.appending(path: "d"), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: dir.appending(path: "d/kept.txt"))
+        try Data((IgnoreRulesGenerator.fileContents(present: [RelativePath(rawValue: "old.txt")])).utf8)
+            .write(to: dir.appending(path: ".stignore"))
+        try Data("*.psd\n".utf8).write(to: dir.appending(path: IgnoreRulesGenerator.userFile))
+
+        try await h.engine.addFolder(Folder(id: id, label: "RE", contentMode: .everything))
+        let everything = try String(contentsOf: dir.appending(path: ".stignore"), encoding: .utf8)
+        #expect(!IgnoreRulesGenerator.isManaged(LiveSyncEngine.splitLines(everything)))
+        #expect(everything.contains("*.psd") && !everything.contains("\n*\n"))
+
+        try await h.engine.addFolder(Folder(id: id, label: "RE", contentMode: .onDemand))
+        let onDemand = LiveSyncEngine.splitLines(try String(contentsOf: dir.appending(path: ".stignore"), encoding: .utf8))
+        #expect(IgnoreRulesGenerator.presentPaths(from: onDemand) == [RelativePath(rawValue: "d/kept.txt")])
+        try await h.engine.stop(deadline: .seconds(1))
+    }
+
     @Test func rejectsInvalidRequests() async throws {
         let h = try makeHarness()
         defer { try? FileManager.default.removeItem(at: h.root) }
