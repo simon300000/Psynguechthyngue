@@ -55,6 +55,8 @@ final class ExtensionContext: @unchecked Sendable {
 
     var folderInfo: FilesFolderInfo? { try? store.folderInfo(folder) }
 
+    var isOnDemand: Bool { (try? store.folderInfo(folder))?.contentMode == .onDemand }
+
     func item(for record: FileItemRecord) -> FileProviderItem {
         let info = folderInfo
         return FileProviderItem(

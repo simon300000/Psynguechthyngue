@@ -2,14 +2,21 @@ import FileProvider
 import PsySync
 import os
 
-/// Anchors are the store's monotonic Int64, encoded as decimal text.
+/// Anchors are "<store generation>:<monotonic Int64>" (FilesAnchor). An
+/// anchor from another generation (store rebuilt: new item identifiers) is
+/// expired, so the system re-enumerates instead of asking for identifiers
+/// that no longer exist — which made it drop folders the user tapped.
 enum AnchorCoding {
-    static func encode(_ value: Int64) -> NSFileProviderSyncAnchor {
-        NSFileProviderSyncAnchor(Data(String(value).utf8))
+    static func encode(_ value: Int64, generation: Int64) -> NSFileProviderSyncAnchor {
+        NSFileProviderSyncAnchor(Data(FilesAnchor.encode(generation: generation, anchor: value).utf8))
     }
 
-    static func decode(_ anchor: NSFileProviderSyncAnchor) -> Int64? {
-        Int64(String(decoding: anchor.rawValue, as: UTF8.self))
+    static func decode(_ anchor: NSFileProviderSyncAnchor, generation: Int64) -> Int64? {
+        guard let d = FilesAnchor.decode(String(decoding: anchor.rawValue, as: UTF8.self)) else { return nil }
+        // No generation = anchor from before generations: its store may have
+        // been rebuilt already, so re-enumerate once.
+        guard let g = d.generation, g == generation else { return nil }
+        return d.anchor
     }
 }
 
@@ -27,7 +34,11 @@ class BaseEnumerator: NSObject, NSFileProviderEnumerator {
     }
 
     func currentSyncAnchor(completionHandler: @escaping (NSFileProviderSyncAnchor?) -> Void) {
-        completionHandler((try? context.reader.currentAnchor()).map(AnchorCoding.encode))
+        guard let anchor = try? context.reader.currentAnchor(), let generation = try? context.reader.generation() else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(AnchorCoding.encode(anchor, generation: generation))
     }
 
     func pageCursor(_ page: NSFileProviderPage) -> String? {
@@ -49,7 +60,7 @@ class BaseEnumerator: NSObject, NSFileProviderEnumerator {
         _ observer: NSFileProviderChangeObserver, from anchor: NSFileProviderSyncAnchor, workingSet: Bool,
         filter: (FileItemRecord) -> Bool
     ) {
-        guard let since = AnchorCoding.decode(anchor) else {
+        guard let generation = try? context.reader.generation(), let since = AnchorCoding.decode(anchor, generation: generation) else {
             observer.finishEnumeratingWithError(NSFileProviderError(.syncAnchorExpired))
             return
         }
@@ -63,7 +74,7 @@ class BaseEnumerator: NSObject, NSFileProviderEnumerator {
             #endif
             let deleted = page.deleted.map { NSFileProviderItemIdentifier($0.rawValue) }
             if !deleted.isEmpty { observer.didDeleteItems(withIdentifiers: deleted) }
-            observer.finishEnumeratingChanges(upTo: AnchorCoding.encode(page.newAnchor), moreComing: page.more)
+            observer.finishEnumeratingChanges(upTo: AnchorCoding.encode(page.newAnchor, generation: generation), moreComing: page.more)
         } catch {
             observer.finishEnumeratingWithError(ErrorMapping.map(error))
         }

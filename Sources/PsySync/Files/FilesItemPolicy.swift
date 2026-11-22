@@ -33,12 +33,41 @@ public enum FilesItemPolicy {
     /// Bumped whenever the extension's item capabilities change, so the system
     /// re-reads items it cached under the old set (1: `.allowsEvicting`).
     /// Existing rows are re-announced once (`FilesStore.reannounceForCapabilitiesIfNeeded`).
-    public static let capabilityRevision: Int64 = 1
+    public static let capabilityRevision: Int64 = 2
 
     public static func exposedMetadataVersion(for record: FileItemRecord) -> Data {
         var v = record.metadataVersion + Data("|c\(capabilityRevision)".utf8)
         if record.isPinned { v += Data("|pinned".utf8) }
         if record.isReadOnly { v += Data("|readonly".utf8) }
+        if isRemoteOnlyFile(record) { v += Data("|remote".utf8) }
         return v
+    }
+
+    /// A file whose content is not on this device (and no pending write).
+    public static func isRemoteOnlyFile(_ record: FileItemRecord) -> Bool {
+        !record.isDirectory && !record.isLocal && !record.pendingUpload
+    }
+
+    /// Delete / rename / move are offered only where they can propagate: in an
+    /// on-demand folder a not-downloaded file is ignored locally, so the change
+    /// would never reach other devices and the item would come back (review
+    /// finding A1). Folders are checked when the operation arrives.
+    public static func allowsNamespaceChanges(_ record: FileItemRecord, contentMode: ContentMode?) -> Bool {
+        contentMode != .onDemand || !isRemoteOnlyFile(record)
+    }
+
+    /// `dir/name.sync-conflict-YYYYMMDD-HHMMSS-FILESAP.ext`, the upstream
+    /// pattern (StatusMapper lists it as a conflict). Used when an edit in
+    /// Files was based on an older version than ours (finding A4).
+    public static func conflictPath(for path: RelativePath, now: Date = Date()) -> RelativePath {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let name = path.lastComponent
+        let ext = (name as NSString).pathExtension
+        let stem = ext.isEmpty ? name : String(name.dropLast(ext.count + 1))
+        let copy = "\(stem).sync-conflict-\(formatter.string(from: now))-FILESAP" + (ext.isEmpty ? "" : ".\(ext)")
+        return path.parent.appending(copy)
     }
 }

@@ -130,7 +130,9 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             let context = try context()
             let parent = try context.record(itemTemplate.parentItemIdentifier)
             guard parent.isDirectory, !parent.isReadOnly else { throw CocoaError(.fileWriteNoPermission) }
-            let name = itemTemplate.filename
+            // Upstream normalizes names to NFC (autoNormalize); match it so the
+            // identity does not change after the scan (finding A9).
+            let name = itemTemplate.filename.precomposedStringWithCanonicalMapping
             guard PathContainment.isValidFilename(name) else { throw CocoaError(.fileWriteInvalidFileName) }
             let path = parent.path.appending(name)
             let isDirectory = itemTemplate.contentType == .folder || itemTemplate.contentType?.conforms(to: .directory) == true
@@ -146,7 +148,14 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             }
             let target = try context.containment.url(for: path)
             let fm = FileManager.default
-            if isDirectory {
+            if isDirectory, let url {
+                // A package (Pages, .rtfd, …) conforms to .directory and comes
+                // with contents: copying only the folder lost the document
+                // (finding A5). Synced as the directory tree it is.
+                if fm.fileExists(atPath: target.path(percentEncoded: false)) { throw NSFileProviderError(.filenameCollision) }
+                try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: url, to: target)
+            } else if isDirectory {
                 try fm.createDirectory(at: target, withIntermediateDirectories: true)
             } else {
                 if fm.fileExists(atPath: target.path(percentEncoded: false)) { throw NSFileProviderError(.filenameCollision) }
@@ -187,11 +196,21 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             guard !record.isReadOnly else { throw CocoaError(.fileWriteNoPermission) }
             let fm = FileManager.default
 
+            if changedFields.contains(.filename) || changedFields.contains(.parentItemIdentifier),
+               try context.isOnDemand && context.store.hasRemoteOnlyFiles(context.folder, at: record.path)
+            {
+                // Cannot propagate (finding A1): answer with the unchanged
+                // item, so the system puts the name/location back.
+                log.info("modifyItem rename/move rejected: not downloaded id=\(item.itemIdentifier.rawValue, privacy: .public)")
+                completionHandler(context.item(for: record), [], false, nil)
+                return Progress()
+            }
             if changedFields.contains(.filename) || changedFields.contains(.parentItemIdentifier) {
                 let parent = changedFields.contains(.parentItemIdentifier)
                     ? try context.record(item.parentItemIdentifier) : try context.reader.item(record.parentID)
                 guard let parent, parent.isDirectory, !record.path.isRoot else { throw CocoaError(.fileWriteNoPermission) }
-                let name = changedFields.contains(.filename) ? item.filename : record.path.lastComponent
+                let name = (changedFields.contains(.filename) ? item.filename : record.path.lastComponent)
+                    .precomposedStringWithCanonicalMapping
                 guard PathContainment.isValidFilename(name) else { throw CocoaError(.fileWriteInvalidFileName) }
                 let newPath = parent.path.appending(name)
                 if newPath != record.path {
@@ -211,6 +230,27 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 }
             }
 
+            if changedFields.contains(.contents), let newContents, !record.isDirectory,
+               version.contentVersion != record.contentVersion
+            {
+                // Edited on top of an older version than ours (finding A4):
+                // keep both, like Syncthing. The user's bytes become a
+                // conflict copy; the item stays at the newer version, which
+                // the system then fetches.
+                let copy = FilesItemPolicy.conflictPath(for: record.path)
+                try Self.atomicWrite(from: newContents, to: try context.containment.url(for: copy), replacing: false)
+                let attributes = try fm.attributesOfItem(atPath: try context.containment.url(for: copy).path(percentEncoded: false))
+                _ = try context.store.recordLocalWrite(
+                    context.folder, path: copy, isDirectory: false,
+                    size: (attributes[.size] as? NSNumber)?.int64Value ?? 0,
+                    modified: attributes[.modificationDate] as? Date ?? Date())
+                try context.store.append(context.folder, kind: .created, path: copy, previousPath: nil)
+                DarwinNotifier.post(DarwinNotification.filesRequestPosted)
+                context.manager?.signalEnumerator(for: .workingSet) { _ in }
+                log.info("modifyItem conflict: base version is stale; kept the edit as a conflict copy")
+                completionHandler(context.item(for: record), [], false, nil)
+                return Progress()
+            }
             if changedFields.contains(.contents), let newContents, !record.isDirectory {
                 let target = try context.containment.url(for: record.path)
                 try Self.atomicWrite(from: newContents, to: target, replacing: true)
@@ -247,6 +287,19 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 return Progress()
             }
             guard !record.isReadOnly, !record.path.isRoot else { throw CocoaError(.fileWriteNoPermission) }
+            if try context.isOnDemand && context.store.hasRemoteOnlyFiles(context.folder, at: record.path) {
+                // Cannot propagate (finding A1): the system restores the item.
+                log.info("deleteItem rejected: not downloaded id=\(identifier.rawValue, privacy: .public)")
+                completionHandler(NSError.fileProviderErrorForRejectedDeletion(of: context.item(for: record)))
+                return Progress()
+            }
+            if !record.isDirectory, version.contentVersion != record.contentVersion {
+                // Changed elsewhere since the system last saw it (finding A4):
+                // deleting would discard that newer version; keep it.
+                log.info("deleteItem rejected: base version is stale id=\(identifier.rawValue, privacy: .public)")
+                completionHandler(NSError.fileProviderErrorForRejectedDeletion(of: context.item(for: record)))
+                return Progress()
+            }
             if record.isDirectory, !options.contains(.recursive),
                 !(try context.reader.children(of: record.itemID, after: nil, limit: 1).items.isEmpty)
             {
@@ -300,7 +353,10 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             completionHandler()
             return
         }
-        let collector = MaterializedCollector(context: context) { [log] ids in
+        let collector = MaterializedCollector(context: context, failed: { [log] error in
+            log.error("materialized enumeration failed, keeping the previous set: \(String(describing: error), privacy: .public)")
+            completionHandler()
+        }) { [log] ids in
             do {
                 let reannounced = try context.store.setMaterialized(context.folder, ids: ids)
                 log.info("materialized set updated count=\(ids.count) reannounced=\(reannounced)")
@@ -375,11 +431,13 @@ extension FileProviderExtension: @unchecked Sendable {}
 private final class MaterializedCollector: NSObject, NSFileProviderEnumerationObserver, @unchecked Sendable {
     private let context: ExtensionContext
     private let done: ([ItemIdentifier]) -> Void
+    private let failed: (Error) -> Void
     private var ids: [ItemIdentifier] = []
     private var enumerator: NSFileProviderEnumerator?
 
-    init(context: ExtensionContext, done: @escaping ([ItemIdentifier]) -> Void) {
+    init(context: ExtensionContext, failed: @escaping (Error) -> Void, done: @escaping ([ItemIdentifier]) -> Void) {
         self.context = context
+        self.failed = failed
         self.done = done
     }
 
@@ -400,7 +458,13 @@ private final class MaterializedCollector: NSObject, NSFileProviderEnumerationOb
         }
     }
 
-    func finishEnumeratingWithError(_ error: Error) { finish() }
+    /// A partial list would replace the whole materialized set (finding A6);
+    /// keep the previous one instead.
+    func finishEnumeratingWithError(_ error: Error) {
+        enumerator?.invalidate()
+        enumerator = nil
+        failed(error)
+    }
 
     private func finish() {
         enumerator?.invalidate()

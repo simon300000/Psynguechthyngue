@@ -106,7 +106,7 @@ public final class FilesStore: @unchecked Sendable {
         if version != schemaVersion {
             try connection.transaction {
                 if version != 0 {
-                    for table in ["items", "tombstones", "meta", "journal", "requests", "folders", "materialized", "presence"] {
+                    for table in ["items", "tombstones", "meta", "journal", "requests", "folders", "materialized", "presence", "adopted"] {
                         try connection.execute("DROP TABLE IF EXISTS \(table)")
                     }
                 }
@@ -114,8 +114,18 @@ public final class FilesStore: @unchecked Sendable {
                 try connection.execute("PRAGMA user_version = \(schemaVersion)")
             }
         }
+        // Additive tables (no version bump: a bump rebuilds everything).
+        try connection.execute(additiveSQL)
         return connection
     }
+
+    /// `adopted`: content version a local write exposed to the system, kept
+    /// until the engine's hash for the file actually changes. `hash` empty =
+    /// adopt the next hash the engine reports for the row.
+    private static let additiveSQL = """
+        CREATE TABLE IF NOT EXISTS adopted(item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, hash BLOB NOT NULL);
+        INSERT OR IGNORE INTO meta(key, value) VALUES ('generation', 1 + abs(random() % 1000000000));
+        """
 
     private static let schemaSQL = """
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
@@ -286,6 +296,7 @@ public final class FilesStore: @unchecked Sendable {
     private static func deleteRow(_ ctx: WriteContext, folder: FolderID, id: String) throws {
         try ctx.db.run("DELETE FROM items WHERE item_id=?", [.text(id)])
         try ctx.db.run("DELETE FROM materialized WHERE item_id=?", [.text(id)])
+        try ctx.db.run("DELETE FROM adopted WHERE item_id=?", [.text(id)])
         try ctx.db.run(
             "INSERT OR REPLACE INTO tombstones(item_id, folder_id, change_anchor) VALUES (?,?,?)",
             [.text(id), .text(folder.rawValue), .int(ctx.nextAnchor())])
@@ -576,6 +587,12 @@ public final class FilesStore: @unchecked Sendable {
                     try ctx.db.run(
                         "UPDATE items SET pending_upload=0, change_anchor=? WHERE item_id=?",
                         [.int(ctx.nextAnchor()), .text(id)])
+                    // The system holds exactly these bytes under the local
+                    // content version; the engine's hash for them must not
+                    // look like a remote change (it evicted the saved file).
+                    try ctx.db.run(
+                        "INSERT OR REPLACE INTO adopted(item_id, folder_id, hash) VALUES (?,?,?)",
+                        [.text(id), .text(folder.rawValue), .blob(Data())])
                 }
             }
         }
@@ -606,6 +623,22 @@ public final class FilesStore: @unchecked Sendable {
             }
             let added = Set(ids.map(\.rawValue)).subtracting(previous)
             return try Self.reannounceChildren(ctx, of: added) > 0
+        }
+    }
+
+    /// Whether `path` is, or contains, a file that is not on this device (and
+    /// not a pending local write). In an on-demand folder such a file is
+    /// ignored locally, so deleting or moving it here never reaches the
+    /// other devices and the next projection brings it back.
+    public func hasRemoteOnlyFiles(_ folder: FolderID, at path: RelativePath) throws -> Bool {
+        try read { db in
+            let n = try db.scalarInt64(
+                """
+                SELECT COUNT(*) FROM (SELECT 1 FROM items WHERE folder_id=? AND is_dir=0 AND is_local=0 AND pending_upload=0
+                  AND (path=? OR (path>? AND path<?)) LIMIT 1)
+                """,
+                [.text(folder.rawValue), .text(path.rawValue), .text(path.rawValue + "/"), .text(path.rawValue + "0")])
+            return (n ?? 0) > 0
         }
     }
 
@@ -747,6 +780,12 @@ public final class FilesStore: @unchecked Sendable {
         try read { db in try db.scalarInt64("SELECT value FROM meta WHERE key='anchor'") ?? 0 }
     }
 
+    /// Random per database file: a rebuilt store (corruption, schema change)
+    /// gets new item identifiers, so anchors from the old one must expire.
+    public func generation() throws -> Int64 {
+        try read { db in try db.scalarInt64("SELECT value FROM meta WHERE key='generation'") ?? 0 }
+    }
+
     func minimumAnchor() throws -> Int64 {
         try read { db in try db.scalarInt64("SELECT value FROM meta WHERE key='min_anchor'") ?? 0 }
     }
@@ -777,6 +816,10 @@ extension FilesStore: FilesMetadataWriter {
         let readOnly = info?.isReadOnly ?? false
         return try write { ctx in
             let suppressed = try Self.suppressedPaths(ctx.db, folder: folder)
+            var adopted: [String: Data] = [:]
+            let a = try ctx.db.prepare("SELECT item_id, hash FROM adopted WHERE folder_id=?")
+            try a.bind([.text(folder.rawValue)])
+            while try a.step() == SQLITE_ROW { adopted[a.text(at: 0)] = a.data(at: 1) }
             var cache: [String: ItemIdentifier] = [:]
             for entry in entries {
                 let path = entry.name
@@ -794,7 +837,19 @@ extension FilesStore: FilesMetadataWriter {
                 if Self.isUnder(path, suppressed.removed) { continue }
 
                 let isDirectory = entry.type == .directory
-                let content = Self.contentVersion(for: entry)
+                var content = Self.contentVersion(for: entry)
+                if let row = existing, let hash = adopted[row.itemID.rawValue], !isDirectory {
+                    if hash.isEmpty && entry.localPresent {
+                        // First hash after our own upload: these are our bytes.
+                        try ctx.db.run("UPDATE adopted SET hash=? WHERE item_id=?", [.blob(content), .text(row.itemID.rawValue)])
+                        content = row.contentVersion
+                    } else if hash == content {
+                        content = row.contentVersion
+                    } else if !hash.isEmpty {
+                        // Changed elsewhere since: a real new version.
+                        try ctx.db.run("DELETE FROM adopted WHERE item_id=?", [.text(row.itemID.rawValue)])
+                    }
+                }
                 let metadata = Self.metadataVersion(version: entry.version, modified: entry.modified)
                 if var row = existing, row.isDirectory == isDirectory {
                     let size = isDirectory ? 0 : entry.size
@@ -834,7 +889,7 @@ extension FilesStore: FilesMetadataWriter {
 
     public func removeFolder(_ folder: FolderID) throws -> Int64 {
         try write { ctx in
-            for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders"] {
+            for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders", "adopted"] {
                 try ctx.db.run("DELETE FROM \(table) WHERE folder_id=?", [.text(folder.rawValue)])
             }
             return ctx.anchor
@@ -1063,8 +1118,13 @@ public struct FolderFilesReader: FilesMetadataReader {
         -> (updated: [FileItemRecord], deleted: [ItemIdentifier], newAnchor: Int64, more: Bool)
     {
         if anchor < (try store.minimumAnchor()) { throw FilesStoreError.anchorExpired }
+        // Ahead of this store: it was rebuilt under the system (legacy
+        // anchors carry no generation).
+        if anchor > (try store.currentAnchor()) { throw FilesStoreError.anchorExpired }
         let onDemand = try store.folderInfo(folder)?.contentMode == .onDemand
-        return try store.read { db in
+        // One snapshot (finding A7): the App process commits concurrently; an
+        // anchor read after the row query could cover rows it never saw.
+        return try store.read { db in try db.readTransaction {
             let filter = workingSetOnly ? "AND (\(Self.workingSetPredicate(onDemand: onDemand)))" : ""
             let s = try db.prepare(
                 """
@@ -1094,7 +1154,7 @@ public struct FolderFilesReader: FilesMetadataReader {
             let current = try db.scalarInt64("SELECT value FROM meta WHERE key='anchor'") ?? 0
             let newAnchor = more ? (rows.last?.2 ?? anchor) : max(current, anchor)
             return (updated, deleted, newAnchor, more)
-        }
+        } }
     }
 
     private static func workingSetPredicate(onDemand: Bool) -> String {
@@ -1108,6 +1168,7 @@ public struct FolderFilesReader: FilesMetadataReader {
     }
 
     public func currentAnchor() throws -> Int64 { try store.currentAnchor() }
+    public func generation() throws -> Int64 { try store.generation() }
 
     public func workingSet(after cursor: String?, limit: Int) throws -> (items: [FileItemRecord], next: String?) {
         let onDemand = try store.folderInfo(folder)?.contentMode == .onDemand
@@ -1125,6 +1186,23 @@ public struct FolderFilesReader: FilesMetadataReader {
                 items.append(FilesStore.record(from: s))
             }
             return (items, nil)
+        }
+    }
+}
+
+/// Sync anchors handed to the system: "<generation>:<anchor>". Plain
+/// "<anchor>" (before generations) is still accepted.
+public enum FilesAnchor {
+    public static func encode(generation: Int64, anchor: Int64) -> String { "\(generation):\(anchor)" }
+
+    public static func decode(_ text: String) -> (generation: Int64?, anchor: Int64)? {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        switch parts.count {
+        case 1: return Int64(parts[0]).map { (nil, $0) }
+        case 2:
+            guard let g = Int64(parts[0]), let a = Int64(parts[1]) else { return nil }
+            return (g, a)
+        default: return nil
         }
     }
 }
