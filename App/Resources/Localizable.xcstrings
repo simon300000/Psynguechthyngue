@@ -1,2478 +1,2481 @@
 {
-  "sourceLanguage": "en",
-  "strings": {
-    "%@ (%@)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ (%2$@)"
+  "sourceLanguage" : "en",
+  "strings" : {
+    "—" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
+          }
+        }
+      }
+    },
+    "“%@” was shared with you" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有人与你共享了“%@”"
+          }
+        }
+      }
+    },
+    "%@ (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@)"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ (%2$@)"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@)"
           }
         }
       }
     },
-    "%@ (+%lld)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ (+%2$lld)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@（另有 %2$lld 个）"
-          }
-        }
-      }
-    },
-    "%@ left · %lld items": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ left · %2$lld items"
+    "%@ (+%lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (+%2$lld)"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "剩余 %1$@ · %2$lld 项"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@（另有 %2$lld 个）"
           }
         }
       }
     },
-    "%@ wants to connect": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ 请求连接"
-          }
-        }
-      }
-    },
-    "%@ wants to connect.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ 请求连接。"
-          }
-        }
-      }
-    },
-    "%lld KB/s": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld KB/s"
-          }
-        }
-      }
-    },
-    "%lld devices added": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已添加 %lld 台设备"
-          }
-        }
-      }
-    },
-    "%lld folders": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 个文件夹"
-          }
-        }
-      }
-    },
-    "%lld of %lld devices connected": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld of %2$lld devices connected"
+    "%@ left · %lld items" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ left · %2$lld items"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已连接 %1$lld / %2$lld 台设备"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剩余 %1$@ · %2$lld 项"
           }
         }
       }
     },
-    "A device wants to share “%@” with you.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有设备想与你共享“%@”。"
+    "%@ wants to connect" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 请求连接"
           }
         }
       }
     },
-    "A file conflict needs your attention.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有文件冲突需要处理。"
+    "%@ wants to connect." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 请求连接。"
           }
         }
       }
     },
-    "A file could not be synced": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有文件无法同步"
+    "%lld devices added" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已添加 %lld 台设备"
           }
         }
       }
     },
-    "A folder I choose": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "我选择的文件夹"
+    "%lld folders" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件夹"
           }
         }
       }
     },
-    "A folder could not be synced. Open the app for details.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有文件夹无法同步，打开 App 查看详情。"
+    "%lld KB/s" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld KB/s"
           }
         }
       }
     },
-    "About": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "关于"
-          }
-        }
-      }
-    },
-    "Accept": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "接受"
-          }
-        }
-      }
-    },
-    "Accept Folder": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "接受文件夹"
-          }
-        }
-      }
-    },
-    "Accept…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "接受…"
-          }
-        }
-      }
-    },
-    "Add": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加"
-          }
-        }
-      }
-    },
-    "Add Device": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加设备"
-          }
-        }
-      }
-    },
-    "Add Device…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加设备…"
-          }
-        }
-      }
-    },
-    "Add a device": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加设备"
-          }
-        }
-      }
-    },
-    "Add a device first to share this folder.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请先添加设备，再共享此文件夹。"
-          }
-        }
-      }
-    },
-    "Add a device to start": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加一台设备即可开始"
-          }
-        }
-      }
-    },
-    "Add the computer or phone you want to sync with.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加要与之同步的电脑或手机。"
-          }
-        }
-      }
-    },
-    "Add the device you want to sync with. You can also add this device from the other one using the ID on the first page.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加要同步的设备。也可以在另一台设备上，用第一页显示的 ID 添加本机。"
-          }
-        }
-      }
-    },
-    "Address": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "地址"
-          }
-        }
-      }
-    },
-    "Advanced": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "高级"
-          }
-        }
-      }
-    },
-    "Advanced options are available while syncing is running.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步运行时才能修改高级选项。"
-          }
-        }
-      }
-    },
-    "All devices and folders are removed from this app. Files already on this device are kept.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "将从本 App 中移除所有设备和文件夹。本机上已有的文件会保留。"
-          }
-        }
-      }
-    },
-    "All files are downloaded and kept on this device.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "所有文件都会下载并保存在本机。"
-          }
-        }
-      }
-    },
-    "Allow camera access in Settings to scan QR codes, or paste the device ID instead.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请在“设置”中允许访问相机以扫描二维码，或直接粘贴设备 ID。"
-          }
-        }
-      }
-    },
-    "Back": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上一步"
-          }
-        }
-      }
-    },
-    "Background": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "后台"
-          }
-        }
-      }
-    },
-    "Background sync": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "后台同步"
-          }
-        }
-      }
-    },
-    "Camera access is off": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "相机访问已关闭"
-          }
-        }
-      }
-    },
-    "Cancel": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "取消"
-          }
-        }
-      }
-    },
-    "Cellular download limit": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "蜂窝网络下载限速"
-          }
-        }
-      }
-    },
-    "Cellular upload limit": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "蜂窝网络上传限速"
-          }
-        }
-      }
-    },
-    "Choose Another Folder…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选择其他文件夹…"
-          }
-        }
-      }
-    },
-    "Closing the last window quits Psynguechthyngue and stops the transfers in progress. Minimize the window to keep syncing.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "关闭最后一个窗口会退出 Psynguechthyngue，并停止正在进行的传输。最小化窗口可继续同步。"
-          }
-        }
-      }
-    },
-    "Closing the window stops syncing. Minimize it to keep syncing.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "关闭窗口会停止同步，最小化窗口可继续同步。"
-          }
-        }
-      }
-    },
-    "Conflicts": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "冲突"
-          }
-        }
-      }
-    },
-    "Connected": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已连接"
-          }
-        }
-      }
-    },
-    "Connected on local network": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已通过局域网连接"
-          }
-        }
-      }
-    },
-    "Connected over the internet": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已通过互联网连接"
-          }
-        }
-      }
-    },
-    "Connected via relay": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已通过中继连接"
-          }
-        }
-      }
-    },
-    "Connection": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "连接"
-          }
-        }
-      }
-    },
-    "Copied": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已复制"
-          }
-        }
-      }
-    },
-    "Copy": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "复制"
-          }
-        }
-      }
-    },
-    "Copy the ID from the other device’s Syncthing screen and paste it here.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从另一台设备的 Syncthing 界面复制 ID，粘贴到这里。"
-          }
-        }
-      }
-    },
-    "Could not talk to the sync engine.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法与同步引擎通信。"
-          }
-        }
-      }
-    },
-    "Create": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创建"
-          }
-        }
-      }
-    },
-    "Create a folder to share, or accept a folder another device offers. Invitations appear on the Sync tab.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建一个要共享的文件夹，或接受其他设备共享的文件夹。邀请会显示在“同步”页。"
-          }
-        }
-      }
-    },
-    "Create a folder to share, or accept one that another device offers.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建一个要共享的文件夹，或接受其他设备共享的文件夹。"
-          }
-        }
-      }
-    },
-    "Device ID": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设备 ID"
-          }
-        }
-      }
-    },
-    "Device name": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设备名称"
-          }
-        }
-      }
-    },
-    "Device removed": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设备已移除"
-          }
-        }
-      }
-    },
-    "Devices": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设备"
-          }
-        }
-      }
-    },
-    "Dismiss": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "关闭"
-          }
-        }
-      }
-    },
-    "Done": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "完成"
-          }
-        }
-      }
-    },
-    "Download": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下载"
-          }
-        }
-      }
-    },
-    "Error": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "出错"
-          }
-        }
-      }
-    },
-    "Everything": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "全部下载"
-          }
-        }
-      }
-    },
-    "Everything is up to date": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "全部已是最新"
-          }
-        }
-      }
-    },
-    "Export Diagnostics": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "导出诊断信息"
-          }
-        }
-      }
-    },
-    "FILES_ERROR_OPEN_APP": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No device is reachable. Open Psynguechthyngue to download this file."
+    "%lld of %lld devices connected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld of %2$lld devices connected"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有可连接的设备，请打开 Psynguechthyngue 下载此文件。"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接 %1$lld / %2$lld 台设备"
           }
         }
       }
     },
-    "FILES_ERROR_STALE": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This file has changed on other devices. Open Psynguechthyngue to sync."
+    "A device wants to share “%@” with you." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有设备想与你共享“%@”。"
+          }
+        }
+      }
+    },
+    "A file conflict needs your attention." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有文件冲突需要处理。"
+          }
+        }
+      }
+    },
+    "A file could not be synced" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有文件无法同步"
+          }
+        }
+      }
+    },
+    "A folder could not be synced. Open the app for details." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有文件夹无法同步，打开 App 查看详情。"
+          }
+        }
+      }
+    },
+    "A folder I choose" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我选择的文件夹"
+          }
+        }
+      }
+    },
+    "About" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于"
+          }
+        }
+      }
+    },
+    "Accept" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接受"
+          }
+        }
+      }
+    },
+    "Accept Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接受文件夹"
+          }
+        }
+      }
+    },
+    "Accept…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接受…"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
+        }
+      }
+    },
+    "Add a device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加设备"
+          }
+        }
+      }
+    },
+    "Add a device first to share this folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先添加设备，再共享此文件夹。"
+          }
+        }
+      }
+    },
+    "Add a device to start" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加一台设备即可开始"
+          }
+        }
+      }
+    },
+    "Add Device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加设备"
+          }
+        }
+      }
+    },
+    "Add Device…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加设备…"
+          }
+        }
+      }
+    },
+    "Add the computer or phone you want to sync with." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加要与之同步的电脑或手机。"
+          }
+        }
+      }
+    },
+    "Add the device you want to sync with. You can also add this device from the other one using the ID on the first page." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加要同步的设备。也可以在另一台设备上，用第一页显示的 ID 添加本机。"
+          }
+        }
+      }
+    },
+    "Address" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址"
+          }
+        }
+      }
+    },
+    "Advanced" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高级"
+          }
+        }
+      }
+    },
+    "Advanced options are available while syncing is running." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步运行时才能修改高级选项。"
+          }
+        }
+      }
+    },
+    "All devices and folders are removed from this app. Files already on this device are kept." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将从本 App 中移除所有设备和文件夹。本机上已有的文件会保留。"
+          }
+        }
+      }
+    },
+    "All files are downloaded and kept on this device." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有文件都会下载并保存在本机。"
+          }
+        }
+      }
+    },
+    "Allow camera access in Settings to scan QR codes, or paste the device ID instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在“设置”中允许访问相机以扫描二维码，或直接粘贴设备 ID。"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一步"
+          }
+        }
+      }
+    },
+    "Background" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台"
+          }
+        }
+      }
+    },
+    "Background sync" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台同步"
+          }
+        }
+      }
+    },
+    "Camera access is off" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相机访问已关闭"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "Cellular download limit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蜂窝网络下载限速"
+          }
+        }
+      }
+    },
+    "Cellular upload limit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蜂窝网络上传限速"
+          }
+        }
+      }
+    },
+    "Choose Another Folder…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择其他文件夹…"
+          }
+        }
+      }
+    },
+    "Closing the last window quits Psynguechthyngue and stops the transfers in progress. Minimize the window to keep syncing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭最后一个窗口会退出 Psynguechthyngue，并停止正在进行的传输。最小化窗口可继续同步。"
+          }
+        }
+      }
+    },
+    "Closing the window stops syncing. Minimize it to keep syncing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭窗口会停止同步，最小化窗口可继续同步。"
+          }
+        }
+      }
+    },
+    "Conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "冲突"
+          }
+        }
+      }
+    },
+    "Connected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接"
+          }
+        }
+      }
+    },
+    "Connected on local network" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过局域网连接"
+          }
+        }
+      }
+    },
+    "Connected over the internet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过互联网连接"
+          }
+        }
+      }
+    },
+    "Connected via relay" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过中继连接"
+          }
+        }
+      }
+    },
+    "Connection" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接"
+          }
+        }
+      }
+    },
+    "Copied" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制"
+          }
+        }
+      }
+    },
+    "Copy the ID from the other device’s Syncthing screen and paste it here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从另一台设备的 Syncthing 界面复制 ID，粘贴到这里。"
+          }
+        }
+      }
+    },
+    "Could not talk to the sync engine." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法与同步引擎通信。"
+          }
+        }
+      }
+    },
+    "Create" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建"
+          }
+        }
+      }
+    },
+    "Create a folder to share, or accept a folder another device offers. Invitations appear on the Sync tab." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建一个要共享的文件夹，或接受其他设备共享的文件夹。邀请会显示在“同步”页。"
+          }
+        }
+      }
+    },
+    "Create a folder to share, or accept one that another device offers." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建一个要共享的文件夹，或接受其他设备共享的文件夹。"
+          }
+        }
+      }
+    },
+    "default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "default"
+          }
+        }
+      }
+    },
+    "Device ID" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备 ID"
+          }
+        }
+      }
+    },
+    "Device name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备名称"
+          }
+        }
+      }
+    },
+    "Device removed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备已移除"
+          }
+        }
+      }
+    },
+    "Devices" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备"
+          }
+        }
+      }
+    },
+    "Dismiss" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成"
+          }
+        }
+      }
+    },
+    "Download" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载"
+          }
+        }
+      }
+    },
+    "Error" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "出错"
+          }
+        }
+      }
+    },
+    "Everything" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部下载"
+          }
+        }
+      }
+    },
+    "Everything is up to date" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部已是最新"
+          }
+        }
+      }
+    },
+    "Export Diagnostics" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出诊断信息"
+          }
+        }
+      }
+    },
+    "File" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件"
+          }
+        }
+      }
+    },
+    "File conflict" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件冲突"
+          }
+        }
+      }
+    },
+    "Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件"
+          }
+        }
+      }
+    },
+    "Files appear in the Files app and are downloaded when you open them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件会显示在“文件”App 中，打开时再下载。"
+          }
+        }
+      }
+    },
+    "Files are stored by this app and appear in the Files app under Psynguechthyngue." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件由本 App 保存，并显示在“文件”App 的 Psynguechthyngue 位置下。"
+          }
+        }
+      }
+    },
+    "Files are synced in place. Downloading on demand is not available for these folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件直接在原位置同步。这类文件夹不支持按需下载。"
+          }
+        }
+      }
+    },
+    "Files location" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件位置"
+          }
+        }
+      }
+    },
+    "Files location is turned off" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件位置未启用"
+          }
+        }
+      }
+    },
+    "Files that were already synced stay on this device. You can add the device again later." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已同步的文件会保留在本机。之后可以重新添加该设备。"
+          }
+        }
+      }
+    },
+    "FILES_ERROR_OPEN_APP" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No device is reachable. Open Psynguechthyngue to download this file."
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此文件已在其他设备上更改，请打开 Psynguechthyngue 同步。"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可连接的设备，请打开 Psynguechthyngue 下载此文件。"
           }
         }
       }
     },
-    "FILES_ERROR_TOO_LARGE": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This file is too large to download here. Open Psynguechthyngue to download it."
+    "FILES_ERROR_STALE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file has changed on other devices. Open Psynguechthyngue to sync."
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件太大，无法在此下载，请打开 Psynguechthyngue 下载。"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件已在其他设备上更改，请打开 Psynguechthyngue 同步。"
           }
         }
       }
     },
-    "File": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件"
+    "FILES_ERROR_TOO_LARGE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file is too large to download here. Open Psynguechthyngue to download it."
           }
-        }
-      }
-    },
-    "File conflict": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件冲突"
-          }
-        }
-      }
-    },
-    "Files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件"
-          }
-        }
-      }
-    },
-    "Files appear in the Files app and are downloaded when you open them.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件会显示在“文件”App 中，打开时再下载。"
-          }
-        }
-      }
-    },
-    "Files are stored by this app and appear in the Files app under Psynguechthyngue.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件由本 App 保存，并显示在“文件”App 的 Psynguechthyngue 位置下。"
-          }
-        }
-      }
-    },
-    "Files are synced in place. Downloading on demand is not available for these folders.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件直接在原位置同步。这类文件夹不支持按需下载。"
-          }
-        }
-      }
-    },
-    "Files location": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件位置"
-          }
-        }
-      }
-    },
-    "Files location is turned off": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件位置未启用"
-          }
-        }
-      }
-    },
-    "Files that were already synced stay on this device. You can add the device again later.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已同步的文件会保留在本机。之后可以重新添加该设备。"
-          }
-        }
-      }
-    },
-    "Find your files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "查找你的文件"
-          }
-        }
-      }
-    },
-    "Find your files in Finder": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在访达中查找文件"
-          }
-        }
-      }
-    },
-    "Folder": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件夹"
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件太大，无法在此下载，请打开 Psynguechthyngue 下载。"
           }
         }
       }
     },
-    "Folder ID": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件夹 ID"
+    "Find your files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找你的文件"
           }
         }
       }
     },
-    "Folder invitation": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件夹邀请"
+    "Find your files in Finder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中查找文件"
           }
         }
       }
     },
-    "Folder name": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件夹名称"
+    "Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
           }
         }
       }
     },
-    "Folder not found": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "找不到文件夹"
+    "Folder ID" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹 ID"
           }
         }
       }
     },
-    "Folder removed": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件夹已移除"
+    "Folder invitation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹邀请"
           }
         }
       }
     },
-    "Folders": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件夹"
+    "Folder name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹名称"
           }
         }
       }
     },
-    "Free up some storage on this device, then sync again.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请释放一些本机存储空间，然后再同步。"
+    "Folder not found" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到文件夹"
           }
         }
       }
     },
-    "From %@": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "来自 %@"
+    "Folder removed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹已移除"
           }
         }
       }
     },
-    "Get notified about new device requests, folder invitations and sync problems.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有新设备请求、文件夹邀请或同步问题时通知你。"
+    "Folders" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
           }
         }
       }
     },
-    "Global discovery": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "全局发现"
+    "Free up some storage on this device, then sync again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请释放一些本机存储空间，然后再同步。"
           }
         }
       }
     },
-    "Global discovery and relays help devices find each other over the internet. They share this device’s ID and IP address with the public Syncthing servers.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "全局发现和中继帮助设备通过互联网互相找到。它们会向 Syncthing 公共服务器提供本机的设备 ID 和 IP 地址。"
+    "From %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自 %@"
           }
         }
       }
     },
-    "Ignore": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "忽略"
+    "Get notified about new device requests, folder invitations and sync problems." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有新设备请求、文件夹邀请或同步问题时通知你。"
           }
         }
       }
     },
-    "Ignore Patterns": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "忽略规则"
+    "Global discovery" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局发现"
           }
         }
       }
     },
-    "Ignore patterns saved.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "忽略规则已保存。"
+    "Global discovery and relays help devices find each other over the internet. They share this device’s ID and IP address with the public Syncthing servers." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局发现和中继帮助设备通过互联网互相找到。它们会向 Syncthing 公共服务器提供本机的设备 ID 和 IP 地址。"
           }
         }
       }
     },
-    "In this app (shown in Files)": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存在本 App 中（显示在“文件”里）"
+    "iCloud Drive and other cloud folders can’t be synced in place. Choose a folder on this device." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud 云盘和其他云盘文件夹不能原位同步，请选择本机上的文件夹。"
           }
         }
       }
     },
-    "Keep Syncing in Background": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在后台继续同步"
+    "Ignore" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略"
           }
         }
       }
     },
-    "Keep folders in sync between this device and your other computers and phones — directly, without a cloud.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在本机与你的其他电脑和手机之间直接同步文件夹，无需云端。"
+    "Ignore Patterns" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略规则"
           }
         }
       }
     },
-    "Last background sync": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上次后台同步"
+    "Ignore patterns saved." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略规则已保存。"
           }
         }
       }
     },
-    "Last scan": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上次扫描"
+    "In this app (shown in Files)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存在本 App 中（显示在“文件”里）"
           }
         }
       }
     },
-    "Last seen": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上次在线"
+    "iOS can’t continue syncing in the background right now. Keep the app open to finish." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS 暂时无法在后台继续同步，请保持 App 打开直到完成。"
           }
         }
       }
     },
-    "Last seen %@": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上次在线：%@"
+    "iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台同步的时机由 iOS 决定，通常每天几次。App 打开期间会持续同步。"
           }
         }
       }
     },
-    "Licenses": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "许可证"
+    "Keep folders in sync between this device and your other computers and phones — directly, without a cloud." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在本机与你的其他电脑和手机之间直接同步文件夹，无需云端。"
           }
         }
       }
     },
-    "Listen addresses": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "监听地址"
+    "Keep Syncing in Background" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在后台继续同步"
           }
         }
       }
     },
-    "Location": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "位置"
+    "Last background sync" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次后台同步"
           }
         }
       }
     },
-    "Name": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "名称"
+    "Last scan" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次扫描"
           }
         }
       }
     },
-    "Needs your attention": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "待处理"
+    "Last seen" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次在线"
           }
         }
       }
     },
-    "Network": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "网络"
+    "Last seen %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次在线：%@"
           }
         }
       }
     },
-    "Never": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从未"
+    "Licenses" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许可证"
           }
         }
       }
     },
-    "New Folder": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建文件夹"
+    "Listen addresses" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "监听地址"
           }
         }
       }
     },
-    "New Folder…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建文件夹…"
+    "Location" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
           }
         }
       }
     },
-    "New device request": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新设备请求"
+    "Name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称"
           }
         }
       }
     },
-    "Next": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下一步"
+    "Needs your attention" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待处理"
           }
         }
       }
     },
-    "No devices yet": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有设备"
+    "Network" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络"
           }
         }
       }
     },
-    "No devices yet.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有设备。"
+    "Never" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从未"
           }
         }
       }
     },
-    "No folders are shared with this device.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有与此设备共享的文件夹。"
+    "New device request" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新设备请求"
           }
         }
       }
     },
-    "No folders yet": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有文件夹"
+    "New Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建文件夹"
           }
         }
       }
     },
-    "No network connection": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有网络连接"
+    "New Folder…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建文件夹…"
           }
         }
       }
     },
-    "No permission": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有权限"
+    "Next" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一步"
           }
         }
       }
     },
-    "Not enough storage": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "存储空间不足"
+    "No devices yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有设备"
           }
         }
       }
     },
-    "Not running": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未运行"
+    "No devices yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有设备。"
           }
         }
       }
     },
-    "Notifications": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通知"
+    "No folders are shared with this device." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有与此设备共享的文件夹。"
           }
         }
       }
     },
-    "Off": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未启用"
+    "No folders yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有文件夹"
           }
         }
       }
     },
-    "Offline": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "离线"
+    "No network connection" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有网络连接"
           }
         }
       }
     },
-    "On": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已启用"
+    "No permission" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有权限"
           }
         }
       }
     },
-    "On Mac this location is off at first. Open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue. Closing the window stops syncing; minimize it to keep syncing.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在 Mac 上，此位置默认未启用。请打开 系统设置 ▸ 通用 ▸ 登录项与扩展 ▸ 文件提供程序，启用 Psynguechthyngue。关闭窗口会停止同步，最小化窗口可继续同步。"
+    "Not enough storage" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储空间不足"
           }
         }
       }
     },
-    "On Mac, syncing continues while the window is open or minimized. Closing the window quits the app and stops syncing.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在 Mac 上，窗口打开或最小化时会持续同步。关闭窗口会退出 App 并停止同步。"
+    "Not running" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未运行"
           }
         }
       }
     },
-    "On demand": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "按需下载"
+    "Notifications" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知"
           }
         }
       }
     },
-    "On hold": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已暂停"
+    "Off" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未启用"
           }
         }
       }
     },
-    "On the other device, add this device using its ID or QR code.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在另一台设备上，用此 ID 或二维码添加本机。"
+    "Offline" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离线"
           }
         }
       }
     },
-    "One pattern per line, e.g. *.tmp or /Archive. Matching files are not synced. Lines starting with // are comments.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "每行一条规则，例如 *.tmp 或 /Archive。匹配的文件不会同步。以 // 开头的行是注释。"
+    "On" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已启用"
           }
         }
       }
     },
-    "Open Files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开“文件”"
+    "On demand" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按需下载"
           }
         }
       }
     },
-    "Open Psynguechthyngue and sync all folders.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开 Psynguechthyngue 并同步所有文件夹。"
+    "On hold" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
           }
         }
       }
     },
-    "Open in Files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在“文件”中打开"
+    "On Mac this location is off at first. Open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue. Closing the window stops syncing; minimize it to keep syncing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Mac 上，此位置默认未启用。请打开 系统设置 ▸ 通用 ▸ 登录项与扩展 ▸ 文件提供程序，启用 Psynguechthyngue。关闭窗口会停止同步，最小化窗口可继续同步。"
           }
         }
       }
     },
-    "Open the details for more information.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开详情查看更多信息。"
+    "On Mac, syncing continues while the window is open or minimized. Closing the window quits the app and stops syncing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Mac 上，窗口打开或最小化时会持续同步。关闭窗口会退出 App 并停止同步。"
           }
         }
       }
     },
-    "Optional": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可选"
+    "On the other device, add this device using its ID or QR code." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在另一台设备上，用此 ID 或二维码添加本机。"
           }
         }
       }
     },
-    "Other devices keep their copies.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "其他设备上的副本不受影响。"
+    "One pattern per line, e.g. *.tmp or /Archive. Matching files are not synced. Lines starting with // are comments." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每行一条规则，例如 *.tmp 或 /Archive。匹配的文件不会同步。以 // 开头的行是注释。"
           }
         }
       }
     },
-    "Other files keep syncing. Open the details to see which file is affected.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "其他文件会继续同步。打开详情查看受影响的文件。"
+    "Open Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“文件”"
           }
         }
       }
     },
-    "Pause": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂停"
+    "Open in Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“文件”中打开"
           }
         }
       }
     },
-    "Pause in Low Power Mode": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "低电量模式时暂停"
+    "Open Psynguechthyngue and sync all folders." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Psynguechthyngue 并同步所有文件夹。"
           }
         }
       }
     },
-    "Pause syncing with this device": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂停与此设备同步"
+    "Open the details for more information." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开详情查看更多信息。"
           }
         }
       }
     },
-    "Paused": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已暂停"
+    "Optional" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选"
           }
         }
       }
     },
-    "Paused by Low Data Mode": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "因低数据模式而暂停"
+    "Other devices keep their copies." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其他设备上的副本不受影响。"
           }
         }
       }
     },
-    "Paused by Low Power Mode": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "因低电量模式而暂停"
+    "Other files keep syncing. Open the details to see which file is affected." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其他文件会继续同步。打开详情查看受影响的文件。"
           }
         }
       }
     },
-    "Paused while the device cools down": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设备降温期间暂停"
+    "Pause" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停"
           }
         }
       }
     },
-    "Point the camera at the QR code on the other device": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "将相机对准另一台设备上的二维码"
+    "Pause in Low Power Mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低电量模式时暂停"
           }
         }
       }
     },
-    "Power": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "电源"
+    "Pause syncing with this device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停与此设备同步"
           }
         }
       }
     },
-    "Preparing this device’s ID…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在准备本机 ID…"
+    "Paused" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
           }
         }
       }
     },
-    "Problem": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "问题"
+    "Paused by Low Data Mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "因低数据模式而暂停"
           }
         }
       }
     },
-    "Problems": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "问题"
+    "Paused by Low Power Mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "因低电量模式而暂停"
           }
         }
       }
     },
-    "Psynguechthyngue keeps syncing until your transfers finish.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Psynguechthyngue 会继续同步，直到传输完成。"
+    "Paused while the device cools down" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备降温期间暂停"
           }
         }
       }
     },
-    "Psynguechthyngue uses Syncthing, which is licensed under the Mozilla Public License 2.0. The source code of the exact Syncthing release used is available at github.com/syncthing/syncthing.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Psynguechthyngue 使用 Syncthing，后者以 Mozilla Public License 2.0 授权。所用 Syncthing 版本的源代码可在 github.com/syncthing/syncthing 获取。"
+    "Point the camera at the QR code on the other device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将相机对准另一台设备上的二维码"
           }
         }
       }
     },
-    "QR Code Unavailable": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "二维码不可用"
+    "Power" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电源"
           }
         }
       }
     },
-    "QR code": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "二维码"
+    "Preparing this device’s ID…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在准备本机 ID…"
           }
         }
       }
     },
-    "Receive Only": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仅接收"
+    "Problem" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问题"
           }
         }
       }
     },
-    "Recent problems": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近的问题"
+    "Problems" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问题"
           }
         }
       }
     },
-    "Relays": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "中继"
+    "Psynguechthyngue keeps syncing until your transfers finish." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Psynguechthyngue 会继续同步，直到传输完成。"
           }
         }
       }
     },
-    "Remove": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除"
+    "Psynguechthyngue uses Syncthing, which is licensed under the Mozilla Public License 2.0. The source code of the exact Syncthing release used is available at github.com/syncthing/syncthing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Psynguechthyngue 使用 Syncthing，后者以 Mozilla Public License 2.0 授权。所用 Syncthing 版本的源代码可在 github.com/syncthing/syncthing 获取。"
           }
         }
       }
     },
-    "Remove Device": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除设备"
+    "QR code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "二维码"
           }
         }
       }
     },
-    "Remove Folder": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除文件夹"
+    "QR Code Unavailable" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "二维码不可用"
           }
         }
       }
     },
-    "Remove this device?": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除此设备？"
+    "Receive Only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅接收"
           }
         }
       }
     },
-    "Remove this folder?": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除此文件夹？"
+    "Recent problems" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近的问题"
           }
         }
       }
     },
-    "Rescan Now": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "立即重新扫描"
+    "Relays" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中继"
           }
         }
       }
     },
-    "Reset": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重置"
+    "Remove" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除"
           }
         }
       }
     },
-    "Reset Devices and Folders": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重置设备和文件夹"
+    "Remove Device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除设备"
           }
         }
       }
     },
-    "Reset devices and folders?": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重置设备和文件夹？"
+    "Remove Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除文件夹"
           }
         }
       }
     },
-    "Respect Low Data Mode": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "遵守低数据模式"
+    "Remove this device?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除此设备？"
           }
         }
       }
     },
-    "Save": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存"
+    "Remove this folder?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除此文件夹？"
           }
         }
       }
     },
-    "Scan QR Code": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "扫描二维码"
+    "Rescan Now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即重新扫描"
           }
         }
       }
     },
-    "Scan started.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已开始扫描。"
+    "Reset" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置"
           }
         }
       }
     },
-    "Scan the QR code shown on the other device, or paste its ID.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "扫描另一台设备上显示的二维码，或粘贴其 ID。"
+    "Reset Devices and Folders" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置设备和文件夹"
           }
         }
       }
     },
-    "Scan this code with another device.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "用另一台设备扫描此二维码。"
+    "Reset devices and folders?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置设备和文件夹？"
           }
         }
       }
     },
-    "Scanning": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在扫描"
+    "Respect Low Data Mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "遵守低数据模式"
           }
         }
       }
     },
-    "Send & Receive": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "发送和接收"
+    "Save" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
           }
         }
       }
     },
-    "Send Only": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仅发送"
+    "Scan QR Code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扫描二维码"
           }
         }
       }
     },
-    "Separate several addresses with commas, e.g. tcp://:22000. “default” lets Syncthing choose.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多个地址用英文逗号分隔，例如 tcp://:22000。“default”表示由 Syncthing 自动选择。"
+    "Scan started." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已开始扫描。"
           }
         }
       }
     },
-    "Settings": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设置"
+    "Scan the QR code shown on the other device, or paste its ID." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扫描另一台设备上显示的二维码，或粘贴其 ID。"
           }
         }
       }
     },
-    "Share": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "分享"
+    "Scan this code with another device." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用另一台设备扫描此二维码。"
           }
         }
       }
     },
-    "Share a folder": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共享文件夹"
+    "Scanning" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在扫描"
           }
         }
       }
     },
-    "Share with": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共享给"
+    "Send & Receive" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送和接收"
           }
         }
       }
     },
-    "Shared by %@": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "由 %@ 共享"
+    "Send Only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅发送"
           }
         }
       }
     },
-    "Shared folders": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共享的文件夹"
+    "Separate several addresses with commas, e.g. tcp://:22000. “default” lets Syncthing choose." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "多个地址用英文逗号分隔，例如 tcp://:22000。“default”表示由 Syncthing 自动选择。"
           }
         }
       }
     },
-    "Shared with": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共享给"
+    "Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
           }
         }
       }
     },
-    "Size": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "大小"
+    "Share" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享"
           }
         }
       }
     },
-    "Skip": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跳过"
+    "Share a folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享文件夹"
           }
         }
       }
     },
-    "Some folders have problems": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "部分文件夹有问题"
+    "Share with" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享给"
           }
         }
       }
     },
-    "Starting…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在启动…"
+    "Shared by %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由 %@ 共享"
           }
         }
       }
     },
-    "Status": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "状态"
+    "Shared folders" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享的文件夹"
           }
         }
       }
     },
-    "Stop Syncing and Delete Files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "停止同步并删除文件"
+    "Shared with" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享给"
           }
         }
       }
     },
-    "Stop Syncing, Keep Files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "停止同步，保留文件"
+    "Size" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
           }
         }
       }
     },
-    "Stop syncing?": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "停止同步？"
+    "Skip" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过"
           }
         }
       }
     },
-    "Sync": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步"
+    "Some folders have problems" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分文件夹有问题"
           }
         }
       }
     },
-    "Sync Now": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "立即同步"
+    "Starting…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在启动…"
           }
         }
       }
     },
-    "Sync engine problem": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎出现问题"
+    "Status" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态"
           }
         }
       }
     },
-    "Sync engine stopped": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎已停止"
+    "Stop Syncing and Delete Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止同步并删除文件"
           }
         }
       }
     },
-    "Sync is on hold": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步已暂停"
+    "Stop Syncing, Keep Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止同步，保留文件"
           }
         }
       }
     },
-    "Sync now": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "立即同步"
+    "Stop syncing?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止同步？"
           }
         }
       }
     },
-    "Sync over cellular": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用蜂窝网络同步"
+    "Sync" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步"
           }
         }
       }
     },
-    "Sync problem": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步问题"
+    "Sync engine problem" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步引擎出现问题"
           }
         }
       }
     },
-    "Syncing": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在同步"
+    "Sync engine stopped" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步引擎已停止"
           }
         }
       }
     },
-    "Syncing continues in the background": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步将在后台继续"
+    "Sync is on hold" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步已暂停"
           }
         }
       }
     },
-    "Syncing files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在同步文件"
+    "Sync now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即同步"
           }
         }
       }
     },
-    "Syncing is busy in another part of the app. Please try again in a moment.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步正忙，请稍后再试。"
+    "Sync Now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即同步"
           }
         }
       }
     },
-    "Syncing is paused": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步已暂停"
+    "Sync over cellular" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用蜂窝网络同步"
           }
         }
       }
     },
-    "Syncing is paused while the app is in the background. Open the app and try again.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App 在后台时同步会暂停。请打开 App 后重试。"
+    "Sync problem" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步问题"
           }
         }
       }
     },
-    "Syncing more slowly while the system saves resources": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "系统正在节省资源，同步会放慢"
+    "Syncing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步"
           }
         }
       }
     },
-    "Syncing will continue after you leave the app.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "离开 App 后同步会继续。"
+    "Syncing continues in the background" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步将在后台继续"
           }
         }
       }
     },
-    "Syncing…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在同步…"
+    "Syncing files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步文件"
           }
         }
       }
     },
-    "Syncthing": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Syncthing"
+    "Syncing is busy in another part of the app. Please try again in a moment." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步正忙，请稍后再试。"
           }
         }
       }
     },
-    "Technical details": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "技术详情"
+    "Syncing is paused" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步已暂停"
           }
         }
       }
     },
-    "That folder could not be opened.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法打开该文件夹。"
+    "Syncing is paused while the app is in the background. Open the app and try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App 在后台时同步会暂停。请打开 App 后重试。"
           }
         }
       }
     },
-    "That value is not valid.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "该值无效。"
+    "Syncing more slowly while the system saves resources" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统正在节省资源，同步会放慢"
           }
         }
       }
     },
-    "The app is not allowed to change files in this folder.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App 无权修改此文件夹中的文件。"
+    "Syncing will continue after you leave the app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离开 App 后同步会继续。"
           }
         }
       }
     },
-    "The folder’s location is no longer available. Reconnect the drive or choose another location.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件夹所在位置已不可用。请重新连接磁盘或选择其他位置。"
+    "Syncing…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步…"
           }
         }
       }
     },
-    "The same file was changed on two devices. Both versions were kept; open the folder in Files to choose which one to keep.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同一个文件在两台设备上都被修改了。两个版本都已保留，请在“文件”中打开文件夹，选择要保留的版本。"
+    "Syncthing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Syncthing"
           }
         }
       }
     },
-    "The sync engine could not open its network port.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎无法打开网络端口。"
+    "Technical details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "技术详情"
           }
         }
       }
     },
-    "The sync engine rejected the request.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎拒绝了该请求。"
+    "That folder could not be opened." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开该文件夹。"
           }
         }
       }
     },
-    "The sync engine reported a problem.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎报告了一个问题。"
+    "That value is not valid." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该值无效。"
           }
         }
       }
     },
-    "The sync engine took too long to stop. It will restart when you return to the app.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步引擎停止超时，回到 App 时会自动重新启动。"
+    "The app is not allowed to change files in this folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App 无权修改此文件夹中的文件。"
           }
         }
       }
     },
-    "This device": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本机"
+    "The folder’s location is no longer available. Reconnect the drive or choose another location." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹所在位置已不可用。请重新连接磁盘或选择其他位置。"
           }
         }
       }
     },
-    "This device has already been added.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此设备已经添加过了。"
+    "The same file was changed on two devices. Both versions were kept; open the folder in Files to choose which one to keep." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一个文件在两台设备上都被修改了。两个版本都已保留，请在“文件”中打开文件夹，选择要保留的版本。"
           }
         }
       }
     },
-    "This is not a valid device ID.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这不是有效的设备 ID。"
+    "The sync engine could not open its network port." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步引擎无法打开网络端口。"
           }
         }
       }
     },
-    "This is the ID of this device. Enter the ID of the other device.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这是本机的 ID，请输入另一台设备的 ID。"
+    "The sync engine rejected the request." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步引擎拒绝了该请求。"
           }
         }
       }
     },
-    "To see your synced folders in Files, open the Files app, tap ••• ▸ Edit, and turn on Psynguechthyngue.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "要在“文件”中查看同步的文件夹，请打开“文件”App，轻点 ••• ▸ 编辑，然后启用 Psynguechthyngue。"
+    "The sync engine reported a problem." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步引擎报告了一个问题。"
           }
         }
       }
     },
-    "To see your synced folders in Finder, open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "要在访达中查看同步的文件夹，请打开 系统设置 ▸ 通用 ▸ 登录项与扩展 ▸ 文件提供程序，然后启用 Psynguechthyngue。"
+    "The sync engine took too long to stop. It will restart when you return to the app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步引擎停止超时，回到 App 时会自动重新启动。"
           }
         }
       }
     },
-    "Transfers": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在传输"
+    "This device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机"
           }
         }
       }
     },
-    "Try closing and reopening the app.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请尝试关闭后重新打开 App。"
+    "This device has already been added." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备已经添加过了。"
           }
         }
       }
     },
-    "Type": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "类型"
+    "This is not a valid device ID." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是有效的设备 ID。"
           }
         }
       }
     },
-    "Unlimited": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "不限速"
+    "This is the ID of this device. Enter the ID of the other device." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这是本机的 ID，请输入另一台设备的 ID。"
           }
         }
       }
     },
-    "Up to date": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已是最新"
+    "To see your synced folders in Files, open the Files app, tap ••• ▸ Edit, and turn on Psynguechthyngue." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要在“文件”中查看同步的文件夹，请打开“文件”App，轻点 ••• ▸ 编辑，然后启用 Psynguechthyngue。"
           }
         }
       }
     },
-    "Valid device ID (%@…)": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有效的设备 ID（%@…）"
+    "To see your synced folders in Finder, open System Settings ▸ General ▸ Login Items & Extensions ▸ File Providers and turn on Psynguechthyngue." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要在访达中查看同步的文件夹，请打开 系统设置 ▸ 通用 ▸ 登录项与扩展 ▸ 文件提供程序，然后启用 Psynguechthyngue。"
           }
         }
       }
     },
-    "Version": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "版本"
+    "Transfers" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在传输"
           }
         }
       }
     },
-    "Waiting for Wi-Fi (cellular sync is off)": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "等待 Wi-Fi（已关闭蜂窝网络同步）"
+    "Try closing and reopening the app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请尝试关闭后重新打开 App。"
           }
         }
       }
     },
-    "Waiting for devices": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "等待设备"
+    "Type" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "类型"
           }
         }
       }
     },
-    "Welcome": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "欢迎"
+    "Unlimited" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不限速"
           }
         }
       }
     },
-    "Where to keep the files": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件保存位置"
+    "Up to date" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已是最新"
           }
         }
       }
     },
-    "Your synced folders appear in the Files app under Locations → Psynguechthyngue. If you don’t see it, tap ••• in Files, choose Edit, and turn it on.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步的文件夹会出现在“文件”App 的“位置 → Psynguechthyngue”中。如果看不到，请在“文件”中轻点 •••，选择“编辑”并打开它。"
+    "Valid device ID (%@…)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有效的设备 ID（%@…）"
           }
         }
       }
     },
-    "default": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "default"
+    "Version" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本"
           }
         }
       }
     },
-    "iCloud Drive and other cloud folders can’t be synced in place. Choose a folder on this device.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iCloud 云盘和其他云盘文件夹不能原位同步，请选择本机上的文件夹。"
+    "Waiting for devices" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待设备"
           }
         }
       }
     },
-    "iOS can’t continue syncing in the background right now. Keep the app open to finish.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iOS 暂时无法在后台继续同步，请保持 App 打开直到完成。"
+    "Waiting for Wi-Fi (cellular sync is off)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待 Wi-Fi（已关闭蜂窝网络同步）"
           }
         }
       }
     },
-    "iOS decides when background syncing runs, usually a few times a day. Syncing is continuous while the app is open.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "后台同步的时机由 iOS 决定，通常每天几次。App 打开期间会持续同步。"
+    "Welcome" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "欢迎"
           }
         }
       }
     },
-    "—": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "—"
+    "Where to keep the files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件保存位置"
           }
         }
       }
     },
-    "“%@” was shared with you": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有人与你共享了“%@”"
+    "Your synced folders appear in the Files app under Locations → Psynguechthyngue. If you don’t see it, tap ••• in Files, choose Edit, and turn it on." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步的文件夹会出现在“文件”App 的“位置 → Psynguechthyngue”中。如果看不到，请在“文件”中轻点 •••，选择“编辑”并打开它。"
           }
         }
       }
     }
   },
-  "version": "1.0"
+  "version" : "1.0"
 }

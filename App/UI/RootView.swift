@@ -35,7 +35,7 @@ struct RootView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         // The Sync tab already shows transfers; show the accessory elsewhere.
-        .modifier(SyncAccessoryModifier(enabled: !model.syncingFolders.isEmpty && selection != .home))
+        .modifier(SyncAccessoryModifier(enabled: !model.syncingFolders.isEmpty && selection != .home, model: model))
         .overlay(alignment: .top) { BannerView() }
         .animation(.smooth, value: model.banner)
         .overlay(alignment: .bottomLeading) {
@@ -47,7 +47,11 @@ struct RootView: View {
                     .allowsHitTesting(false)
             }
         }
-        .fullScreenCover(isPresented: onboardingBinding) { OnboardingView() }
+        // Presented content on Mac (Designed for iPad) is hosted outside this view's
+        // environment, so pass the observable models explicitly.
+        .fullScreenCover(isPresented: onboardingBinding) {
+            OnboardingView().environment(model).environment(settings)
+        }
         .onChange(of: model.pendingCommand) { _, command in
             switch command {
             case .syncNow:
@@ -75,10 +79,11 @@ struct RootView: View {
 /// on 26.0 progress is still shown on the Sync tab.
 private struct SyncAccessoryModifier: ViewModifier {
     let enabled: Bool
+    let model: AppModel
 
     func body(content: Content) -> some View {
         if #available(iOS 26.1, *) {
-            content.tabViewBottomAccessory(isEnabled: enabled) { SyncProgressAccessory() }
+            content.tabViewBottomAccessory(isEnabled: enabled) { SyncProgressAccessory().environment(model) }
         } else {
             content
         }
