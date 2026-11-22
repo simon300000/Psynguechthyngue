@@ -37,7 +37,7 @@ enum ErrorMapping {
 
     static func openAppMessage(_ reason: FilesContentError.OpenAppReason) -> String {
         switch reason {
-        case .tooLarge:
+        case .tooLarge, .lowMemory:
             return String(localized: "FILES_ERROR_TOO_LARGE", defaultValue: "This file is too large to download here. Open Psynguechthyngue to download it.")
         case .staleIndex:
             return String(localized: "FILES_ERROR_STALE", defaultValue: "This file has changed on other devices. Open Psynguechthyngue to sync.")

@@ -16,6 +16,8 @@ public enum FilesContentError: Error, Hashable, Sendable {
         case unavailable
         /// App engine owns the lock but did not take the request.
         case appBusy
+        /// Too little jetsam headroom left to start the restricted core.
+        case lowMemory
     }
 
     case noSuchItem
@@ -46,6 +48,9 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         /// blocking thread — e.g. return Go memory to the OS so the
         /// extension's phys_footprint drops back between fetches.
         public var afterFetch: (@Sendable () -> Void)?
+        /// Current jetsam headroom in bytes (`os_proc_available_memory()` in
+        /// the extension); fits GOMEMLIMIT per fetch. nil / 0 = unknown.
+        public var availableMemory: (@Sendable () -> UInt64)?
         public init() {}
     }
 
@@ -250,7 +255,12 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         try FileManager.default.createDirectory(at: layout.staging, withIntermediateDirectories: true)
         let staged = layout.staging.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: staged) }
-        let budget = configuration.fetchBudget
+        let available = configuration.availableMemory?() ?? 0
+        guard let budget = configuration.fetchBudget.fitted(availableBytes: available) else {
+            log.error("restricted fetch refused: available \(available >> 20, privacy: .public) MiB")
+            throw FilesContentError.openAppRequired(.lowMemory)
+        }
+        log.info("restricted fetch GOMEMLIMIT \(budget.memory.limitMiB, privacy: .public) MiB (available \(available >> 20, privacy: .public) MiB)")
         let folder = self.folder
         let home = layout.engineHost
         let result: RestrictedFetchResult

@@ -178,6 +178,28 @@ public struct RestrictedFetchBudget: Hashable, Sendable {
         maxFileBytes: 2 << 30,
         memory: .restrictedFetch
     )
+
+    /// Headroom kept free for Swift/ObjC allocations next to the Go heap.
+    public static let memoryReserveMiB: Int64 = 4
+    /// Below this GOMEMLIMIT the core cannot start (≈ runtime + one block
+    /// window); the fetch is refused with "open the App".
+    public static let memoryFloorMiB: Int64 = 6
+
+    /// Fits GOMEMLIMIT to the extension's current jetsam headroom
+    /// (`os_proc_available_memory()`): `min(memory.limitMiB, available − reserve)`.
+    /// The device limit is ≈ 20 MiB (iPhone 13 Pro, iPad Pro 4th gen), far
+    /// below the static 40 MiB ceiling. Returns nil when the result would be
+    /// below `memoryFloorMiB`. `availableBytes == 0` means "unknown"
+    /// (simulator, macOS) and keeps the static profile.
+    public func fitted(availableBytes: UInt64) -> RestrictedFetchBudget? {
+        guard availableBytes > 0 else { return self }
+        let availableMiB = Int64(clamping: availableBytes >> 20)
+        let limit = min(memory.limitMiB, availableMiB - Self.memoryReserveMiB)
+        guard limit >= Self.memoryFloorMiB else { return nil }
+        var budget = self
+        budget.memory.limitMiB = limit
+        return budget
+    }
 }
 
 public struct RestrictedFetchResult: Hashable, Sendable {
