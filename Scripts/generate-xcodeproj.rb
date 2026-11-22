@@ -102,8 +102,11 @@ provider_group.new_file("PsyFileProvider.entitlements")
 
 # --- Resources ---
 app_resources = app_group.children.find { |c| c.display_name == "Resources" } || app_group.new_group("Resources", "Resources")
-%w[Assets.xcassets PrivacyInfo.xcprivacy Localizable.xcstrings InfoPlist.xcstrings].each do |name|
-  app.resources_build_phase.add_file_reference(app_resources.new_file(name))
+%w[Assets.xcassets AppIcon.icon PrivacyInfo.xcprivacy Localizable.xcstrings InfoPlist.xcstrings].each do |name|
+  ref = app_resources.new_file(name)
+  # Icon Composer bundle: without the type Xcode copies it as a plain folder.
+  ref.last_known_file_type = "folder.iconcomposer.icon" if name.end_with?(".icon")
+  app.resources_build_phase.add_file_reference(ref)
 end
 legal_group = main.new_group("Legal", "")
 %w[LICENSE NOTICE THIRD_PARTY_NOTICES.md].each do |path|
