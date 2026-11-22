@@ -170,6 +170,22 @@ func applyEngineConfig(c *config.Configuration, myID protocol.DeviceID, apiAddr,
 	for i := range c.Folders {
 		applyFolderPolicy(&c.Folders[i])
 	}
+	// One connection per peer. Upstream v2 defaults numConnections to 3
+	// (0 = "default"); the device that wants more opens extra connections,
+	// and on a phone whose network and suspension keep dropping them the
+	// primary connection keeps changing, which makes upstream abandon and
+	// restart the index exchange ("Abandoning old index handler in favour of
+	// new connection"). 1 is a supported value: both sides then negotiate a
+	// single connection (connections.desiredConnectionsToDevice). Explicit
+	// non-default values are left alone.
+	if c.Defaults.Device.RawNumConnections == 0 {
+		c.Defaults.Device.RawNumConnections = 1
+	}
+	for i := range c.Devices {
+		if c.Devices[i].RawNumConnections == 0 {
+			c.Devices[i].RawNumConnections = 1
+		}
+	}
 
 	if firstStart && deviceName != "" {
 		for i := range c.Devices {
