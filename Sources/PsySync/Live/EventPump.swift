@@ -136,10 +136,16 @@ final class EventPump: Sendable {
     /// - Parameters:
     ///   - onUnreachable: called once after `failureThreshold` consecutive
     ///     transport failures (engine likely exited).
+    ///   - batchInterval: after a poll that returned events, wait this long
+    ///     before the next one. Upstream answers a long-poll as soon as any
+    ///     event exists, so during a big sync (~100 ItemStarted/ItemFinished
+    ///     a second) the pump made ~100 requests a second; waiting lets
+    ///     upstream batch them (its buffer holds far more than one interval).
     init(
         client: SyncthingRESTClient,
         pollTimeout: Int = 50,
         failureThreshold: Int = 6,
+        batchInterval: Duration = .milliseconds(250),
         handle: @escaping @Sendable ([EventAction]) async -> Void,
         onUnreachable: @escaping @Sendable (EngineError) async -> Void
     ) {
@@ -158,6 +164,9 @@ final class EventPump: Sendable {
                         PerfCounters.hit("upstream \(e.type)")
                         let actions = EventTranslator.translate(e)
                         if !actions.isEmpty { await handle(actions) }
+                    }
+                    if !events.isEmpty, batchInterval > .zero {
+                        try await Task.sleep(for: batchInterval)
                     }
                 } catch is CancellationError {
                     return

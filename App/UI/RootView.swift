@@ -36,7 +36,9 @@ struct RootView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         // The Sync tab already shows transfers; show the accessory elsewhere.
-        .modifier(SyncAccessoryModifier(enabled: !model.syncingFolders.isEmpty && selection != .home, model: model))
+        // Reads of per-event state (statuses, transfers) live in the modifier,
+        // so a progress tick re-evaluates it, not this body and the TabView.
+        .modifier(SyncAccessoryModifier(onHome: selection == .home, model: model))
         .overlay(alignment: .top) { BannerView() }
         .animation(.smooth, value: model.banner)
         .overlay(alignment: .bottomLeading) {
@@ -63,9 +65,6 @@ struct RootView: View {
             case nil: break
             }
         }
-        .onChange(of: model.hasActiveTransfers, initial: true) { _, active in
-            ClosureConfirmation.update(transfersActive: active, isOnMac: model.isOnMac)
-        }
     }
 
     private var onboardingBinding: Binding<Bool> {
@@ -79,14 +78,20 @@ struct RootView: View {
 /// The dynamic bottom accessory needs iOS 26.1 (deployment target is 26.0);
 /// on 26.0 progress is still shown on the Sync tab.
 private struct SyncAccessoryModifier: ViewModifier {
-    let enabled: Bool
+    let onHome: Bool
     let model: AppModel
 
     func body(content: Content) -> some View {
-        if #available(iOS 26.1, *) {
-            content.tabViewBottomAccessory(isEnabled: enabled) { SyncProgressAccessory().environment(model) }
-        } else {
-            content
+        let enabled = !onHome && !model.syncingFolders.isEmpty
+        Group {
+            if #available(iOS 26.1, *) {
+                content.tabViewBottomAccessory(isEnabled: enabled) { SyncProgressAccessory().environment(model) }
+            } else {
+                content
+            }
+        }
+        .onChange(of: model.hasActiveTransfers, initial: true) { _, active in
+            ClosureConfirmation.update(transfersActive: active, isOnMac: model.isOnMac)
         }
     }
 }

@@ -6,9 +6,6 @@ struct HomeView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var acceptingFolder: PendingFolder?
     @State private var detailIssue: SyncIssue?
-    /// Per-file progress is collapsed by default: during a big sync the list
-    /// changes several times a second and made the whole page jump.
-    @State private var showFileTransfers = false
     @Namespace private var glass
 
     var body: some View {
@@ -64,7 +61,9 @@ struct HomeView: View {
                 .glassCard(tint: .orange)
         }
         if model.pendingCount > 0 { inbox }
-        if !model.syncingFolders.isEmpty || !model.transfers.isEmpty { transfers }
+        if !model.syncingFolders.isEmpty || model.hasFileTransfers {
+            TransfersCard(glass: glass)
+        }
         if !model.allIssues.isEmpty { problems }
     }
 
@@ -114,7 +113,52 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Transfers
+    // MARK: Problems
+
+    private var problems: some View {
+        VStack(spacing: 10) {
+            CardHeader(title: "Recent problems", systemImage: "exclamationmark.triangle")
+            VStack(spacing: 0) {
+                ForEach(Array(model.allIssues.enumerated()), id: \.element.id) { index, issue in
+                    if index > 0 { Divider().padding(.leading, 52) }
+                    Button { detailIssue = issue } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: issue.kind == .conflict ? "doc.on.doc.fill" : "exclamationmark.triangle.fill")
+                                .font(.title3)
+                                .foregroundStyle(issue.kind == .conflict ? .orange : .red)
+                                .frame(width: 26)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(issue.kind.title).foregroundStyle(.primary)
+                                if let folder = issue.folderID, let f = model.folders.first(where: { $0.id == folder }) {
+                                    Text(f.label).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("issue.\(issue.id)")
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 6)
+            .glassCard()
+            .glassEffectID("problems", in: glass)
+        }
+    }
+}
+
+/// Home ▸ Transfers: syncing folders and per-file progress. Its own view so
+/// progress ticks re-evaluate this card only, not the whole Home page.
+struct TransfersCard: View {
+    @Environment(AppModel.self) private var model
+    /// Per-file progress is collapsed by default: during a big sync the list
+    /// changes several times a second and made the whole page jump.
+    @State private var showFileTransfers = false
+    let glass: Namespace.ID
 
     /// Collapsed: one fixed-height row with the count. Expanded: at most
     /// `maxFileRows` files in a stable (path) order, so rows do not reshuffle.
@@ -156,7 +200,8 @@ struct HomeView: View {
         }
     }
 
-    private var transfers: some View {
+    var body: some View {
+        let _ = perfProbe("TransfersCard")
         VStack(spacing: 10) {
             CardHeader(title: "Transfers", systemImage: "arrow.up.arrow.down")
             VStack(alignment: .leading, spacing: 16) {
@@ -181,7 +226,7 @@ struct HomeView: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("transfer.\(folder.id.rawValue)")
                 }
-                if !model.transfers.isEmpty {
+                if model.hasFileTransfers {
                     fileTransfers
                 }
                 if model.isContinuingInBackground {
@@ -204,43 +249,6 @@ struct HomeView: View {
             .padding(18)
             .glassCard()
             .glassEffectID("transfers", in: glass)
-        }
-    }
-
-    // MARK: Problems
-
-    private var problems: some View {
-        VStack(spacing: 10) {
-            CardHeader(title: "Recent problems", systemImage: "exclamationmark.triangle")
-            VStack(spacing: 0) {
-                ForEach(Array(model.allIssues.enumerated()), id: \.element.id) { index, issue in
-                    if index > 0 { Divider().padding(.leading, 52) }
-                    Button { detailIssue = issue } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: issue.kind == .conflict ? "doc.on.doc.fill" : "exclamationmark.triangle.fill")
-                                .font(.title3)
-                                .foregroundStyle(issue.kind == .conflict ? .orange : .red)
-                                .frame(width: 26)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(issue.kind.title).foregroundStyle(.primary)
-                                if let folder = issue.folderID, let f = model.folders.first(where: { $0.id == folder }) {
-                                    Text(f.label).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-                        }
-                        .padding(.vertical, 12)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("issue.\(issue.id)")
-                }
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 6)
-            .glassCard()
-            .glassEffectID("problems", in: glass)
         }
     }
 }
