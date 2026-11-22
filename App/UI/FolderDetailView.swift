@@ -25,6 +25,7 @@ struct FolderDetailView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     LabeledContent("Size") { Text(Format.bytes(status.progress.globalBytes)) }
+                    StorageRow(progress: status.progress, onDemand: folder.contentMode == .onDemand)
                     if let scan = status.lastScan {
                         LabeledContent("Last scan") { Text(Format.relative(scan)) }
                     }
@@ -182,5 +183,31 @@ struct IgnoreRulesEditor: View {
             original = text
             loaded = true
         }
+    }
+}
+
+/// Space this folder uses on the device. In on-demand mode it doubles as the
+/// "how much has been downloaded so far" gauge (local vs. global bytes; files
+/// that are not downloaded are ignored locally and do not count).
+struct StorageRow: View {
+    let progress: SyncProgress
+    let onDemand: Bool
+
+    var body: some View {
+        let total = max(progress.globalBytes, 0)
+        let local = min(max(progress.localBytes, 0), max(total, progress.localBytes))
+        let fraction = total > 0 ? Double(local) / Double(total) : 0
+        VStack(alignment: .leading, spacing: 6) {
+            LabeledContent("On this device") {
+                Text(Format.bytes(local)).monospacedDigit()
+            }
+            if onDemand && total > 0 {
+                ProgressView(value: min(fraction, 1))
+                Text("\(Format.bytes(local)) of \(Format.bytes(total)) downloaded (\(fraction, format: .percent.precision(.fractionLength(0))))")
+                    .font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("folder.storage")
     }
 }
