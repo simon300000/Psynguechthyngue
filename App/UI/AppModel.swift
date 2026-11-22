@@ -124,6 +124,7 @@ final class AppModel {
 
     func startObserving() {
         guard eventTask == nil else { return }
+        PerfLog.startIfRequested()
         let stream = engine.events()
         eventTask = Task { [weak self] in
             for await event in stream {
@@ -135,6 +136,7 @@ final class AppModel {
     }
 
     private func apply(_ event: EngineEvent) {
+        PerfCounters.hit("event \(Self.perfName(event))")
         notifier.handle(event, isActive: isActive, enabled: settings.notificationsEnabled)
         switch event {
         case let .engineStateChanged(state):
@@ -172,6 +174,21 @@ final class AppModel {
             break
         }
         autoContinueIfNeeded()
+    }
+
+    private static func perfName(_ e: EngineEvent) -> String {
+        switch e {
+        case .engineStateChanged: "engineState"
+        case .deviceConnectionChanged: "connection"
+        case .pendingDevicesChanged: "pendingDevices"
+        case .pendingFoldersChanged: "pendingFolders"
+        case .folderStatusChanged: "folderStatus"
+        case .configurationChanged: "config"
+        case .indexChanged: "index"
+        case .itemStarted: "itemStarted"
+        case .itemFinished: "itemFinished"
+        case .downloadProgress: "downloadProgress"
+        }
     }
 
     private func scheduleRefresh() {

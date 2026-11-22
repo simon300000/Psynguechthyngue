@@ -12,6 +12,7 @@ struct HomeView: View {
     @Namespace private var glass
 
     var body: some View {
+        let _ = perfProbe("HomeView")
         NavigationStack {
             ScrollView {
                 GlassEffectContainer(spacing: 6) {
@@ -336,6 +337,7 @@ struct StatusCard: View {
     }
 
     var body: some View {
+        let _ = perfProbe("StatusCard")
         let s = summary
         HStack(spacing: 14) {
             Image(systemName: s.symbol)
@@ -378,6 +380,7 @@ struct LocalIDCard: View {
     @ScaledMetric(relativeTo: .body) private var qrSize: CGFloat = 180
 
     var body: some View {
+        let _ = perfProbe("LocalIDCard")
         if let id = model.localID {
             VStack(spacing: 12) {
                 QRCodeView(value: id.rawValue)

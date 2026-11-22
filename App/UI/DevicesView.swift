@@ -6,6 +6,7 @@ struct DevicesView: View {
     @State private var adding = false
 
     var body: some View {
+        let _ = perfProbe("DevicesView")
         NavigationStack {
             Group {
                 if model.devices.isEmpty {
@@ -68,6 +69,7 @@ struct DeviceRow: View {
     let device: Device
 
     var body: some View {
+        let _ = perfProbe("DeviceRow")
         let conn = model.connections[device.id]
         HStack(spacing: 14) {
             Image(systemName: icon(conn))
@@ -123,6 +125,7 @@ struct DeviceDetailView: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
+        let _ = perfProbe("DeviceDetailView")
         if let device = model.devices.first(where: { $0.id == deviceID }) {
             let conn = model.connections[deviceID]
             Form {

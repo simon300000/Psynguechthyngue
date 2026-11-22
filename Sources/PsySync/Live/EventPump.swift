@@ -155,6 +155,7 @@ final class EventPump: Sendable {
                     }
                     for e in events.sorted(by: { $0.id < $1.id }) where e.id > since {
                         since = e.id
+                        PerfCounters.hit("upstream \(e.type)")
                         let actions = EventTranslator.translate(e)
                         if !actions.isEmpty { await handle(actions) }
                     }

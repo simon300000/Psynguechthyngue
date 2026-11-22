@@ -45,6 +45,7 @@ public final class SyncthingRESTClient: Sendable {
     }
 
     func request(_ method: String, _ path: String, query: [URLQueryItem], body: Data?, timeout: TimeInterval?) async throws -> Data {
+        PerfCounters.hit("rest \(method) \(path)")
         var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty {
             components.queryItems = query

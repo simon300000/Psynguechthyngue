@@ -11,6 +11,7 @@ struct FolderDetailView: View {
     @State private var notYetInFiles = 0
 
     var body: some View {
+        let _ = perfProbe("FolderDetailView")
         if let folder = model.folders.first(where: { $0.id == folderID }) {
             let status = model.status(of: folder)
             Form {

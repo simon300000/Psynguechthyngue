@@ -16,6 +16,7 @@ struct RootView: View {
     }
 
     var body: some View {
+        let _ = perfProbe("RootView")
         TabView(selection: $selection) {
             Tab("Sync", systemImage: "arrow.triangle.2.circlepath", value: AppTab.home) {
                 HomeView()
@@ -95,6 +96,7 @@ struct SyncProgressAccessory: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        let _ = perfProbe("SyncProgressAccessory")
         let folders = model.syncingFolders
         let statuses = folders.map { model.status(of: $0).progress }
         let total = statuses.reduce(Int64(0)) { $0 + $1.globalBytes }

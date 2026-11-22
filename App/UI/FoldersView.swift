@@ -6,6 +6,7 @@ struct FoldersView: View {
     @State private var creating = false
 
     var body: some View {
+        let _ = perfProbe("FoldersView")
         NavigationStack {
             Group {
                 if model.folders.isEmpty {
@@ -77,6 +78,7 @@ struct FolderRow: View {
     let folder: Folder
 
     var body: some View {
+        let _ = perfProbe("FolderRow")
         let status = model.status(of: folder)
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
