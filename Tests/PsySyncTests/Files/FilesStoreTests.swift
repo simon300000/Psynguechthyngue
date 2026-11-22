@@ -307,3 +307,30 @@ private let f1 = FolderID(rawValue: "f1")
             """)
     }
 }
+
+/// Review finding A2: after a Files edit was uploaded, the projection replaced
+/// the local content version with the engine's blocks hash; the system took
+/// that for a remote update and evicted the file the user had just saved.
+@Suite struct LocalWriteVersionAdoptionTests {
+    let f1 = FolderID(rawValue: "f1")
+
+    @Test func uploadedEditKeepsItsContentVersionUntilTheContentChangesElsewhere() throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir())
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("doc.txt", blocks: "aDE=")])
+        let written = try store.recordLocalWrite(
+            f1, path: RelativePath(rawValue: "doc.txt"), isDirectory: false, size: 3, modified: Date())
+        try store.clearPendingUpload(f1, paths: [RelativePath(rawValue: "doc.txt")])
+        // The scan announces our bytes under their real hash.
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("doc.txt", version: "v2", blocks: "aDI=")])
+        var row = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "doc.txt")))
+        #expect(row.contentVersion == written.contentVersion)
+        // Re-read of the same version: still the exposed one.
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("doc.txt", version: "v2", blocks: "aDI=")])
+        row = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "doc.txt")))
+        #expect(row.contentVersion == written.contentVersion)
+        // A peer changes it: a real new content version.
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("doc.txt", version: "v3", blocks: "aDM=")])
+        row = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "doc.txt")))
+        #expect(row.contentVersion == Data(base64Encoded: "aDM="))
+    }
+}
