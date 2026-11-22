@@ -22,6 +22,7 @@ final class FilesIntegration {
     private var store: FilesStore?
     private var projector: FilesProjector?
     private var server: ContentRequestServer?
+    private var materializer: FilesMaterializer?
     private var configTask: Task<Void, Never>?
     private let log = Logger(subsystem: FilesLog.subsystem, category: "integration")
 
@@ -63,17 +64,24 @@ final class FilesIntegration {
             self.store = store
             #if DEBUG
             let trace: FilesProjector.Trace? = { LifecycleLog.shared.record("files-projection", $0) }
+            let materializeTrace: FilesMaterializer.Trace? = { LifecycleLog.shared.record("files-materialize", $0) }
             #else
             let trace: FilesProjector.Trace? = nil
+            let materializeTrace: FilesMaterializer.Trace? = nil
             #endif
+            let materializer = FilesMaterializer(store: store, trace: materializeTrace) { folder, id in
+                try await DomainManager.requestDownload(folder, item: id)
+            }
             let projector = FilesProjector(engine: engine, store: store, trace: trace) { folder in
                 await DomainManager.signal(folder)
+                await materializer.refresh(folder)
             }
             let server = ContentRequestServer(engine: engine, store: store, layout: layout) { [projector] folder in
                 await projector.schedule(folder, after: .milliseconds(300), reason: "content")
             }
             self.projector = projector
             self.server = server
+            self.materializer = materializer
             await foldersChanged()
             await projector.start()
             await server.start()
@@ -95,6 +103,8 @@ final class FilesIntegration {
         configTask = nil
         await server?.stop()
         await projector?.stop()
+        await materializer?.stop()
+        materializer = nil
         server = nil
         projector = nil
         store?.close()
@@ -115,6 +125,11 @@ final class FilesIntegration {
         return domainStatuses
     }
 
+    /// Local files Files has not materialized yet (FolderDetailView hint).
+    func notYetInFiles(_ folder: FolderID) -> Int {
+        (try? store?.unmaterializedLocalFileCount(folder)) ?? 0
+    }
+
     func foldersChanged() async {
         guard let store, let projector else { return }
         do {
@@ -128,6 +143,9 @@ final class FilesIntegration {
             domainStatuses = await DomainManager.statuses(for: managed.map(\.id))
             // Engine is running: lift any "paused" back-off from earlier failures.
             await DomainManager.resolveErrors(managed.map(\.id))
+            // Files already on the device (e.g. synced while the App was
+            // away, or from before a mode switch) become offline in Files.
+            if let materializer { for folder in managed { await materializer.refresh(folder.id) } }
             #if DEBUG
             await DomainManager.logDomainStates()
             #endif

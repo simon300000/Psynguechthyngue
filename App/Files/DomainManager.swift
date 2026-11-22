@@ -40,6 +40,12 @@ enum DomainManager {
             log.info("working-set repair folders=\(repaired.count)")
             for id in repaired where !touched.contains(id) { touched.append(id) }
         }
+        // Item capabilities changed (FilesItemPolicy.capabilityRevision):
+        // re-announce every row once so the system re-reads them.
+        if let changed = try? store.reannounceForCapabilitiesIfNeeded(), !changed.isEmpty {
+            log.info("capability re-announce folders=\(changed.count)")
+            for id in changed where !touched.contains(id) { touched.append(id) }
+        }
         let wanted = Dictionary(uniqueKeysWithValues: managed.map { ($0.id.rawValue, $0) })
         let existing: [NSFileProviderDomain]
         do {
@@ -99,6 +105,14 @@ enum DomainManager {
         } catch {
             log.debug("signal \(folder.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// Asks the system to download `item` now (FilesMaterializer). The
+    /// extension serves it with a local clone of the engine copy.
+    static func requestDownload(_ folder: FolderID, item: ItemIdentifier) async throws {
+        let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(folder.rawValue), displayName: "")
+        guard let manager = NSFileProviderManager(for: domain) else { return }
+        try await manager.requestDownloadForItem(withIdentifier: NSFileProviderItemIdentifier(item.rawValue))
     }
 
     /// The extension answers `.serverUnreachable` / `.notAuthenticated` when it

@@ -695,10 +695,9 @@ public actor LiveSyncEngine: SyncEngine {
                     try await client.setIgnores(id, lines: IgnoreRulesGenerator.everythingLines(user: user))
                     try Self.writeHelperFile(Data(Self.joinLines(user).utf8), to: dir.appending(path: IgnoreRulesGenerator.userFile))
                 }
-                // Keep what is already local; everything else becomes on-demand.
-                let present = (try? FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false)))?
-                    .filter { !IgnoreRulesGenerator.isEngineInternal($0) }
-                    .map(RelativePath.init(rawValue:)) ?? []
+                // Keep what is already local, file by file: an un-ignored
+                // directory would keep downloading everything added under it.
+                let present = Self.presentFiles(in: dir)
                 try await client.setIgnores(id, lines: try IgnoreRulesGenerator.lines(present: present))
             case .everything:
                 // The user's rules come back from .stignore-user into
@@ -863,6 +862,34 @@ public actor LiveSyncEngine: SyncEngine {
                 try? await client.setIgnores(f.id, lines: IgnoreRulesGenerator.everythingLines(user: Self.expandUserInclude(lines, dir: dir)))
             }
         }
+    }
+
+    /// Regular files under a managed folder root, as folder-relative paths:
+    /// what a switch to on-demand keeps local. Skips Syncthing's own entries
+    /// at the root (`.stfolder`, `.stignore*`, `.stversions`) and its
+    /// in-progress temp files; paths that cannot be expressed as a rule are
+    /// left out (they become on-demand).
+    static func presentFiles(in root: URL) -> [RelativePath] {
+        let base = root.standardizedFileURL.path(percentEncoded: false)
+        let prefix = base.hasSuffix("/") ? base : base + "/"
+        guard let walker = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey], options: [])
+        else { return [] }
+        var result: [RelativePath] = []
+        for case let url as URL in walker {
+            let path = url.standardizedFileURL.path(percentEncoded: false)
+            guard path.hasPrefix(prefix) else { continue }
+            let rel = String(path.dropFirst(prefix.count))
+            let name = url.lastPathComponent
+            if let first = rel.split(separator: "/", maxSplits: 1).first,
+               IgnoreRulesGenerator.isEngineInternal(String(first)) || IgnoreRulesGenerator.isEngineInternal(name) {
+                continue
+            }
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            let p = RelativePath(rawValue: rel)
+            if (try? IgnoreRulesGenerator.pattern(for: p)) != nil { result.append(p) }
+        }
+        return result.sorted { $0.rawValue < $1.rawValue }
     }
 
     private func writeOnDemandRulesToDisk(_ dir: URL, present: [RelativePath]) throws {

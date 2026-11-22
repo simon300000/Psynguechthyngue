@@ -609,6 +609,43 @@ public final class FilesStore: @unchecked Sendable {
         }
     }
 
+    /// Files whose content is on this device (engine copy, `is_local`) but that
+    /// the system has not materialized in its Files replica yet — they show a
+    /// cloud badge although opening them needs no network. Pending uploads are
+    /// skipped (the replica already holds the user's version), and so are
+    /// paths with a pending "Remove Download" (the App is about to drop them).
+    public func unmaterializedLocalFiles(_ folder: FolderID, limit: Int) throws
+        -> [(id: ItemIdentifier, contentVersion: Data)]
+    {
+        try read { db in
+            let s = try db.prepare(
+                """
+                SELECT item_id, content_version FROM items
+                WHERE folder_id=? AND is_dir=0 AND is_local=1 AND pending_upload=0
+                  AND item_id NOT IN (SELECT item_id FROM materialized WHERE folder_id=?)
+                  AND NOT EXISTS (SELECT 1 FROM presence p WHERE p.folder_id=items.folder_id AND p.present=0
+                                  AND (items.path=p.path OR substr(items.path, 1, length(p.path) + 1)=p.path || '/'))
+                ORDER BY path LIMIT ?
+                """)
+            try s.bind([.text(folder.rawValue), .text(folder.rawValue), .int(Int64(limit))])
+            var result: [(id: ItemIdentifier, contentVersion: Data)] = []
+            while try s.step() == SQLITE_ROW {
+                result.append((ItemIdentifier(rawValue: s.text(at: 0)), s.data(at: 1)))
+            }
+            return result
+        }
+    }
+
+    public func unmaterializedLocalFileCount(_ folder: FolderID) throws -> Int {
+        try read { db in
+            Int(try db.scalarInt64(
+                """
+                SELECT COUNT(*) FROM items WHERE folder_id=? AND is_dir=0 AND is_local=1 AND pending_upload=0
+                  AND item_id NOT IN (SELECT item_id FROM materialized WHERE folder_id=?)
+                """, [.text(folder.rawValue), .text(folder.rawValue)]) ?? 0)
+        }
+    }
+
     /// Gives every child of `parents` a new change anchor. Returns the count.
     private static func reannounceChildren(_ ctx: WriteContext, of parents: some Collection<String>) throws -> Int {
         var children: [String] = []
@@ -646,6 +683,29 @@ public final class FilesStore: @unchecked Sendable {
                 "INSERT OR REPLACE INTO meta(key, value) VALUES ('working_set_repair', ?)",
                 [.int(Self.workingSetRepairVersion)])
             return touched
+        }
+    }
+
+    /// Gives every row a new anchor once per `FilesItemPolicy.capabilityRevision`
+    /// so the system re-reads items whose capabilities changed (it caches
+    /// them per version and only learns about new versions through change
+    /// enumeration). Returns the folders to signal; empty when already done.
+    public func reannounceForCapabilitiesIfNeeded() throws -> [FolderID] {
+        try write { ctx in
+            let done = try ctx.db.scalarInt64("SELECT value FROM meta WHERE key='capability_revision'") ?? 0
+            guard done < FilesItemPolicy.capabilityRevision else { return [] }
+            var rows: [(String, String)] = []
+            let s = try ctx.db.prepare("SELECT item_id, folder_id FROM items ORDER BY folder_id, change_anchor")
+            while try s.step() == SQLITE_ROW { rows.append((s.text(at: 0), s.text(at: 1))) }
+            var folders: [String] = []
+            for (id, folder) in rows {
+                try ctx.db.run("UPDATE items SET change_anchor=? WHERE item_id=?", [.int(ctx.nextAnchor()), .text(id)])
+                if folders.last != folder { folders.append(folder) }
+            }
+            try ctx.db.run(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES ('capability_revision', ?)",
+                [.int(FilesItemPolicy.capabilityRevision)])
+            return folders.map(FolderID.init(rawValue:))
         }
     }
 

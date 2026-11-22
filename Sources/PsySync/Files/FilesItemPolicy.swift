@@ -30,8 +30,13 @@ public enum FilesItemPolicy {
     /// properties it cached for the unchanged version. The root's stored
     /// version already covers the content mode (`FilesStore.upsertFolder`).
     /// The receive-only flag (capabilities) is folded in the same way.
+    /// Bumped whenever the extension's item capabilities change, so the system
+    /// re-reads items it cached under the old set (1: `.allowsEvicting`).
+    /// Existing rows are re-announced once (`FilesStore.reannounceForCapabilitiesIfNeeded`).
+    public static let capabilityRevision: Int64 = 1
+
     public static func exposedMetadataVersion(for record: FileItemRecord) -> Data {
-        var v = record.metadataVersion
+        var v = record.metadataVersion + Data("|c\(capabilityRevision)".utf8)
         if record.isPinned { v += Data("|pinned".utf8) }
         if record.isReadOnly { v += Data("|readonly".utf8) }
         return v

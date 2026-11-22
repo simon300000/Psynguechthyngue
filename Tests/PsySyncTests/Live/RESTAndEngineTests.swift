@@ -429,6 +429,40 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.stop(deadline: .seconds(1))
     }
 
+    /// Regression (dynamic E2E): switching "Everything" → "On demand" kept
+    /// whole top-level directories un-ignored, so everything later added under
+    /// them still downloaded. Present files are kept file by file; the user's
+    /// rules still round-trip through .stignore-user.
+    @Test func switchingToOnDemandKeepsPresentFilesOnly() async throws {
+        let h = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        try await h.engine.start(context: .foreground)
+        let id = FolderID(rawValue: "sw")
+        try await h.engine.addFolder(Folder(id: id, label: "SW", contentMode: .everything))
+        let dir = AppGroupLayout(root: h.root).managedFolder(id)
+        for rel in ["报告 1/子目录/a b.txt", "top.md", ".stfolder/x", "d/.syncthing.c.txt.tmp", "d/[x].txt"] {
+            let f = dir.appending(path: rel)
+            try FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: f)
+        }
+        try await h.engine.setUserIgnoreRules(id, ["*.tmp"])
+        var folder = try #require(try await h.engine.folders().first { $0.id == id })
+        folder.contentMode = .onDemand
+        try await h.engine.updateFolder(folder)
+
+        let lines = h.fake.ignores["sw"] ?? []
+        #expect(IgnoreRulesGenerator.isManaged(lines))
+        #expect(IgnoreRulesGenerator.presentPaths(from: lines) == Set(["报告 1/子目录/a b.txt", "top.md", "d/[x].txt"].map(RelativePath.init(rawValue:))))
+        #expect(!lines.contains("!/报告 1"))
+        #expect(lines.last == "*")
+        #expect(try await h.engine.userIgnoreRules(id) == ["*.tmp"])
+
+        folder.contentMode = .everything
+        try await h.engine.updateFolder(folder)
+        #expect(try await h.engine.userIgnoreRules(id) == ["*.tmp"])
+        try await h.engine.stop(deadline: .seconds(1))
+    }
+
     @Test func rejectsInvalidRequests() async throws {
         let h = try makeHarness()
         defer { try? FileManager.default.removeItem(at: h.root) }

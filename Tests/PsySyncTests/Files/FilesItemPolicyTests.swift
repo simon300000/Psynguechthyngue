@@ -42,7 +42,7 @@ private let f1 = FolderID(rawValue: "f1")
         let (store, reader) = try setup(.onDemand)
         let a = try #require(try reader.item(at: RelativePath(rawValue: "a")))
         let before = FilesItemPolicy.exposedMetadataVersion(for: a)
-        #expect(before == a.metadataVersion)
+        #expect(before == a.metadataVersion + Data("|c\(FilesItemPolicy.capabilityRevision)".utf8))
         _ = try store.setPinned(a.itemID, pinned: true)
         let pinned = try #require(try reader.item(a.itemID))
         #expect(pinned.changeAnchor > a.changeAnchor)
@@ -50,6 +50,19 @@ private let f1 = FolderID(rawValue: "f1")
         _ = try store.setPinned(a.itemID, pinned: false)
         let unpinned = try #require(try reader.item(a.itemID))
         #expect(FilesItemPolicy.exposedMetadataVersion(for: unpinned) == before)
+    }
+
+    /// Dynamic E2E: items lacked `.allowsEvicting`, so on iOS neither "Remove
+    /// Download" nor the system could ever evict them (NonEvictable, -2008).
+    /// The capability change must reach items the system already cached:
+    /// every row gets a new anchor once.
+    @Test func capabilityRevisionReannouncesEveryRowOnce() throws {
+        let (store, reader) = try setup(.everything)
+        let since = try reader.currentAnchor()
+        #expect(try store.reannounceForCapabilitiesIfNeeded() == [f1])
+        let page = try reader.changes(since: since, limit: 100)
+        #expect(Set(page.updated.map(\.path.rawValue)).isSuperset(of: ["a", "a/x.txt", "b"]))
+        #expect(try store.reannounceForCapabilitiesIfNeeded().isEmpty)
     }
 
     /// Simulator acceptance: after Receive Only → Send & Receive, items synced

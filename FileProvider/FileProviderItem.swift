@@ -46,18 +46,25 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
             contentVersion: record.contentVersion, metadataVersion: FilesItemPolicy.exposedMetadataVersion(for: record))
     }
 
+    /// `.allowsEvicting`: on iOS an item without it is never evicted — not by
+    /// the system under storage pressure, not by "Remove Download"
+    /// (NSFileProviderErrorNonEvictable). The system's own "Remove Download"
+    /// menu item is hidden (Info.plist NSExtensionFileProviderAllowsUserControlledEviction),
+    /// ours also drops the Syncthing copy. Changing this set needs a new
+    /// `FilesItemPolicy.capabilityRevision`.
     var capabilities: NSFileProviderItemCapabilities {
         if record.isReadOnly {
-            return record.isDirectory ? [.allowsReading, .allowsContentEnumerating] : [.allowsReading]
+            return record.isDirectory ? [.allowsReading, .allowsContentEnumerating, .allowsEvicting]
+                : [.allowsReading, .allowsEvicting]
         }
         if isRoot {
             return [.allowsReading, .allowsContentEnumerating, .allowsAddingSubItems]
         }
         if record.isDirectory {
             return [.allowsReading, .allowsContentEnumerating, .allowsAddingSubItems, .allowsRenaming, .allowsReparenting,
-                    .allowsDeleting]
+                    .allowsDeleting, .allowsEvicting]
         }
-        return [.allowsReading, .allowsWriting, .allowsRenaming, .allowsReparenting, .allowsDeleting]
+        return [.allowsReading, .allowsWriting, .allowsRenaming, .allowsReparenting, .allowsDeleting, .allowsEvicting]
     }
 
     /// Local change not yet announced by the engine ("waiting to upload").
