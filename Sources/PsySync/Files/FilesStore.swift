@@ -573,14 +573,69 @@ public final class FilesStore: @unchecked Sendable {
 
     /// Replaces the set of items the system has materialized for `folder`
     /// (from `NSFileProviderManager.enumeratorForMaterializedItems`).
-    public func setMaterialized(_ folder: FolderID, ids: [ItemIdentifier]) throws {
+    ///
+    /// Children of a *newly* materialized directory get fresh anchors. The
+    /// system enumerates a directory before it reports it as materialized;
+    /// children projected in between were filtered out of the working-set
+    /// changes (their parent was not in this table yet) while the anchor
+    /// moved past them, so Files never showed them. Re-announcing them closes
+    /// that window. Returns true when anything was re-announced (the caller
+    /// signals the working set).
+    @discardableResult
+    public func setMaterialized(_ folder: FolderID, ids: [ItemIdentifier]) throws -> Bool {
         try write { ctx in
+            var previous = Set<String>()
+            let s = try ctx.db.prepare("SELECT item_id FROM materialized WHERE folder_id=?")
+            try s.bind([.text(folder.rawValue)])
+            while try s.step() == SQLITE_ROW { previous.insert(s.text(at: 0)) }
             try ctx.db.run("DELETE FROM materialized WHERE folder_id=?", [.text(folder.rawValue)])
             for id in ids {
                 try ctx.db.run(
                     "INSERT OR IGNORE INTO materialized(item_id, folder_id) VALUES (?,?)",
                     [.text(id.rawValue), .text(folder.rawValue)])
             }
+            let added = Set(ids.map(\.rawValue)).subtracting(previous)
+            return try Self.reannounceChildren(ctx, of: added) > 0
+        }
+    }
+
+    /// Gives every child of `parents` a new change anchor. Returns the count.
+    private static func reannounceChildren(_ ctx: WriteContext, of parents: some Collection<String>) throws -> Int {
+        var children: [String] = []
+        for parent in parents {
+            let s = try ctx.db.prepare("SELECT item_id FROM items WHERE parent_id=? AND item_id<>?")
+            try s.bind([.text(parent), .text(parent)])
+            while try s.step() == SQLITE_ROW { children.append(s.text(at: 0)) }
+        }
+        for id in children {
+            try ctx.db.run("UPDATE items SET change_anchor=? WHERE item_id=?", [.int(ctx.nextAnchor()), .text(id)])
+        }
+        return children.count
+    }
+
+    /// Version of the one-time working-set repair below.
+    static let workingSetRepairVersion: Int64 = 1
+
+    /// One-time repair for installs that lost items to the window described in
+    /// `setMaterialized`: the rows are in this store but the system never saw
+    /// them. Re-announces the children of every materialized directory once
+    /// (per `workingSetRepairVersion`). Returns the folders whose working set
+    /// must be signalled; empty when already done.
+    public func repairWorkingSetIfNeeded() throws -> [FolderID] {
+        try write { ctx in
+            let done = try ctx.db.scalarInt64("SELECT value FROM meta WHERE key='working_set_repair'") ?? 0
+            guard done < Self.workingSetRepairVersion else { return [] }
+            var byFolder: [String: [String]] = [:]
+            let s = try ctx.db.prepare("SELECT item_id, folder_id FROM materialized")
+            while try s.step() == SQLITE_ROW { byFolder[s.text(at: 1), default: []].append(s.text(at: 0)) }
+            var touched: [FolderID] = []
+            for (folder, parents) in byFolder.sorted(by: { $0.key < $1.key }) {
+                if try Self.reannounceChildren(ctx, of: parents) > 0 { touched.append(FolderID(rawValue: folder)) }
+            }
+            try ctx.db.run(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES ('working_set_repair', ?)",
+                [.int(Self.workingSetRepairVersion)])
+            return touched
         }
     }
 

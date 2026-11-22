@@ -181,23 +181,31 @@ public struct RestrictedFetchBudget: Hashable, Sendable {
 
     /// Headroom kept free for Swift/ObjC allocations next to the Go heap.
     public static let memoryReserveMiB: Int64 = 4
-    /// Below this GOMEMLIMIT the core cannot start (≈ runtime + one block
-    /// window); the fetch is refused with "open the App".
-    public static let memoryFloorMiB: Int64 = 6
+    /// Lowest GOMEMLIMIT handed to the core. GOMEMLIMIT is a soft target (GC
+    /// works harder, allocations never fail), so a low value costs CPU, not
+    /// correctness.
+    public static let memoryFloorMiB: Int64 = 4
+    /// Refuse ("open the App") only below this jetsam headroom. Measured on
+    /// device (iPad Pro, iPadOS 27): a fetch adds ≈ 3 MiB of footprint before
+    /// the first block (DB open + connect) and peaks ≈ 5–6 MiB above its
+    /// start for 30–200 MB files; plus 1 MiB margin.
+    public static let minimumHeadroomMiB: Int64 = 7
 
     /// Fits GOMEMLIMIT to the extension's current jetsam headroom
-    /// (`os_proc_available_memory()`): `min(memory.limitMiB, available − reserve)`.
-    /// The device limit is ≈ 20 MiB (iPhone 13 Pro, iPad Pro 4th gen), far
-    /// below the static 40 MiB ceiling. Returns nil when the result would be
-    /// below `memoryFloorMiB`. `availableBytes == 0` means "unknown"
-    /// (simulator, macOS) and keeps the static profile.
+    /// (`os_proc_available_memory()`):
+    /// `min(memory.limitMiB, max(available − reserve, floor))`. The device
+    /// limit is ≈ 20 MiB, far below the static 40 MiB ceiling. Returns nil
+    /// when the headroom itself is below `minimumHeadroomMiB`.
+    /// (Until 2026-11-22 the refusal compared `available − reserve` with 6,
+    /// i.e. required 10 MiB of headroom and refused every fetch on devices
+    /// with a heavier extension baseline.) `availableBytes == 0` means
+    /// "unknown" (simulator, macOS) and keeps the static profile.
     public func fitted(availableBytes: UInt64) -> RestrictedFetchBudget? {
         guard availableBytes > 0 else { return self }
         let availableMiB = Int64(clamping: availableBytes >> 20)
-        let limit = min(memory.limitMiB, availableMiB - Self.memoryReserveMiB)
-        guard limit >= Self.memoryFloorMiB else { return nil }
+        guard availableMiB >= Self.minimumHeadroomMiB else { return nil }
         var budget = self
-        budget.memory.limitMiB = limit
+        budget.memory.limitMiB = min(memory.limitMiB, max(availableMiB - Self.memoryReserveMiB, Self.memoryFloorMiB))
         return budget
     }
 }

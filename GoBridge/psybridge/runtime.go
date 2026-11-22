@@ -19,7 +19,8 @@ const (
 	// File Provider extension restricted fetch: ceiling / fallback only. The
 	// measured jetsam limit is ≈ 20 MiB (iPhone 13 Pro, iPad Pro 4th gen), so
 	// Swift fits the request to os_proc_available_memory() − 4 MiB per fetch
-	// (RestrictedFetchBudget.fitted) and refuses below 6 MiB.
+	// (RestrictedFetchBudget.fitted, floor 4 MiB) and refuses only when the
+	// headroom itself is below 7 MiB.
 	DefaultRestrictedMemoryLimitMiB = 40
 
 	DefaultGCPercent           = 100

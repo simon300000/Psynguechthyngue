@@ -300,8 +300,9 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
         }
         let collector = MaterializedCollector(context: context) { [log] ids in
             do {
-                try context.store.setMaterialized(context.folder, ids: ids)
-                log.info("materialized set updated count=\(ids.count)")
+                let reannounced = try context.store.setMaterialized(context.folder, ids: ids)
+                log.info("materialized set updated count=\(ids.count) reannounced=\(reannounced)")
+                if reannounced { manager.signalEnumerator(for: .workingSet) { _ in } }
             } catch {
                 log.error("materialized update failed: \(String(describing: error), privacy: .public)")
             }

@@ -60,10 +60,13 @@ struct ContentHarness {
     }
 
     func provider(
-        bridge: (any RestrictedFetchBridge)?, accept: Duration = .seconds(2), availableMemory: UInt64? = nil
+        bridge: (any RestrictedFetchBridge)?, accept: Duration = .seconds(2), availableMemory: UInt64? = nil,
+        memory: (@Sendable () -> UInt64)? = nil, release: (@Sendable () -> Void)? = nil
     ) -> LiveContentProvider {
         var config = LiveContentProvider.Configuration()
         if let availableMemory { config.availableMemory = { availableMemory } }
+        if let memory { config.availableMemory = memory }
+        config.afterFetch = release
         config.acceptTimeout = accept
         config.lockTimeout = .seconds(2)
         config.pollInterval = .milliseconds(50)
@@ -153,8 +156,9 @@ struct ContentHarness {
         #expect(base.fitted(availableBytes: 0) == base)  // unknown → static ceiling
         #expect(base.fitted(availableBytes: 200 << 20)?.memory.limitMiB == 40)  // capped
         #expect(base.fitted(availableBytes: 14 << 20)?.memory.limitMiB == 10)  // device: ≈14 MiB left
-        #expect(base.fitted(availableBytes: (10 << 20) + 123)?.memory.limitMiB == 6)  // floor exactly
-        #expect(base.fitted(availableBytes: 9 << 20) == nil)
+        #expect(base.fitted(availableBytes: 9 << 20)?.memory.limitMiB == 5)  // was refused (needed 10 MiB)
+        #expect(base.fitted(availableBytes: (7 << 20) + 123)?.memory.limitMiB == 4)  // threshold, floor
+        #expect(base.fitted(availableBytes: (7 << 20) - 1) == nil)
         #expect(base.fitted(availableBytes: 1 << 20) == nil)
         #expect(base.fitted(availableBytes: 14 << 20)?.memory.gcPercent == base.memory.gcPercent)
     }
@@ -174,11 +178,43 @@ struct ContentHarness {
         try h.project([FilesFixtures.file("m.bin", size: 7, local: false)])
         let bridge = FakeFetchBridge()
         await #expect(throws: FilesContentError.openAppRequired(.lowMemory)) {
-            _ = try await h.provider(bridge: bridge, availableMemory: 8 << 20)
+            _ = try await h.provider(bridge: bridge, availableMemory: 6 << 20)
                 .provideContents(for: h.id("m.bin"), requestedVersion: nil, progress: Progress())
         }
         #expect(bridge.calls == 0)
         #expect(h.lock.currentHolder() == nil)
+    }
+
+    /// Regression (iPhone 17 Pro, iOS 27.3): a 231-byte file was refused with
+    /// "too large" because ~8–9 MiB of headroom counted as too little.
+    @Test func smallHeadroomStillFetches() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("package.json", size: 231, local: false)])
+        let bridge = FakeFetchBridge()
+        let result = try await h.provider(bridge: bridge, availableMemory: 8 << 20)
+            .provideContents(for: h.id("package.json"), requestedVersion: nil, progress: Progress())
+        #expect(result.source == .restrictedFetch)
+        #expect(bridge.lastMemoryMiB == 4)
+    }
+
+    /// Go memory of the previous fetch is released asynchronously; release it
+    /// and measure again before refusing.
+    @Test func lowHeadroomReleasesMemoryAndRemeasures() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("m.bin", size: 7, local: false)])
+        final class Flag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = false
+            var isSet: Bool { lock.withLock { value } }
+            func set() { lock.withLock { value = true } }
+        }
+        let released = Flag()
+        let bridge = FakeFetchBridge()
+        let provider = h.provider(
+            bridge: bridge, memory: { released.isSet ? 12 << 20 : 5 << 20 }, release: { released.set() })
+        let result = try await provider.provideContents(for: h.id("m.bin"), requestedVersion: nil, progress: Progress())
+        #expect(result.source == .restrictedFetch)
+        #expect(bridge.lastMemoryMiB == 8)
     }
 
     @Test func bridgeErrorDescriptionsMap() {
