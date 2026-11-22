@@ -12,6 +12,8 @@ struct SyncNowIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         let env = AppEnvironment.shared
         await env.host.handle(.didBecomeActive)
+        // Cold launch: the model has not loaded the folder list yet.
+        await env.model.refreshAll()
         await env.model.syncNow()
         return .result()
     }

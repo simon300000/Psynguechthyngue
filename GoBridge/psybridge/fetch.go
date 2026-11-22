@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -160,6 +162,7 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 	if err != nil {
 		return nil, newError(CodeConfig, "parse config: %v", err)
 	}
+	unpausePolicyHeld(&base, readPolicyPausedDevices(req.HomeDir))
 	folderCfg, ok := restrictConfig(&base, myID, req.FolderID)
 	if !ok {
 		return nil, newError(CodeFileNotFound, "folder %q is not configured", req.FolderID)
@@ -297,6 +300,48 @@ func restrictConfig(c *config.Configuration, myID protocol.DeviceID, folderID st
 	c.Options.AutoUpgradeIntervalH = 0
 	c.Options.StartBrowser = false
 	return target, found
+}
+
+// AppStateFileName is the Swift engine's app state (LiveEngineAppState) in
+// HomeDir. The restricted fetch reads only `policyPausedDevices` from it.
+const AppStateFileName = "psy-app-state.json"
+
+// readPolicyPausedDevices returns the devices the App paused for a policy
+// hold (POST /rest/system/pause persists Paused=true in config.xml). Missing
+// or unreadable state = none.
+func readPolicyPausedDevices(homeDir string) map[protocol.DeviceID]bool {
+	raw, err := os.ReadFile(filepath.Join(homeDir, AppStateFileName))
+	if err != nil {
+		return nil
+	}
+	var state struct {
+		PolicyPausedDevices []string `json:"policyPausedDevices"`
+	}
+	if json.Unmarshal(raw, &state) != nil {
+		return nil
+	}
+	out := map[protocol.DeviceID]bool{}
+	for _, s := range state.PolicyPausedDevices {
+		if id, err := protocol.DeviceIDFromString(s); err == nil {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+// unpausePolicyHeld clears Paused (in memory only) on devices that the App
+// paused for a policy hold. The hold governs the App's own background sync
+// and is persisted in config.xml, so after the App stops it would otherwise
+// make every restricted fetch fail with no_peer although the user never
+// paused those devices. The fetch is an explicit user request for one file
+// (as the extension already ignores the policy when no hold was active);
+// devices the user paused stay paused.
+func unpausePolicyHeld(c *config.Configuration, held map[protocol.DeviceID]bool) {
+	for i := range c.Devices {
+		if held[c.Devices[i].DeviceID] {
+			c.Devices[i].Paused = false
+		}
+	}
 }
 
 // candidateDevices: devices sharing the folder (not us, not paused), the ones

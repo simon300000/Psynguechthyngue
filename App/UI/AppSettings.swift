@@ -18,6 +18,10 @@ final class AppSettings {
     var cellularReceiveLimit: Int { didSet { defaults.set(cellularReceiveLimit, forKey: "psy.cellularRecv"); changed() } }
     var backgroundSync: Bool { didSet { defaults.set(backgroundSync, forKey: BackgroundScheduler.enabledKey); changed() } }
     var notificationsEnabled: Bool { didSet { defaults.set(notificationsEnabled, forKey: "psy.notifications") } }
+    /// Submit the continued-processing request automatically when transfers
+    /// start (the user's explicit consent; see AppModel.autoContinueIfNeeded).
+    var autoContinueInBackground: Bool { didSet { defaults.set(autoContinueInBackground, forKey: Self.autoContinueKey) } }
+    static let autoContinueKey = "psy.autoContinueInBackground"
 
     var lastBackgroundRun: Date? { defaults.object(forKey: BackgroundScheduler.lastRunKey) as? Date }
 
@@ -36,6 +40,7 @@ final class AppSettings {
         cellularReceiveLimit = defaults.integer(forKey: "psy.cellularRecv")
         backgroundSync = bool(BackgroundScheduler.enabledKey, true)
         notificationsEnabled = bool("psy.notifications", false)
+        autoContinueInBackground = bool(Self.autoContinueKey, true)
     }
 
     var policyPreferences: PolicyPreferences {

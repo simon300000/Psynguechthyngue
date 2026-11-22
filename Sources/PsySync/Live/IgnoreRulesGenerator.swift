@@ -4,6 +4,7 @@ import Foundation
 ///
 /// ```
 /// // === Psynguechthyngue managed — do not edit below ===
+/// /.stignore-user
 /// #include .stignore-user
 /// !/Docs/report.pdf
 /// !/Photos/2026
@@ -19,6 +20,13 @@ public enum IgnoreRulesGenerator {
     public static let header = "// === Psynguechthyngue managed — do not edit below ==="
     public static let userFile = ".stignore-user"
     public static let includeLine = "#include \(userFile)"
+    /// Keeps the app's helper file local. Upstream always ignores `.stignore`
+    /// itself but not `.stignore-user`, which therefore synced to every peer
+    /// as an ordinary file. Written in both content modes (`everythingLines`).
+    public static let helperIgnoreLine = "/\(userFile)"
+    /// Marks the helper line in an "everything" folder's `.stignore`, where
+    /// the rest of the file is the user's own rules.
+    public static let helperComment = "// Psynguechthyngue: keep the app's helper file local"
 
     public enum RuleError: Error, Hashable, Sendable {
         /// Path cannot be expressed as a pattern (newline, `..`, absolute, empty).
@@ -31,7 +39,31 @@ public enum IgnoreRulesGenerator {
         for p in present {
             unique.insert(try pattern(for: p))
         }
-        return [header, includeLine] + unique.sorted() + ["*"]
+        return [header, helperIgnoreLine, includeLine] + unique.sorted() + ["*"]
+    }
+
+    /// `.stignore` of an "everything" folder: the helper ignore line first
+    /// (first match wins, so no user rule can un-ignore it), then the user's
+    /// rules verbatim.
+    public static func everythingLines(user: [String]) -> [String] {
+        [helperComment, helperIgnoreLine] + userLines(fromEverything: user)
+    }
+
+    /// The user's rules from an "everything" `.stignore` (inverse of
+    /// `everythingLines`; files written without the helper line pass through).
+    public static func userLines(fromEverything lines: [String]) -> [String] {
+        var rest = lines[...]
+        if rest.first == helperComment { rest = rest.dropFirst() }
+        if rest.first == helperIgnoreLine { rest = rest.dropFirst() }
+        return Array(rest)
+    }
+
+    /// Upstream's internal files and temporary files: never "present" content.
+    public static func isEngineInternal(_ name: String) -> Bool {
+        if [".stfolder", ".stignore", userFile, ".stversions"].contains(name) { return true }
+        if name.hasPrefix(".syncthing.") && name.hasSuffix(".tmp") { return true }
+        if name.hasPrefix("~syncthing~") && name.hasSuffix(".tmp") { return true }
+        return false
     }
 
     public static func fileContents(present: some Sequence<RelativePath>) throws -> String {

@@ -117,6 +117,9 @@ struct DeviceDetailView: View {
     @State private var name = ""
     @State private var loaded = false
     @State private var confirmRemove = false
+    /// Set when Remove was confirmed: the view then disappears and its
+    /// onDisappear must not PATCH the deleted device.
+    @State private var removed = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -128,13 +131,13 @@ struct DeviceDetailView: View {
                         .plainNameInput()
                         .focused($nameFocused)
                         .submitLabel(.done)
-                        .onSubmit { commitName(device) }
+                        .onSubmit { commitName() }
                         .accessibilityIdentifier("device.name")
                 }
                 Section {
                     Toggle("Pause syncing with this device", isOn: Binding(
                         get: { device.paused },
-                        set: { v in Task { await model.setPaused(device, v) } }
+                        set: { v in Task { await model.updateDevice(id: deviceID) { $0.paused = v } } }
                     ))
                     .accessibilityIdentifier("device.pause")
                 }
@@ -174,10 +177,13 @@ struct DeviceDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: FolderID.self) { FolderDetailView(folderID: $0) }
             .onAppear { if !loaded { name = device.name; loaded = true } }
-            .onDisappear { commitName(device) }
+            .onDisappear { commitName() }
             .confirmationDialog("Remove this device?", isPresented: $confirmRemove, titleVisibility: .visible) {
                 Button("Remove", role: .destructive) {
-                    Task { if await model.remove(device) { dismiss() } }
+                    removed = true
+                    Task {
+                        if await model.remove(device) { dismiss() } else { removed = false }
+                    }
                 }
                 .accessibilityIdentifier("device.remove.confirm")
             } message: {
@@ -188,9 +194,11 @@ struct DeviceDetailView: View {
         }
     }
 
-    private func commitName(_ device: Device) {
+    private func commitName() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard loaded, !trimmed.isEmpty, trimmed != device.name else { return }
-        Task { await model.rename(device, to: trimmed) }
+        // The latest device, not the render-time copy; gone after Remove.
+        guard loaded, !removed, !trimmed.isEmpty,
+              let current = model.devices.first(where: { $0.id == deviceID }), trimmed != current.name else { return }
+        Task { await model.updateDevice(id: deviceID) { $0.name = trimmed } }
     }
 }

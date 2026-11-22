@@ -50,7 +50,9 @@ struct FolderDetailView: View {
                     } header: { Text("Conflicts") } footer: { Text(SyncIssue.Kind.conflict.advice) }
                 }
 
-                if folder.location == .managed {
+                // shareddocuments:// opens the Files app on iPhone/iPad; on Mac
+                // (Designed for iPad) there is no Files app and it does nothing.
+                if folder.location == .managed && !model.isOnMac {
                     Section {
                         Button { openURL(URL(string: "shareddocuments://")!) } label: { Label("Open in Files", systemImage: "folder") }
                             .accessibilityIdentifier("folder.openfiles")
@@ -60,13 +62,13 @@ struct FolderDetailView: View {
                 Section {
                     Toggle("Pause", isOn: Binding(
                         get: { folder.paused },
-                        set: { v in var f = folder; f.paused = v; Task { await model.update(f) } }
+                        set: { v in Task { await model.updateFolder(id: folderID) { $0.paused = v } } }
                     ))
                     .accessibilityIdentifier("folder.pause")
                     if folder.location == .managed {
                         Picker("Download", selection: Binding(
                             get: { folder.contentMode },
-                            set: { v in var f = folder; f.contentMode = v; Task { await model.update(f) } }
+                            set: { v in Task { await model.updateFolder(id: folderID) { $0.contentMode = v } } }
                         )) {
                             Text("Everything").tag(PsySync.ContentMode.everything)
                             Text("On demand").tag(PsySync.ContentMode.onDemand)
@@ -80,9 +82,12 @@ struct FolderDetailView: View {
                         Toggle(d.name.nilIfEmpty ?? d.id.short, isOn: Binding(
                             get: { folder.devices.contains(d.id) },
                             set: { on in
-                                var f = folder
-                                if on { if !f.devices.contains(d.id) { f.devices.append(d.id) } } else { f.devices.removeAll { $0 == d.id } }
-                                Task { await model.update(f) }
+                                let id = d.id
+                                Task {
+                                    await model.updateFolder(id: folderID) { f in
+                                        if on { if !f.devices.contains(id) { f.devices.append(id) } } else { f.devices.removeAll { $0 == id } }
+                                    }
+                                }
                             }
                         ))
                     }
@@ -93,7 +98,7 @@ struct FolderDetailView: View {
                         LabeledContent("Folder ID") { Text(folder.id.rawValue).font(.footnote.monospaced()).textSelection(.enabled) }
                         Picker("Type", selection: Binding(
                             get: { folder.type },
-                            set: { v in var f = folder; f.type = v; Task { await model.update(f) } }
+                            set: { v in Task { await model.updateFolder(id: folderID) { $0.type = v } } }
                         )) {
                             Text("Send & Receive").tag(FolderType.sendReceive)
                             Text("Send Only").tag(FolderType.sendOnly)

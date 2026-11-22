@@ -22,10 +22,15 @@ enum EngineFactory {
             return LiveEngineComponents(engine: UnavailableSyncEngine(detail: "\(error)"), bridge: nil, layout: nil)
         }
         let bridgeLog = Logger(subsystem: "app.psynguechthyngue", category: "bridge")
+        let exitTarget = ExitTarget()
         let bridge = PsyBridgeAdapter(
             log: { level, message in bridgeLog.log(level: level == "error" ? .error : .info, "\(message, privacy: .public)") },
             onExit: { code, detail in
                 LifecycleLog.shared.record("engine-exited", "code=\(code?.rawValue ?? "-") \(detail)")
+                // Mark the engine failed now; LiveEngineHost restarts it.
+                if let engine = exitTarget.engine {
+                    Task { await engine.bridgeExited(code: code?.rawValue, detail: detail) }
+                }
             }
         )
         let accessGroup = Bundle.main.object(forInfoDictionaryKey: "PsyKeychainAccessGroup") as? String
@@ -37,7 +42,18 @@ enum EngineFactory {
             identityStore: KeychainIdentityStore(accessGroup: accessGroup.flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 }),
             configuration: config
         )
+        exitTarget.engine = engine
         return LiveEngineComponents(engine: engine, bridge: bridge, layout: layout)
+    }
+}
+
+/// Lets the bridge's exit callback (created before the engine) reach it.
+private final class ExitTarget: @unchecked Sendable {
+    private let lock = NSLock()
+    private weak var _engine: LiveSyncEngine?
+    var engine: LiveSyncEngine? {
+        get { lock.withLock { _engine } }
+        set { lock.withLock { _engine = newValue } }
     }
 }
 

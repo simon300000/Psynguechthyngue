@@ -212,6 +212,27 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertTrue(waitGone(text("Work Laptop"), timeout: 5))
     }
 
+    /// Regression: after Remove, onDisappear committed the edited name and
+    /// PATCHed the deleted device, which showed a "rejected" error banner.
+    func testRemoveDeviceAfterEditingNameShowsNoError() {
+        launch()
+        tab("Devices")
+        let row = text("Work Laptop")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let name = el("device.name")
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText(" 2")   // not submitted
+        let remove = el("device.remove")
+        scrollTo(remove)
+        remove.tap()
+        app.buttons.matching(NSPredicate(format: "label == %@", "Remove")).firstMatch.tap()
+        XCTAssertTrue(waitGone(text("Work Laptop"), timeout: 5))
+        sleep(1)
+        XCTAssertFalse(anyLabel("rejected the request").exists, "no error banner after removing")
+    }
+
     // MARK: Folders tab
 
     func testCreateManagedOnDemandFolderSharedWithDevice() {
@@ -307,7 +328,8 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         el("onboarding.adddevice").tap()
         typeDeviceID(newPeerID)
         el("adddevice.add").tap()
-        XCTAssertTrue(text("1 devices added").waitForExistence(timeout: 5))
+        XCTAssertTrue(text("1 device added").waitForExistence(timeout: 5), "English plural (was “1 devices added”)")
+        XCTAssertFalse(text("1 devices added").exists)
         el("onboarding.next").tap()
         XCTAssertTrue(el("onboarding.newfolder").waitForExistence(timeout: 3))
         el("onboarding.skip").tap()
@@ -369,6 +391,7 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertFalse(el("settings.lowdata").exists)
         XCTAssertTrue(scrollTo(el("settings.machint")), "Mac background hint")
         XCTAssertFalse(el("settings.background").exists, "no background-sync toggle on Mac")
+        XCTAssertFalse(el("settings.autocontinue").exists, "no continued processing on Mac")
     }
 
     func testIOSSettingsKeepCellularAndBackgroundSync() {
@@ -376,6 +399,8 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         tab("Settings")
         XCTAssertTrue(el("settings.cellular").waitForExistence(timeout: 5))
         XCTAssertTrue(scrollTo(el("settings.background")))
+        XCTAssertTrue(scrollTo(app.switches["settings.autocontinue"]), "automatic continue toggle next to background sync")
+        XCTAssertEqual(app.switches["settings.autocontinue"].value as? String, "1", "on by default")
         XCTAssertFalse(el("settings.machint").exists)
     }
 }
@@ -385,7 +410,11 @@ final class EngineSettingsUITests: PsyUITestCase {
     /// so it may already be expanded and scrolled.
     private func openAdvancedSettings() {
         tab("Settings")
-        XCTAssertTrue(app.switches["settings.cellular"].waitForExistence(timeout: 5))
+        // The form keeps its scroll position across tab switches; when it is
+        // scrolled to the end, the first (lazily built) rows do not exist.
+        let cellular = app.switches["settings.cellular"]
+        for _ in 0..<6 where !cellular.waitForExistence(timeout: 1) { app.swipeDown() }
+        XCTAssertTrue(cellular.waitForExistence(timeout: 5))
         // Advanced is the last section: scroll to the end so lazily built rows exist,
         // then expand only if it is still collapsed (tapping again would collapse it).
         for _ in 0..<4 { app.swipeUp() }
@@ -459,8 +488,22 @@ final class EngineSettingsUITests: PsyUITestCase {
         XCTAssertFalse(text("Sync engine stopped").exists)
     }
 
-    func testKeepSyncingInBackgroundKeepsEngineRunning() {
+    /// Default: "Keep syncing in background automatically" requests continued
+    /// processing as soon as transfers run, without the button.
+    func testAutomaticContinueInBackground() {
         launch(extra: ["-PsyUITestSimulateContinued"])
+        XCTAssertTrue(scrollTo(el("home.continuing")), "requested automatically while syncing")
+        XCTAssertFalse(el("home.continueinbg").exists, "no button while the automatic request is active")
+        XCUIDevice.shared.press(.home)
+        sleep(2)
+        app.activate()
+        let probe = el("debug.engine")
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        XCTAssertTrue(probe.label.contains("stops=0"), "engine kept running in background: \(probe.label)")
+    }
+
+    func testKeepSyncingInBackgroundKeepsEngineRunning() {
+        launch(extra: ["-PsyUITestSimulateContinued", "-psy.autoContinueInBackground", "NO"])
         let button = el("home.continueinbg")
         XCTAssertTrue(scrollTo(button), "offered while a folder is syncing")
         button.tap()

@@ -170,6 +170,22 @@ func applyEngineConfig(c *config.Configuration, myID protocol.DeviceID, apiAddr,
 	for i := range c.Folders {
 		applyFolderPolicy(&c.Folders[i])
 	}
+	// One connection per peer. Upstream v2 defaults numConnections to 3
+	// (0 = "default"); the device that wants more opens extra connections,
+	// and on a phone whose network and suspension keep dropping them the
+	// primary connection keeps changing, which makes upstream abandon and
+	// restart the index exchange ("Abandoning old index handler in favour of
+	// new connection"). 1 is a supported value: both sides then negotiate a
+	// single connection (connections.desiredConnectionsToDevice). Explicit
+	// non-default values are left alone.
+	if c.Defaults.Device.RawNumConnections == 0 {
+		c.Defaults.Device.RawNumConnections = 1
+	}
+	for i := range c.Devices {
+		if c.Devices[i].RawNumConnections == 0 {
+			c.Devices[i].RawNumConnections = 1
+		}
+	}
 
 	if firstStart && deviceName != "" {
 		for i := range c.Devices {
@@ -331,10 +347,20 @@ func waitHealthy(baseURL string, deadline time.Time, app *syncthing.App) error {
 // watchExit reports an unexpected exit (anything but our own Stop) to Swift.
 func (e *Engine) watchExit(rt *upstreamRuntime, logs *sinkShared) {
 	rt.app.Wait()
+	e.handleExit(rt, rt.app.Error(), logs)
+}
+
+// handleExit is watchExit after the App returned (split out for tests).
+func (e *Engine) handleExit(rt *upstreamRuntime, appErr error, logs *sinkShared) {
 	e.mu.Lock()
 	unexpected := e.rt == rt && !e.stopping
 	if unexpected {
 		e.closeStreamsLocked()
+		// Bridge-side goroutines (peer cache writer) would otherwise leak:
+		// only Stop's stopAsync cancelled them.
+		if rt.extraCancel != nil {
+			rt.extraCancel()
+		}
 		rt.earlyCancel()
 		e.rt = nil
 		e.endpoint = nil
@@ -344,7 +370,7 @@ func (e *Engine) watchExit(rt *upstreamRuntime, logs *sinkShared) {
 	e.mu.Unlock()
 	if unexpected && e.obs != nil {
 		code, detail := CodeNotRunning, "engine stopped"
-		if err := rt.app.Error(); err != nil {
+		if err := appErr; err != nil {
 			detail = logs.redact(err.Error())
 			if strings.Contains(strings.ToLower(detail), "database") || strings.Contains(detail, "sqlite") {
 				code = CodeDatabase

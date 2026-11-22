@@ -45,7 +45,7 @@ final class AppModel {
     /// Counts of engine start/stop transitions (fixture diagnostics for UI tests).
     private(set) var engineStarts = 0
     private(set) var engineStops = 0
-    var isActive = false
+    var isActive = false { didSet { if isActive && !oldValue { autoContinueIfNeeded() } } }
     /// Menu / keyboard command waiting to be handled by the UI.
     var pendingCommand: AppCommand?
     /// Transfers in progress (Mac closure confirmation, accessory).
@@ -68,6 +68,12 @@ final class AppModel {
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var bannerTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    /// Serialises folder/device edits so each applies to the latest value.
+    @ObservationIgnored private var editChain: Task<Void, Never>?
+    @ObservationIgnored private var autoContinueGate = AutoContinueGate()
+    /// The automatic continued-processing request was refused: Home offers
+    /// the manual button again.
+    private(set) var autoContinueFailed = false
     /// `debugAutoAccept()` bookkeeping (Debug acceptance hook).
     @ObservationIgnored var debugAccepted: Set<String> = []
 
@@ -127,6 +133,7 @@ final class AppModel {
         case .itemStarted, .indexChanged:
             break
         }
+        autoContinueIfNeeded()
     }
 
     private func scheduleRefresh() {
@@ -162,8 +169,13 @@ final class AppModel {
             if !settings.onboardingDone && !onboardingInProgress && (!devices.isEmpty || !folders.isEmpty) {
                 settings.onboardingDone = true
             }
+            autoContinueIfNeeded()
         } catch {
             if case EngineError.notRunning = error { return }
+            // The engine stopped (backgrounding) or died while we were
+            // reading: "Could not talk to the sync engine" is not actionable.
+            engineState = await engine.state
+            guard case .running = engineState else { return }
             report(error)
         }
     }
@@ -234,10 +246,36 @@ final class AppModel {
             title: String(localized: "Syncing files"),
             subtitle: String(localized: "Psynguechthyngue keeps syncing until your transfers finish.")
         )
+        if ok { autoContinueFailed = false }
         if ok {
             show(info: String(localized: "Syncing will continue after you leave the app."))
         } else {
             show(error: String(localized: "iOS can’t continue syncing in the background right now. Keep the app open to finish."))
+        }
+    }
+
+    /// "Keep syncing in background automatically" (Settings ▸ Background).
+    /// App Review: Apple intends BGContinuedProcessingTask to be started by
+    /// an explicit user action. Turning this setting on is that action: the
+    /// user consents once to every sync burst continuing in the background,
+    /// instead of tapping "Keep Syncing in Background" each time. Requests
+    /// are made only while the app is in the foreground, once per burst
+    /// (AutoContinueGate), and the task finishes when transfers end.
+    private func autoContinueIfNeeded() {
+        let transfersActive = !syncingFolders.isEmpty
+        if !transfersActive { autoContinueFailed = false }
+        guard autoContinueGate.shouldRequest(
+            enabled: settings.autoContinueInBackground, appActive: isActive, canContinue: canContinueInBackground,
+            transfersActive: transfersActive, alreadyContinuing: isContinuingInBackground, now: .now),
+              let scheduler else { return }
+        LifecycleLog.shared.record("continued-auto-request", "")
+        Task {
+            let ok = await scheduler.continueInBackground(
+                title: String(localized: "Syncing files"),
+                subtitle: String(localized: "Psynguechthyngue keeps syncing until your transfers finish.")
+            )
+            // Silent either way: no banner for something the user did not just tap.
+            autoContinueFailed = !ok
         }
     }
 
@@ -344,13 +382,35 @@ final class AppModel {
     }
 
     func rename(_ device: Device, to name: String) async {
-        var d = device; d.name = name
-        if await perform({ try await engine.updateDevice(d) }) { await refreshAll() }
+        await updateDevice(id: device.id) { $0.name = name }
     }
 
     func setPaused(_ device: Device, _ paused: Bool) async {
-        var d = device; d.paused = paused
-        if await perform({ try await engine.updateDevice(d) }) { await refreshAll() }
+        await updateDevice(id: device.id) { $0.paused = paused }
+    }
+
+    /// Applies `mutate` to the device's latest value (not a render-time copy),
+    /// so quick consecutive edits do not revert each other.
+    func updateDevice(id: DeviceID, _ mutate: @escaping (inout Device) -> Void) async {
+        if let i = devices.firstIndex(where: { $0.id == id }) { mutate(&devices[i]) }   // show it now
+        await serializedEdit {
+            guard var d = self.devices.first(where: { $0.id == id }) else { return }
+            mutate(&d)
+            await self.perform { try await self.engine.updateDevice(d) }
+            await self.refreshAll()
+        }
+    }
+
+    /// Edits run one after another; each re-reads the latest value when it
+    /// runs (an earlier edit's refresh may have replaced the array).
+    private func serializedEdit(_ operation: @escaping @MainActor () async -> Void) async {
+        let previous = editChain
+        let task = Task { @MainActor in
+            await previous?.value
+            await operation()
+        }
+        editChain = task
+        await task.value
     }
 
     func remove(_ device: Device) async -> Bool {
@@ -391,6 +451,17 @@ final class AppModel {
         if await perform({ try await engine.updateFolder(folder) }) { await refreshAll() }
     }
 
+    /// Applies `mutate` to the folder's latest value (see `updateDevice`).
+    func updateFolder(id: FolderID, _ mutate: @escaping (inout Folder) -> Void) async {
+        if let i = folders.firstIndex(where: { $0.id == id }) { mutate(&folders[i]) }   // show it now
+        await serializedEdit {
+            guard var f = self.folders.first(where: { $0.id == id }) else { return }
+            mutate(&f)
+            await self.perform { try await self.engine.updateFolder(f) }
+            await self.refreshAll()
+        }
+    }
+
     func remove(_ folder: Folder, deleteLocalFiles: Bool) async -> Bool {
         let ok = await perform { try await engine.removeFolder(folder.id, deleteLocalFiles: deleteLocalFiles) }
         if ok { await refreshAll() }
@@ -402,7 +473,8 @@ final class AppModel {
     }
 
     func syncNow() async {
-        for f in folders { _ = await perform { try await engine.scan(f.id, paths: nil) } }
+        // Upstream rejects scanning a paused folder ("rejected" banner each).
+        for f in folders where !f.paused { _ = await perform { try await engine.scan(f.id, paths: nil) } }
     }
 
     func resetConfiguration() async {

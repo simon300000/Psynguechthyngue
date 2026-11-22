@@ -39,6 +39,8 @@ import (
 //	}
 type IndexStream struct {
 	folderID string
+	// engine that tracks this stream (Close unregisters it). nil in tests.
+	engine *Engine
 
 	mu     sync.Mutex
 	db     dbQueries
@@ -99,7 +101,7 @@ func (e *Engine) OpenIndexStream(folderID string) (*IndexStream, error) {
 		return nil, newError(CodeInvalidArgument, "unknown folder %q", folderID)
 	}
 	internals := e.rt.app.Internals
-	s := &IndexStream{folderID: folderID, db: e.sdb}
+	s := &IndexStream{folderID: folderID, db: e.sdb, engine: e}
 	// Upstream runs the SQL query as soon as AllGlobalFiles is called and
 	// only closes the rows once the iterator is ranged, so the query is
 	// deferred to the first Next: an opened-but-unread stream holds nothing.
@@ -190,8 +192,15 @@ func (s *IndexStream) entry(md indexMeta) (IndexEntryJSON, error) {
 	return e, nil
 }
 
-// Close releases the DB snapshot. Idempotent.
+// Close releases the DB snapshot and unregisters the stream from its engine
+// (otherwise e.streams grows for the life of a long-running Mac engine).
+// Idempotent. Lock order: e.mu, then s.mu (same as Engine.Stop).
 func (s *IndexStream) Close() {
+	if e := s.engine; e != nil {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		delete(e.streams, s)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closeLocked0()

@@ -246,8 +246,8 @@ import Testing
 @Suite struct IgnoreRulesGeneratorTests {
     @Test func generatesManagedFile() throws {
         let lines = try IgnoreRulesGenerator.lines(present: [RelativePath(rawValue: "Photos/2026"), RelativePath(rawValue: "Docs/report.pdf")])
-        #expect(lines == [IgnoreRulesGenerator.header, "#include .stignore-user", "!/Docs/report.pdf", "!/Photos/2026", "*"])
-        #expect(try IgnoreRulesGenerator.lines(present: []) == [IgnoreRulesGenerator.header, "#include .stignore-user", "*"])
+        #expect(lines == [IgnoreRulesGenerator.header, "/.stignore-user", "#include .stignore-user", "!/Docs/report.pdf", "!/Photos/2026", "*"])
+        #expect(try IgnoreRulesGenerator.lines(present: []) == [IgnoreRulesGenerator.header, "/.stignore-user", "#include .stignore-user", "*"])
     }
 
     @Test func escapesGlobCharactersAndRoundTrips() throws {
@@ -257,7 +257,7 @@ import Testing
         #expect(lines.contains("!/a\\*b\\?.txt"))
         #expect(lines.contains("!/\\[x\\]\\{y\\}"))
         #expect(lines.contains("!/back\\\\slash"))
-        #expect(lines.allSatisfy { $0 == IgnoreRulesGenerator.header || $0.hasPrefix("!/") || $0 == "*" || $0.hasPrefix("#include") })
+        #expect(lines.allSatisfy { $0 == IgnoreRulesGenerator.header || $0 == IgnoreRulesGenerator.helperIgnoreLine || $0.hasPrefix("!/") || $0 == "*" || $0.hasPrefix("#include") })
         #expect(IgnoreRulesGenerator.presentPaths(from: lines) == Set(paths.map { RelativePath(rawValue: $0.rawValue.precomposedStringWithCanonicalMapping) }))
     }
 
