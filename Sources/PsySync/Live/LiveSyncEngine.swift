@@ -123,7 +123,10 @@ public actor LiveSyncEngine: SyncEngine {
             try? await doStop(.seconds(5))
         }
         setState(.starting)
-        guard let lease = await lock.acquire(owner: .app, timeout: config.lockTimeout) else {
+        // A restricted fetch in the extension is asked to yield (Files then
+        // gets the file from this engine) instead of failing with "busy".
+        let yield = EngineYield(lockURL: config.layout.engineLock)
+        guard let lease = await yield.acquireForApp(lock, timeout: config.lockTimeout) else {
             setState(.failed(code: "lock_unavailable", detail: "engine lock held by another process"))
             throw EngineError.lockUnavailable
         }
