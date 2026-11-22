@@ -334,3 +334,33 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(row.contentVersion == Data(base64Encoded: "aDM="))
     }
 }
+
+/// Dynamic E2E: after files.sqlite was rebuilt, the system kept the old item
+/// identifiers and anchors; every folder the user tapped answered noSuchItem
+/// and vanished from the listing.
+@Suite struct StoreGenerationTests {
+    let f1 = FolderID(rawValue: "f1")
+
+    @Test func rebuiltStoreExpiresOldAnchors() throws {
+        let dir = FilesFixtures.tempDir()
+        let old = try FilesFixtures.store(dir)
+        _ = try old.applyIndexBatch(f1, entries: (0..<50).map { FilesFixtures.file("f\($0)") })
+        let oldGeneration = try old.generation()
+        let oldAnchor = try old.currentAnchor()
+        #expect(oldGeneration != 0)
+        old.close()
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(at: URL(filePath: dir.appending(path: "Files/files.sqlite").path() + suffix))
+        }
+        let rebuilt = try FilesFixtures.store(dir)
+        _ = try rebuilt.applyIndexBatch(f1, entries: [FilesFixtures.file("f0")])
+        #expect(try rebuilt.generation() != oldGeneration)
+        // Legacy plain anchor from the old store is ahead of the new one.
+        #expect(throws: FilesStoreError.anchorExpired) {
+            _ = try rebuilt.reader(folder: f1).changes(since: oldAnchor, limit: 10, workingSetOnly: true)
+        }
+        #expect(FilesAnchor.decode(FilesAnchor.encode(generation: 7, anchor: 42))! == (7, 42))
+        #expect(FilesAnchor.decode("42")! == (nil, 42))
+        #expect(FilesAnchor.decode("x:1") == nil)
+    }
+}

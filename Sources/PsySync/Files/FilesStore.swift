@@ -124,6 +124,7 @@ public final class FilesStore: @unchecked Sendable {
     /// adopt the next hash the engine reports for the row.
     private static let additiveSQL = """
         CREATE TABLE IF NOT EXISTS adopted(item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, hash BLOB NOT NULL);
+        INSERT OR IGNORE INTO meta(key, value) VALUES ('generation', 1 + abs(random() % 1000000000));
         """
 
     private static let schemaSQL = """
@@ -779,6 +780,12 @@ public final class FilesStore: @unchecked Sendable {
         try read { db in try db.scalarInt64("SELECT value FROM meta WHERE key='anchor'") ?? 0 }
     }
 
+    /// Random per database file: a rebuilt store (corruption, schema change)
+    /// gets new item identifiers, so anchors from the old one must expire.
+    public func generation() throws -> Int64 {
+        try read { db in try db.scalarInt64("SELECT value FROM meta WHERE key='generation'") ?? 0 }
+    }
+
     func minimumAnchor() throws -> Int64 {
         try read { db in try db.scalarInt64("SELECT value FROM meta WHERE key='min_anchor'") ?? 0 }
     }
@@ -1111,6 +1118,9 @@ public struct FolderFilesReader: FilesMetadataReader {
         -> (updated: [FileItemRecord], deleted: [ItemIdentifier], newAnchor: Int64, more: Bool)
     {
         if anchor < (try store.minimumAnchor()) { throw FilesStoreError.anchorExpired }
+        // Ahead of this store: it was rebuilt under the system (legacy
+        // anchors carry no generation).
+        if anchor > (try store.currentAnchor()) { throw FilesStoreError.anchorExpired }
         let onDemand = try store.folderInfo(folder)?.contentMode == .onDemand
         return try store.read { db in
             let filter = workingSetOnly ? "AND (\(Self.workingSetPredicate(onDemand: onDemand)))" : ""
@@ -1156,6 +1166,7 @@ public struct FolderFilesReader: FilesMetadataReader {
     }
 
     public func currentAnchor() throws -> Int64 { try store.currentAnchor() }
+    public func generation() throws -> Int64 { try store.generation() }
 
     public func workingSet(after cursor: String?, limit: Int) throws -> (items: [FileItemRecord], next: String?) {
         let onDemand = try store.folderInfo(folder)?.contentMode == .onDemand
@@ -1173,6 +1184,23 @@ public struct FolderFilesReader: FilesMetadataReader {
                 items.append(FilesStore.record(from: s))
             }
             return (items, nil)
+        }
+    }
+}
+
+/// Sync anchors handed to the system: "<generation>:<anchor>". Plain
+/// "<anchor>" (before generations) is still accepted.
+public enum FilesAnchor {
+    public static func encode(generation: Int64, anchor: Int64) -> String { "\(generation):\(anchor)" }
+
+    public static func decode(_ text: String) -> (generation: Int64?, anchor: Int64)? {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        switch parts.count {
+        case 1: return Int64(parts[0]).map { (nil, $0) }
+        case 2:
+            guard let g = Int64(parts[0]), let a = Int64(parts[1]) else { return nil }
+            return (g, a)
+        default: return nil
         }
     }
 }
