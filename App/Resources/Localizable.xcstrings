@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%lld files in progress" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件正在传输"
+          }
+        }
+      }
+    },
     "Open Psynguechthyngue, the Syncthing client." : {
       "localizations" : {
         "zh-Hans" : {
@@ -27,6 +37,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设备温度过高时暂停同步，降温后自动恢复。关闭后会继续同步，但系统仍可能降低设备性能。"
+          }
+        }
+      }
+    },
+    "and %lld more" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %lld 个"
           }
         }
       }

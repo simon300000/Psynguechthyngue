@@ -6,6 +6,9 @@ struct HomeView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var acceptingFolder: PendingFolder?
     @State private var detailIssue: SyncIssue?
+    /// Per-file progress is collapsed by default: during a big sync the list
+    /// changes several times a second and made the whole page jump.
+    @State private var showFileTransfers = false
     @Namespace private var glass
 
     var body: some View {
@@ -112,6 +115,46 @@ struct HomeView: View {
 
     // MARK: Transfers
 
+    /// Collapsed: one fixed-height row with the count. Expanded: at most
+    /// `maxFileRows` files in a stable (path) order, so rows do not reshuffle.
+    private static let maxFileRows = 6
+
+    private var fileTransfers: some View {
+        let files = model.transfers.values.sorted { $0.id < $1.id }
+        return VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.snappy) { showFileTransfers.toggle() }
+            } label: {
+                HStack {
+                    Label("\(files.count) files in progress", systemImage: "doc.on.doc")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(showFileTransfers ? 90 : 0))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home.filetransfers")
+            if showFileTransfers {
+                ForEach(files.prefix(Self.maxFileRows)) { t in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(t.path.lastComponent, systemImage: "doc").font(.subheadline).lineLimit(1)
+                        ProgressView(value: t.fraction)
+                    }
+                    .transaction { $0.animation = nil }   // progress ticks must not animate layout
+                }
+                if files.count > Self.maxFileRows {
+                    Text("and \(files.count - Self.maxFileRows) more")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
+    }
+
     private var transfers: some View {
         VStack(spacing: 10) {
             CardHeader(title: "Transfers", systemImage: "arrow.up.arrow.down")
@@ -137,11 +180,8 @@ struct HomeView: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("transfer.\(folder.id.rawValue)")
                 }
-                ForEach(model.transfers.values.sorted { $0.id < $1.id }) { t in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label(t.path.lastComponent, systemImage: "doc").font(.subheadline).lineLimit(1)
-                        ProgressView(value: t.fraction)
-                    }
+                if !model.transfers.isEmpty {
+                    fileTransfers
                 }
                 if model.isContinuingInBackground {
                     Label("Syncing continues in the background", systemImage: "arrow.down.app")
