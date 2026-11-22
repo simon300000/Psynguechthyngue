@@ -127,9 +127,24 @@ final class FakeSyncthing: @unchecked Sendable {
         devices = [DeviceConfigDTO(deviceID: myID.rawValue, name: "me", addresses: ["dynamic"], paused: false, introducer: false, autoAcceptFolders: false)]
     }
 
+    /// Answer to GET /rest/config/folders is computed, then delayed this long.
+    var configFoldersDelay: TimeInterval = 0
+    /// Bodies served by GET /rest/events, one per poll ("[]" when empty).
+    var eventBatches: [String] = []
+
     func handle(_ r: StubURLProtocol.Recorded) -> StubURLProtocol.Response {
-        lock.withLock { route(r) }
+        let response = lock.withLock { route(r) }
+        if r.method == "GET", r.path == "/rest/config/folders" {
+            let delay = lock.withLock { configFoldersDelay }
+            if delay > 0 { Thread.sleep(forTimeInterval: delay) }
+        }
+        return response
     }
+
+    func addFolderConfig(_ f: FolderConfigDTO) { lock.withLock { folders.append(f) } }
+    func pushEvents(_ json: String) { lock.withLock { eventBatches.append(json) } }
+    func ignoreLines(_ folder: String) -> [String]? { lock.withLock { ignores[folder] } }
+    func setIgnoreLines(_ folder: String, _ lines: [String]) { lock.withLock { ignores[folder] = lines } }
 
     private func json(_ v: some Encodable) -> StubURLProtocol.Response {
         StubURLProtocol.Response(200, try! JSONEncoder().encode(v))
@@ -139,7 +154,9 @@ final class FakeSyncthing: @unchecked Sendable {
         let d = JSONDecoder()
         switch (r.method, r.path) {
         case ("GET", "/rest/system/ping"): return .json(#"{"ping":"pong"}"#)
-        case ("GET", "/rest/events"): return .json("[]")
+        case ("GET", "/rest/events"):
+            if !eventBatches.isEmpty { return .json(eventBatches.removeFirst()) }
+            return .json("[]")
         case ("GET", "/rest/config/devices"): return json(devices)
         case ("POST", "/rest/config/devices"):
             devices.append(try! d.decode(DeviceConfigDTO.self, from: r.body!)); return .json("")
@@ -167,9 +184,23 @@ final class FakeSyncthing: @unchecked Sendable {
             folders.append(try! d.decode(FolderConfigDTO.self, from: r.body!)); return .json("")
         case ("GET", "/rest/system/connections"): return .json(#"{"connections":{}}"#)
         case ("GET", "/rest/stats/device"), ("GET", "/rest/stats/folder"): return .json("{}")
-        case ("GET", "/rest/db/ignores"): return json(IgnoresDTO(ignore: ignores[r.query["folder"] ?? ""]))
+        case ("GET", "/rest/db/ignores"):
+            // Like upstream: .stignore on disk is the truth (in-memory only
+            // for folders whose directory does not exist).
+            let id = r.query["folder"] ?? ""
+            if let f = folders.first(where: { $0.id == id }),
+               let text = try? String(contentsOf: URL(filePath: f.path).appending(path: ".stignore"), encoding: .utf8) {
+                return json(IgnoresDTO(ignore: LiveSyncEngine.splitLines(text)))
+            }
+            return json(IgnoresDTO(ignore: ignores[id]))
         case ("POST", "/rest/db/ignores"):
-            ignores[r.query["folder"] ?? ""] = try! d.decode(IgnoresDTO.self, from: r.body!).ignore; return .json("{}")
+            let id = r.query["folder"] ?? ""
+            let lines = try! d.decode(IgnoresDTO.self, from: r.body!).ignore
+            ignores[id] = lines
+            if let f = folders.first(where: { $0.id == id }), FileManager.default.fileExists(atPath: f.path) {
+                try? Data(LiveSyncEngine.joinLines(lines ?? []).utf8).write(to: URL(filePath: f.path).appending(path: ".stignore"))
+            }
+            return .json("{}")
         case ("POST", "/rest/db/scan"), ("POST", "/rest/db/prio"): return .json("{}")
         case ("GET", "/rest/db/status"):
             return .json(#"{"state":"idle","globalBytes":0,"localBytes":0,"needBytes":0,"needTotalItems":0}"#)
@@ -181,6 +212,16 @@ final class FakeSyncthing: @unchecked Sendable {
                 let patch = try! JSONSerialization.jsonObject(with: r.body!) as! [String: Any]
                 if let i = devices.firstIndex(where: { $0.deviceID == id }), let p = patch["paused"] as? Bool { devices[i].paused = p }
                 if let i = devices.firstIndex(where: { $0.deviceID == id }), let n = patch["name"] as? String { devices[i].name = n }
+                return .json("")
+            }
+            if r.method == "PATCH", r.path.hasPrefix("/rest/config/folders/") {
+                let id = String(r.path.dropFirst("/rest/config/folders/".count))
+                let patch = try! JSONSerialization.jsonObject(with: r.body!) as! [String: Any]
+                if let i = folders.firstIndex(where: { $0.id == id }) {
+                    if let v = patch["label"] as? String { folders[i].label = v }
+                    if let v = patch["type"] as? String { folders[i].type = v }
+                    if let v = patch["paused"] as? Bool { folders[i].paused = v }
+                }
                 return .json("")
             }
             if r.method == "GET", r.path.hasPrefix("/rest/config/folders/") {

@@ -34,6 +34,9 @@ enum EventAction: Hashable, Sendable {
     case refreshPendingFolders
     case refreshFolder(FolderID)
     case refreshAllFolders
+    /// Events were lost (upstream's buffered subscription overflowed or
+    /// dropped some): refresh everything derived from events.
+    case resync
 }
 
 /// Pure translation of upstream `/rest/events` entries (DESIGN.md §3.2).
@@ -45,6 +48,15 @@ enum EventTranslator {
         "ConfigSaved", "LocalIndexUpdated", "RemoteIndexUpdated",
         "ItemStarted", "ItemFinished", "DownloadProgress",
     ]
+
+    /// Upstream numbers events per subscription (one per mask) without gaps
+    /// and keeps only the newest N in a ring buffer; a poll that falls behind
+    /// gets a batch whose first id is past `since + 1`. `since == 0` is the
+    /// first poll (nothing to miss yet).
+    static func missedEvents(since: Int, ids: [Int]) -> Bool {
+        guard since > 0, let first = ids.filter({ $0 > since }).min() else { return false }
+        return first > since + 1
+    }
 
     static func translate(_ e: RawEventDTO) -> [EventAction] {
         let d = e.data
@@ -138,6 +150,9 @@ final class EventPump: Sendable {
                 do {
                     let events = try await client.events(since: since, mask: EventTranslator.mask, timeout: pollTimeout)
                     failures = 0
+                    if EventTranslator.missedEvents(since: since, ids: events.map(\.id)) {
+                        await handle([.resync])
+                    }
                     for e in events.sorted(by: { $0.id < $1.id }) where e.id > since {
                         since = e.id
                         let actions = EventTranslator.translate(e)

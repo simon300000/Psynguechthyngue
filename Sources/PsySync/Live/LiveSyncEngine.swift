@@ -161,6 +161,7 @@ public actor LiveSyncEngine: SyncEngine {
             startPump(client)
             if let listenPort { try? await applyListenPort(listenPort, client) }
             try? await reconcilePolicy()
+            await migrateHelperIgnores(client)
             scheduleRefresh(nil)
             if let folders = try? await client.configFolders() {
                 for f in folders { scheduleConflictScan(FolderID(rawValue: f.id)) }
@@ -311,8 +312,27 @@ public actor LiveSyncEngine: SyncEngine {
                 scheduleRefresh([id])
             case .refreshAllFolders:
                 scheduleRefresh(nil)
+            case .resync:
+                await resync()
             }
         }
+    }
+
+    /// Missed events: the per-file progress may be stale (an ItemFinished
+    /// may be among the lost ones), so drop it, then refresh every folder,
+    /// the pending lists, and tell index consumers to re-read each folder.
+    private func resync() async {
+        inProgress = [:]
+        if let client, let folders = try? await client.configFolders() {
+            for f in folders {
+                let id = FolderID(rawValue: f.id)
+                broadcaster.yield(.indexChanged(folderID: id, paths: nil))
+                scheduleConflictScan(id)
+            }
+        }
+        scheduleRefresh(nil)
+        if let list = try? await pendingDevices() { broadcaster.yield(.pendingDevicesChanged(list)) }
+        if let list = try? await pendingFolders() { broadcaster.yield(.pendingFoldersChanged(list)) }
     }
 
     private func track(_ event: EngineEvent) {
@@ -370,12 +390,16 @@ public actor LiveSyncEngine: SyncEngine {
     private func flushRefresh() async {
         refreshTask = nil
         guard let client, case .running = engineState else { return }
+        // Take the pending work before the first suspension: anything
+        // scheduled while configFolders() is in flight starts a new task
+        // (refreshTask is nil) instead of being cleared unseen.
         var ids = pendingRefresh
-        if refreshAll, let folders = try? await client.configFolders() {
-            ids.formUnion(folders.map { FolderID(rawValue: $0.id) })
-        }
+        let all = refreshAll
         pendingRefresh = []
         refreshAll = false
+        if all, let folders = try? await client.configFolders() {
+            ids.formUnion(folders.map { FolderID(rawValue: $0.id) })
+        }
         for id in ids.sorted(by: { $0.rawValue < $1.rawValue }) {
             if let status = try? await folderStatus(id) {
                 broadcaster.yield(.folderStatusChanged(status))
@@ -644,16 +668,39 @@ public actor LiveSyncEngine: SyncEngine {
         }
         if folder.contentMode != current.contentMode {
             guard current.location == .managed else { throw EngineError.invalidArgument("external folders cannot be on-demand") }
-            let dir = config.layout.managedFolder(folder.id)
+            let dir = URL(filePath: existing.path, directoryHint: .isDirectory)
+            let id = folder.id.rawValue
+            let currentLines = try await client.ignores(id)
+            let alreadyManaged = IgnoreRulesGenerator.isManaged(currentLines)
             switch folder.contentMode {
             case .onDemand:
+                if alreadyManaged {
+                    if !FileManager.default.fileExists(atPath: dir.appending(path: IgnoreRulesGenerator.userFile).path(percentEncoded: false)) {
+                        try Self.writeHelperFile(Data(), to: dir.appending(path: IgnoreRulesGenerator.userFile))
+                    }
+                } else {
+                    // The user's rules move to .stignore-user (included by the
+                    // managed file; upstream fails the folder if it is missing).
+                    // The helper line is posted first so the file is ignored
+                    // before it is written and never syncs.
+                    let user = IgnoreRulesGenerator.userLines(fromEverything: Self.expandUserInclude(currentLines, dir: dir))
+                    try await client.setIgnores(id, lines: IgnoreRulesGenerator.everythingLines(user: user))
+                    try Self.writeHelperFile(Data(Self.joinLines(user).utf8), to: dir.appending(path: IgnoreRulesGenerator.userFile))
+                }
                 // Keep what is already local; everything else becomes on-demand.
                 let present = (try? FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false)))?
-                    .filter { !$0.hasPrefix(".st") && !$0.hasPrefix(".stignore") }
+                    .filter { !IgnoreRulesGenerator.isEngineInternal($0) }
                     .map(RelativePath.init(rawValue:)) ?? []
-                try await client.setIgnores(folder.id.rawValue, lines: try IgnoreRulesGenerator.lines(present: present))
+                try await client.setIgnores(id, lines: try IgnoreRulesGenerator.lines(present: present))
             case .everything:
-                try await client.setIgnores(folder.id.rawValue, lines: [IgnoreRulesGenerator.includeLine])
+                // The user's rules come back from .stignore-user into
+                // .stignore itself (what the editor shows and saves). The
+                // helper file stays on disk, ignored: deleting it is not
+                // needed and an ignored file's deletion is not propagated.
+                let user = alreadyManaged
+                    ? Self.readUserFile(dir)
+                    : IgnoreRulesGenerator.userLines(fromEverything: Self.expandUserInclude(currentLines, dir: dir))
+                try await client.setIgnores(id, lines: IgnoreRulesGenerator.everythingLines(user: user))
             }
             appState.folders[folder.id.rawValue, default: .init(contentMode: folder.contentMode)].contentMode = folder.contentMode
             try saveAppState()
@@ -752,6 +799,17 @@ public actor LiveSyncEngine: SyncEngine {
             if present {
                 current.insert(p)
             } else {
+                // A kept ancestor (`!/Photos`) would keep this path un-ignored
+                // after its rule is gone, so deleting the file would spread
+                // the deletion to every peer. Refuse instead of adding an
+                // explicit ignore line: the extension rewrites the managed
+                // file from `presentPaths` only and would drop such a line,
+                // which un-ignores the deleted file (upstream then marks it
+                // deleted and propagates that).
+                if let kept = Self.keptAncestor(of: p, in: current) {
+                    throw EngineError.invalidArgument(
+                        "\(p.rawValue) is inside \(kept.rawValue), which is kept on this device; remove the download of \(kept.rawValue) instead")
+                }
                 current = current.filter { $0 != p && !$0.rawValue.hasPrefix(p.rawValue + "/") }
             }
         }
@@ -772,12 +830,40 @@ public actor LiveSyncEngine: SyncEngine {
         }
     }
 
+    /// Folders written by older versions lack the `/.stignore-user` line, so
+    /// the helper file synced to peers. Adding the line makes upstream mark
+    /// our copy ignored at the next scan: peers keep whatever copy they got
+    /// (an ignored file is announced as invalid, never as deleted), and they
+    /// stop receiving it. Deleting it here instead would propagate a deletion
+    /// and could remove a peer's own `.stignore-user` (another phone running
+    /// this app shares the name). Folders that never used the helper file
+    /// are left alone.
+    private func migrateHelperIgnores(_ client: SyncthingRESTClient) async {
+        guard let folders = try? await client.configFolders() else { return }
+        for f in folders {
+            let id = FolderID(rawValue: f.id)
+            guard Self.samePath(f.path, config.layout.managedFolder(id)),
+                  let lines = try? await client.ignores(f.id),
+                  !lines.contains(IgnoreRulesGenerator.helperIgnoreLine) else { continue }
+            let dir = URL(filePath: f.path, directoryHint: .isDirectory)
+            if IgnoreRulesGenerator.isManaged(lines) {
+                if let rules = try? IgnoreRulesGenerator.lines(present: IgnoreRulesGenerator.presentPaths(from: lines)) {
+                    try? await client.setIgnores(f.id, lines: rules)
+                }
+            } else if lines.contains(IgnoreRulesGenerator.includeLine)
+                        || FileManager.default.fileExists(atPath: dir.appending(path: IgnoreRulesGenerator.userFile).path(percentEncoded: false)) {
+                try? await client.setIgnores(f.id, lines: IgnoreRulesGenerator.everythingLines(user: Self.expandUserInclude(lines, dir: dir)))
+            }
+        }
+    }
+
     private func writeOnDemandRulesToDisk(_ dir: URL, present: [RelativePath]) throws {
+        // .stignore first: it ignores .stignore-user before that file exists.
+        try Self.writeHelperFile(Data(IgnoreRulesGenerator.fileContents(present: present).utf8), to: dir.appending(path: ".stignore"))
         let user = dir.appending(path: IgnoreRulesGenerator.userFile)
         if !FileManager.default.fileExists(atPath: user.path(percentEncoded: false)) {
-            try Data().write(to: user, options: .atomic)
+            try Self.writeHelperFile(Data(), to: user)
         }
-        try Data(IgnoreRulesGenerator.fileContents(present: present).utf8).write(to: dir.appending(path: ".stignore"), options: .atomic)
     }
 
     /// Reduced-load mode: one folder at a time and limits on LAN too; the
@@ -843,10 +929,15 @@ public actor LiveSyncEngine: SyncEngine {
     public func userIgnoreRules(_ folder: FolderID) async throws -> [String] {
         let client = try requireClient()
         if let file = try await userIgnoreFile(folder) {
-            guard let data = FileManager.default.contents(atPath: file.path(percentEncoded: false)) else { return [] }
-            return Self.splitLines(String(decoding: data, as: UTF8.self))
+            return Self.readUserFile(file.deletingLastPathComponent())
         }
-        return try await client.ignores(folder.rawValue)
+        // Everything mode: the user's rules are .stignore itself, minus our
+        // helper line. A legacy `#include .stignore-user` (left by an older
+        // switch from on-demand) is shown expanded, so saving keeps the rules.
+        let dto = try await folderConfig(folder)
+        let lines = try await client.ignores(folder.rawValue)
+        return IgnoreRulesGenerator.userLines(fromEverything:
+            Self.expandUserInclude(lines, dir: URL(filePath: dto.path, directoryHint: .isDirectory)))
     }
 
     public func setUserIgnoreRules(_ folder: FolderID, _ lines: [String]) async throws {
@@ -857,11 +948,10 @@ public actor LiveSyncEngine: SyncEngine {
         if let file = try await userIgnoreFile(folder) {
             // On-demand: the managed .stignore includes .stignore-user; rewrite
             // it, then re-post the managed section so upstream reloads.
-            let body = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
-            try Data(body.utf8).write(to: file, options: .atomic)
+            try Self.writeHelperFile(Data(Self.joinLines(lines).utf8), to: file)
             try await client.setIgnores(folder.rawValue, lines: try await client.ignores(folder.rawValue))
         } else {
-            try await client.setIgnores(folder.rawValue, lines: lines)
+            try await client.setIgnores(folder.rawValue, lines: IgnoreRulesGenerator.everythingLines(user: lines))
         }
         try? await scan(folder, paths: nil)
     }
@@ -871,6 +961,57 @@ public actor LiveSyncEngine: SyncEngine {
         let dto = try await folderConfig(folder)
         guard appState.folders[folder.rawValue]?.contentMode == .onDemand else { return nil }
         return URL(filePath: dto.path, directoryHint: .isDirectory).appending(path: IgnoreRulesGenerator.userFile)
+    }
+
+    /// The nearest proper ancestor of `path` in `present`, if any.
+    static func keptAncestor(of path: RelativePath, in present: Set<RelativePath>) -> RelativePath? {
+        // Rules are NFC (IgnoreRulesGenerator.pattern), so compare in NFC.
+        var components = path.rawValue.precomposedStringWithCanonicalMapping.split(separator: "/", omittingEmptySubsequences: false).dropLast()
+        while !components.isEmpty {
+            let candidate = RelativePath(rawValue: components.joined(separator: "/"))
+            if present.contains(candidate) { return candidate }
+            components = components.dropLast()
+        }
+        return nil
+    }
+
+    static func joinLines(_ lines: [String]) -> String {
+        lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Lines of `<dir>/.stignore-user`; [] when missing.
+    static func readUserFile(_ dir: URL) -> [String] {
+        let file = dir.appending(path: IgnoreRulesGenerator.userFile)
+        guard let data = FileManager.default.contents(atPath: file.path(percentEncoded: false)) else { return [] }
+        return splitLines(String(decoding: data, as: UTF8.self))
+    }
+
+    /// Replaces a top-level `#include .stignore-user` with that file's lines.
+    static func expandUserInclude(_ lines: [String], dir: URL) -> [String] {
+        guard lines.contains(IgnoreRulesGenerator.includeLine) else { return lines }
+        var out: [String] = []
+        var expanded = false
+        for line in lines {
+            if line == IgnoreRulesGenerator.includeLine {
+                if !expanded { out += readUserFile(dir); expanded = true }
+            } else {
+                out.append(line)
+            }
+        }
+        return out
+    }
+
+    /// Writes a file inside a synced folder via a temporary name upstream
+    /// never syncs (`.syncthing.*.tmp`), then renames it into place, so no
+    /// intermediate file (Foundation's atomic-write temp) can be scanned.
+    static func writeHelperFile(_ data: Data, to url: URL) throws {
+        let temp = url.deletingLastPathComponent().appending(path: ".syncthing.psy-\(UUID().uuidString).tmp")
+        try data.write(to: temp)
+        if rename(temp.path(percentEncoded: false), url.path(percentEncoded: false)) != 0 {
+            let code = errno
+            try? FileManager.default.removeItem(at: temp)
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)])
+        }
     }
 
     static func splitLines(_ text: String) -> [String] {
