@@ -133,7 +133,8 @@ public actor LiveSyncEngine: SyncEngine {
             let bridge = bridge, store = identityStore, name = config.deviceName, timeout = config.startTimeout
             let storedPort = appState.listenPort, preferAlternate = config.preferAlternateListenPort, probe = config.portProbe
             let (endpoint, listenPort) = try await executor.run { () throws -> (RESTEndpoint, Int?) in
-                // Probe before our own engine binds 22000.
+                // Probe before our own engine binds its port (22000 or the
+                // stored one, which is re-checked: another instance may hold it).
                 let port = ListenAddressPlanner.alternatePort(
                     stored: storedPort,
                     defaultFree: storedPort != nil || probe(ListenAddressPlanner.defaultPort),
@@ -180,7 +181,8 @@ public actor LiveSyncEngine: SyncEngine {
     /// applied live by upstream) and in the app state.
     private func applyListenPort(_ port: Int, _ client: SyncthingRESTClient) async throws {
         let current = try await client.options().listenAddresses ?? ["default"]
-        if let rewritten = ListenAddressPlanner.rewrite(current, port: port) {
+        let previous = appState.listenPort.flatMap { $0 == port ? nil : $0 }
+        if let rewritten = ListenAddressPlanner.rewrite(current, port: port, previous: previous) {
             try await client.send("PATCH", "rest/config/options", json: ListenOptionsDTO(listenAddresses: rewritten))
         }
         if appState.listenPort != port {

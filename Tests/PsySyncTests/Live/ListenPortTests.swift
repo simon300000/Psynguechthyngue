@@ -22,6 +22,13 @@ import Testing
         #expect(ListenAddressPlanner.rewrite(["dynamic+https://relays.syncthing.net/endpoint"], port: 22001) == nil)
     }
 
+    @Test func rewritesPreviouslyChosenPort() {
+        let moved = ["tcp://:22001", "quic://:22001", ListenAddressPlanner.defaultRelay, "tcp://:4000"]
+        #expect(ListenAddressPlanner.rewrite(moved, port: 22002, previous: 22001) ==
+                ["tcp://:22002", "quic://:22002", ListenAddressPlanner.defaultRelay, "tcp://:4000"])
+        #expect(ListenAddressPlanner.rewrite(moved, port: 22002) == nil)
+    }
+
     @Test func alternatePortDecision() {
         let busy: Set<Int> = [22001, 22002]
         let isFree: (Int) -> Bool = { !busy.contains($0) }
@@ -31,8 +38,12 @@ import Testing
         #expect(ListenAddressPlanner.alternatePort(stored: nil, defaultFree: false, preferAlternate: false, isFree: isFree) == 22003)
         // Mac → always move, even if 22000 looks free.
         #expect(ListenAddressPlanner.alternatePort(stored: nil, defaultFree: true, preferAlternate: true, isFree: isFree) == 22003)
-        // A previously chosen port wins (stable address for peers).
-        #expect(ListenAddressPlanner.alternatePort(stored: 22042, defaultFree: false, preferAlternate: true, isFree: { _ in false }) == 22042)
+        // A previously chosen port wins while it is free (stable address for peers).
+        #expect(ListenAddressPlanner.alternatePort(stored: 22042, defaultFree: false, preferAlternate: true, isFree: { _ in true }) == 22042)
+        // …but is replaced when something else now holds it.
+        #expect(ListenAddressPlanner.alternatePort(stored: 22003, defaultFree: false, preferAlternate: false,
+                                                   isFree: { $0 != 22003 && !busy.contains($0) }) == 22004)
+        #expect(ListenAddressPlanner.alternatePort(stored: 22042, defaultFree: false, preferAlternate: true, isFree: { _ in false }) == 0)
         // Nothing free in the range → random port.
         #expect(ListenAddressPlanner.alternatePort(stored: nil, defaultFree: false, preferAlternate: false, isFree: { _ in false }) == 0)
     }
@@ -43,6 +54,7 @@ import Testing
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         #expect(fd >= 0)
         var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, socklen_t(MemoryLayout<Int32>.size))   // as Go does
         setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &on, socklen_t(MemoryLayout<Int32>.size))
         var addr = sockaddr_in()
         addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
@@ -81,16 +93,28 @@ extension LiveSyncEngineTests {
         try await h.engine.stop(deadline: .seconds(1))
         #expect(LiveEngineAppState.load(from: AppGroupLayout(root: h.root).engineHome).listenPort == 22003)
 
-        // Next launch: the stored port is reused without probing again.
+        // Next launch: the stored port is re-checked and reused while free.
         lock.withLock { probed.value = [] }
         let h2 = try makeHarness(root: h.root) { cfg in
-            cfg.portProbe = { port in lock.withLock { probed.value.append(port) }; return false }
+            cfg.portProbe = { port in lock.withLock { probed.value.append(port) }; return true }
         }
         try await h2.engine.start(context: .foreground)
         #expect(h2.fake.currentOptions.listenAddresses ==
                 ["tcp://:22003", "quic://:22003", "dynamic+https://relays.syncthing.net/endpoint"])
-        #expect(lock.withLock { probed.value }.isEmpty)
+        #expect(lock.withLock { probed.value } == [22003])
         try await h2.engine.stop(deadline: .seconds(1))
+
+        // Another instance took 22003 meanwhile → move to the next free port
+        // and write it back to config.xml and the app state.
+        let h3 = try makeHarness(root: h.root) { cfg in
+            cfg.portProbe = { port in port > 22003 }
+        }
+        h3.fake.setListenAddresses(h2.fake.currentOptions.listenAddresses)
+        try await h3.engine.start(context: .foreground)
+        #expect(h3.fake.currentOptions.listenAddresses ==
+                ["tcp://:22004", "quic://:22004", "dynamic+https://relays.syncthing.net/endpoint"])
+        try await h3.engine.stop(deadline: .seconds(1))
+        #expect(LiveEngineAppState.load(from: AppGroupLayout(root: h.root).engineHome).listenPort == 22004)
     }
 
     @Test func keepsDefaultListenerWhenFreeOffMac() async throws {
