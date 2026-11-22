@@ -38,6 +38,7 @@ struct DevicesView: View {
                         .padding(.top, 8)
                         .padding(.bottom, 96)   // room for the floating button
                     }
+                    .task { await model.metrics.watchTraffic() }
                 }
             }
             .glassScreen()
@@ -81,6 +82,11 @@ struct DeviceRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name.nilIfEmpty ?? device.id.short).font(.headline)
                 subtitle(conn).font(.subheadline).foregroundStyle(.secondary)
+                if !device.paused && conn?.state == .connected {
+                    RatePair(rate: model.metrics.deviceRates[device.id] ?? .zero)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("device.row.rates")
+                }
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
@@ -127,7 +133,6 @@ struct DeviceDetailView: View {
     var body: some View {
         let _ = perfProbe("DeviceDetailView")
         if let device = model.devices.first(where: { $0.id == deviceID }) {
-            let conn = model.connections[deviceID]
             Form {
                 Section("Name") {
                     TextField("Device name", text: $name)
@@ -144,16 +149,7 @@ struct DeviceDetailView: View {
                     ))
                     .accessibilityIdentifier("device.pause")
                 }
-                Section("Status") {
-                    LabeledContent("Connection") {
-                        if device.paused { Text("Paused") }
-                        else if conn?.state == .connected { Text(Format.connectionLabel(conn)) }
-                        else { Text("Offline") }
-                    }
-                    if let seen = conn?.lastSeen, conn?.state != .connected {
-                        LabeledContent("Last seen") { Text(Format.relative(seen)) }
-                    }
-                }
+                DeviceConnectionSection(device: device)
                 Section("Shared folders") {
                     let shared = model.folders.filter { $0.devices.contains(deviceID) }
                     if shared.isEmpty {
@@ -166,8 +162,6 @@ struct DeviceDetailView: View {
                 Section {
                     DisclosureGroup("Technical details") {
                         Text(device.id.rawValue).font(.caption.monospaced()).textSelection(.enabled)
-                        if let a = conn?.address { LabeledContent("Address") { Text(a) } }
-                        if let v = conn?.clientVersion { LabeledContent("Version") { Text(v) } }
                     }
                 }
                 Section {

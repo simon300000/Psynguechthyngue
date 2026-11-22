@@ -44,6 +44,8 @@ struct FolderDetailView: View {
                     }
                 }
 
+                FolderStatisticsSection(folder: folder, status: status)
+
                 let errors = status.issues.filter { $0.kind != .conflict }
                 if !errors.isEmpty {
                     Section("Problems") {
@@ -114,6 +116,8 @@ struct FolderDetailView: View {
                         ))
                     }
                 }
+
+                FolderCompletionSection(folder: folder, status: status)
 
                 Section {
                     DisclosureGroup("Advanced") {

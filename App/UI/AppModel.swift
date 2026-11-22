@@ -104,6 +104,8 @@ final class AppModel {
         guard let filesStatus else { return }
         filesLocation = await filesStatus.currentState()
     }
+    /// Rates and statistics, polled only while a screen shows them.
+    let metrics: MetricsMonitor
     /// Set while the onboarding cover is visible so adding the first device does not close it.
     var onboardingInProgress = false
 
@@ -127,6 +129,8 @@ final class AppModel {
         self.settings = settings
         self.notifier = notifier
         self.isFixture = isFixture
+        self.metrics = MetricsMonitor(engine: engine)
+        metrics.isLive = { [weak self] in self.map { $0.isActive && $0.isRunning } ?? false }
         host.onFailure = { [weak self] error in self?.report(error) }
     }
 
@@ -158,6 +162,7 @@ final class AppModel {
                 connections.removeAll()
                 listings.removeAll()
                 pendingListings.removeAll()
+                metrics.engineStopped()
             }
         case let .deviceConnectionChanged(c):
             if connections[c.deviceID] != c { connections[c.deviceID] = c }

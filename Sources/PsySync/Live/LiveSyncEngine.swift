@@ -1155,6 +1155,27 @@ public actor LiveSyncEngine: SyncEngine {
         }
     }
 
+    // MARK: Statistics (MetricsMapping)
+
+    public func traffic() async throws -> TrafficSample {
+        let client = try requireClient()
+        return MetricsMapping.traffic(try await client.get("rest/system/connections"), excluding: myID)
+    }
+
+    public func folderDetails(_ id: FolderID) async throws -> FolderDetails {
+        let client = try requireClient()
+        async let db: DBCountsDTO = client.get("rest/db/status", query: [.init(name: "folder", value: id.rawValue)])
+        let stats: [String: FolderStatsDetailDTO] = (try? await client.get("rest/stats/folder")) ?? [:]
+        return MetricsMapping.folderDetails(try await db, stats: stats[id.rawValue])
+    }
+
+    public func systemInfo() async throws -> EngineSystemInfo {
+        let client = try requireClient()
+        async let status: SystemStatusDetailDTO = client.get("rest/system/status")
+        let version = (try? await client.get("rest/system/version") as SystemVersionDTO)?.version ?? ""
+        return MetricsMapping.systemInfo(try await status, version: version)
+    }
+
     // MARK: Policy
 
     public func apply(_ decision: PolicyDecision) async throws {

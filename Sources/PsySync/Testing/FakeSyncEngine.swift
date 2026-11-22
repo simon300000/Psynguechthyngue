@@ -54,7 +54,8 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
         default: // "populated", "errors"
             s.devices = [Device(id: sampleIDs[0], name: "Home Server"), Device(id: sampleIDs[1], name: "Work Laptop")]
             s.connections = [
-                DeviceConnection(deviceID: sampleIDs[0], state: .connected, transport: "tcp-lan", address: "192.168.1.5:22000", lastSeen: now),
+                DeviceConnection(deviceID: sampleIDs[0], state: .connected, transport: "tcp-client", isLocalNetwork: true, address: "192.168.1.5:22000",
+                                 clientVersion: "v2.1.6", lastSeen: now, inBytesTotal: 40_000_000, outBytesTotal: 10_000_000),
                 DeviceConnection(deviceID: sampleIDs[1], state: .disconnected, lastSeen: now.addingTimeInterval(-3600 * 5)),
             ]
             s.folders = [
@@ -63,7 +64,7 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
                 Folder(id: FolderID(rawValue: "notes-00001"), label: "Notes", devices: [sampleIDs[1]]),
             ]
             s.statuses = [
-                FolderStatus(folderID: s.folders[0].id, state: .upToDate, progress: SyncProgress(globalBytes: 5_000_000, localBytes: 5_000_000), lastScan: now),
+                FolderStatus(folderID: s.folders[0].id, state: .upToDate, progress: SyncProgress(globalBytes: 5_000_000, localBytes: 5_000_000, remoteCompletion: [sampleIDs[0]: 100, sampleIDs[1]: 82], globalItems: 1_340), lastScan: now),
                 FolderStatus(folderID: s.folders[1].id, state: .syncing, progress: SyncProgress(globalBytes: 800_000_000, localBytes: 300_000_000, needBytes: 500_000_000, needItems: 120), lastSyncedFile: RelativePath(rawValue: "2026/IMG_0042.heic")),
                 FolderStatus(folderID: s.folders[2].id, state: name == "errors" ? .error : .waitingForDevices, progress: SyncProgress(globalBytes: 1000, localBytes: 900, needBytes: 100, needItems: 1),
                              issues: name == "errors" ? [SyncIssue(id: "e1", kind: .outOfSpace, folderID: s.folders[2].id, path: nil, technicalDetail: "write /x: no space left on device", occurredAt: now),
@@ -296,4 +297,59 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
         sync { $0.userIgnores[folder] = lines }
     }
     public var syncthingVersion: String { get async { "v2.1.6" } }
+
+    // MARK: Statistics
+
+    /// Counters grow at a fixed rate per connected device since the engine
+    /// was created (Home Server: 1.5 MB/s down, 256 KB/s up), so the UI shows
+    /// steady, deterministic rates.
+    public static let fakeRate = TransferRate(inPerSecond: 1_500_000, outPerSecond: 256_000)
+    private let createdAt = Date()
+
+    public func traffic() async throws -> TrafficSample {
+        try failIfScripted()
+        let now = Date()
+        let elapsed = max(0, now.timeIntervalSince(createdAt))
+        let connected = sync { m in m.scenario.connections.filter { $0.state == .connected }.map(\.deviceID) }
+        var devices: [DeviceID: DeviceTraffic] = [:]
+        for (i, id) in connected.enumerated() {
+            let base = Int64(40_000_000 * (i + 1))
+            devices[id] = DeviceTraffic(inBytesTotal: base + Int64(Self.fakeRate.inPerSecond * elapsed),
+                                        outBytesTotal: base / 4 + Int64(Self.fakeRate.outPerSecond * elapsed),
+                                        connectionCount: 2)
+        }
+        return TrafficSample(at: now, inBytesTotal: devices.values.map(\.inBytesTotal).reduce(0, +),
+                             outBytesTotal: devices.values.map(\.outBytesTotal).reduce(0, +), devices: devices)
+    }
+
+    public func folderDetails(_ id: FolderID) async throws -> FolderDetails {
+        try failIfScripted()
+        let status = try await folderStatus(id)
+        let p = status.progress
+        let files = max(1, p.globalItems > 0 ? p.globalItems * 9 / 10 : p.globalBytes / 400_000)
+        let dirs = max(1, files / 12)
+        let needFiles = min(files, p.needItems)
+        return FolderDetails(
+            global: .init(files: files, directories: dirs, deleted: files / 20, bytes: p.globalBytes),
+            local: .init(files: files - needFiles, directories: dirs, deleted: files / 20, bytes: p.localBytes),
+            needBytes: p.needBytes, needItems: p.needItems,
+            lastScan: status.lastScan ?? createdAt.addingTimeInterval(-300),
+            lastFile: status.lastSyncedFile ?? RelativePath(rawValue: "Notes/Shopping.txt"),
+            lastFileAt: createdAt.addingTimeInterval(-120))
+    }
+
+    public func systemInfo() async throws -> EngineSystemInfo {
+        try failIfScripted()
+        return EngineSystemInfo(
+            version: "v2.1.6", startedAt: createdAt, uptime: Date().timeIntervalSince(createdAt) + 3 * 3600 + 25 * 60,
+            memoryAllocBytes: 38_000_000, memorySysBytes: 71_000_000, goroutines: 84,
+            listeners: [
+                .init(address: "dynamic+https://relays.syncthing.net/endpoint", wanAddresses: ["relay://203.0.113.7:22067"]),
+                .init(address: "quic://0.0.0.0:22000", lanAddresses: ["quic://192.168.1.23:22000"], wanAddresses: ["quic://198.51.100.4:22000"]),
+                .init(address: "tcp://0.0.0.0:22000", lanAddresses: ["tcp://192.168.1.23:22000"], wanAddresses: ["tcp://198.51.100.4:22000"]),
+            ],
+            discoveryEnabled: true,
+            discovery: [.init(method: "IPv4 local"), .init(method: "IPv6 local"),
+                        .init(method: "global@https://discovery.syncthing.net/v2/")])
+    }
 }

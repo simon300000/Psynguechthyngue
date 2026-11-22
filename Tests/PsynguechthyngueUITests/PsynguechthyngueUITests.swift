@@ -293,9 +293,11 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         launch()
         tab("Folders")
         el("folder.row.Documents").tap()
+        XCTAssertTrue(el("folder.state").waitForExistence(timeout: 5))
+        // The detail form is lazy and long (contents, device completion):
+        // the button exists only once scrolled into view.
         let remove = el("folder.remove")
-        XCTAssertTrue(remove.waitForExistence(timeout: 5))
-        scrollTo(remove)
+        XCTAssertTrue(scrollTo(remove, maxSwipes: 10))
         remove.tap()
         app.buttons.matching(NSPredicate(format: "label == %@", "Stop Syncing, Keep Files")).firstMatch.tap()
         XCTAssertTrue(waitGone(el("folder.row.Documents"), timeout: 5))

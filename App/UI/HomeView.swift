@@ -365,6 +365,7 @@ struct StatusCard: View {
                 } else if !model.devices.isEmpty {
                     Text("\(model.connectedCount) of \(model.devices.count) devices connected")
                         .font(.subheadline).foregroundStyle(.secondary)
+                    if model.connectedCount > 0 { HomeTrafficRow() }
                     if model.isOnMac {
                         Text("Closing the window stops syncing. Minimize it to keep syncing.")
                             .font(.footnote).foregroundStyle(.secondary)
