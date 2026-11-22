@@ -3,3 +3,4 @@
 "FILES_ERROR_OPEN_APP" = "No device is reachable. Open Psynguechthyngue to download this file.";
 "FILES_ERROR_TOO_LARGE" = "This file is too large to download here. Open Psynguechthyngue to download it.";
 "FILES_ERROR_STALE" = "This file has changed on other devices. Open Psynguechthyngue to sync.";
+"FILES_ERROR_LOW_MEMORY" = "Not enough memory to download here right now. Open Psynguechthyngue to download this file.";

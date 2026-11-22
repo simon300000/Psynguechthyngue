@@ -255,7 +255,13 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         try FileManager.default.createDirectory(at: layout.staging, withIntermediateDirectories: true)
         let staged = layout.staging.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: staged) }
-        let available = configuration.availableMemory?() ?? 0
+        var available = configuration.availableMemory?() ?? 0
+        if configuration.fetchBudget.fitted(availableBytes: available) == nil, let release = configuration.afterFetch {
+            // The previous fetch returns its Go memory asynchronously (afterFetch
+            // runs detached); release it now and measure again before refusing.
+            try? await BlockingThread.run { release() }
+            available = configuration.availableMemory?() ?? 0
+        }
         guard let budget = configuration.fetchBudget.fitted(availableBytes: available) else {
             log.error("restricted fetch refused: available \(available >> 20, privacy: .public) MiB")
             throw FilesContentError.openAppRequired(.lowMemory)

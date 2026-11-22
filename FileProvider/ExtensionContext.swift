@@ -27,9 +27,19 @@ final class ExtensionContext: @unchecked Sendable {
         let services = RestrictedFetchServices.make(layout: layout)
         var configuration = LiveContentProvider.Configuration()
         configuration.afterFetch = services.afterFetch
+        #if DEBUG
+        // Simulator reproduction: os_proc_available_memory() is 0 there; a
+        // number (MiB) in this file stands in for the device headroom.
+        let headroomOverride = layout.root.appending(path: "Library/Caches/Diagnostics/debug-available-mib")
+        #endif
         configuration.availableMemory = {
-            let available = UInt64(os_proc_available_memory())
+            var available = UInt64(os_proc_available_memory())
             #if DEBUG
+            if let text = try? String(contentsOf: headroomOverride, encoding: .utf8),
+                let mib = UInt64(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            {
+                available = mib << 20
+            }
             let limit = RestrictedFetchBudget.default.fitted(availableBytes: available)?.memory.limitMiB ?? -1
             FootprintProbe.file?.append("fetch-budget available=\(available >> 20)MiB gomemlimit=\(limit)MiB")
             #endif
