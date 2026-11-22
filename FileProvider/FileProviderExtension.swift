@@ -418,6 +418,16 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             }
             DarwinNotifier.post(DarwinNotification.filesRequestPosted)
             context.manager?.signalEnumerator(for: .workingSet) { _ in }
+            // The pin flag is in the item's version and userInfo; signalling
+            // the listing that shows it (its parent) makes the system re-read
+            // it now, so the menu flips to Remove/Keep right away.
+            var parents = Set<NSFileProviderItemIdentifier>()
+            for identifier in itemIdentifiers {
+                if let record = try? context.record(identifier) {
+                    parents.insert(FileProviderItem.identifier(record.parentID, rootID: context.rootID))
+                }
+            }
+            for parent in parents { context.manager?.signalEnumerator(for: parent) { _ in } }
             if !keep, let manager = context.manager {
                 // The App drops the engine copy; drop the Files copy too, or
                 // the item stays "downloaded" in Files (FilesMaterializer
