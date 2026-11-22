@@ -331,10 +331,20 @@ func waitHealthy(baseURL string, deadline time.Time, app *syncthing.App) error {
 // watchExit reports an unexpected exit (anything but our own Stop) to Swift.
 func (e *Engine) watchExit(rt *upstreamRuntime, logs *sinkShared) {
 	rt.app.Wait()
+	e.handleExit(rt, rt.app.Error(), logs)
+}
+
+// handleExit is watchExit after the App returned (split out for tests).
+func (e *Engine) handleExit(rt *upstreamRuntime, appErr error, logs *sinkShared) {
 	e.mu.Lock()
 	unexpected := e.rt == rt && !e.stopping
 	if unexpected {
 		e.closeStreamsLocked()
+		// Bridge-side goroutines (peer cache writer) would otherwise leak:
+		// only Stop's stopAsync cancelled them.
+		if rt.extraCancel != nil {
+			rt.extraCancel()
+		}
 		rt.earlyCancel()
 		e.rt = nil
 		e.endpoint = nil
@@ -344,7 +354,7 @@ func (e *Engine) watchExit(rt *upstreamRuntime, logs *sinkShared) {
 	e.mu.Unlock()
 	if unexpected && e.obs != nil {
 		code, detail := CodeNotRunning, "engine stopped"
-		if err := rt.app.Error(); err != nil {
+		if err := appErr; err != nil {
 			detail = logs.redact(err.Error())
 			if strings.Contains(strings.ToLower(detail), "database") || strings.Contains(detail, "sqlite") {
 				code = CodeDatabase
