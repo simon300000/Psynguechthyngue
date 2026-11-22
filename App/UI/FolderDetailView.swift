@@ -20,6 +20,7 @@ struct FolderDetailView: View {
                         Spacer()
                     }
                     .accessibilityIdentifier("folder.state")
+                    FolderWorkProgress(status: status, listing: model.listing(of: folder))
                     if status.state == .syncing || status.progress.needBytes > 0 {
                         ProgressView(value: status.progress.fractionCompleted)
                         Text("\(Format.bytes(status.progress.needBytes)) left · \(status.progress.needItems) items")

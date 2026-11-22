@@ -94,6 +94,7 @@ struct FolderRow: View {
             if status.state == .syncing {
                 ProgressView(value: status.progress.fractionCompleted)
             }
+            FolderWorkProgress(status: status, listing: model.listing(of: folder), compact: true)
             if let issue = status.issues.first {
                 Label {
                     if status.issues.count > 1 {
@@ -210,5 +211,39 @@ struct AcceptFolderSheet: View {
             .onAppear { if label.isEmpty { label = pending.label } }
         }
         .presentationDetents([.large])
+    }
+}
+
+/// Background work that keeps a folder from being "up to date": the peer's
+/// file list arriving (indeterminate, items received so far) or the Files
+/// list being built (N of M). Shown in the folder row and detail.
+struct FolderWorkProgress: View {
+    let status: FolderStatus
+    let listing: FilesListingProgress?
+    var compact = false
+
+    var body: some View {
+        switch status.state {
+        case .fetchingIndex:
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView().progressViewStyle(.linear)
+                if status.progress.globalItems > 0 {
+                    Text("\(status.progress.globalItems) items received so far")
+                        .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
+            .accessibilityIdentifier("folder.work")
+        case .preparingFiles:
+            let total = max(Int(status.progress.globalItems), listing?.processed ?? 0, 1)
+            let done = min(listing?.processed ?? 0, total)
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: Double(done), total: Double(total))
+                Text("\(done) of \(total) items listed for Files")
+                    .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
+            }
+            .accessibilityIdentifier("folder.work")
+        default:
+            EmptyView()
+        }
     }
 }

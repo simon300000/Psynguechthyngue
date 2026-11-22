@@ -9,6 +9,13 @@ public enum FolderSyncState: String, Codable, Sendable {
     case syncing
     /// Local scan in progress.
     case scanning
+    /// A connected device shares this folder but its file list (index) has
+    /// not fully arrived yet; nothing can be called up to date. (Upstream:
+    /// completion `remoteState` not yet "valid", or RemoteIndexUpdated just now.)
+    case fetchingIndex
+    /// App-level: the index is complete but the list Files shows is still being
+    /// built (FilesProjector pass adding rows). See `FolderStatusComposer`.
+    case preparingFiles
     /// Work is pending but no device sharing this folder is connected.
     case waitingForDevices
     /// Paused by the user.
@@ -31,6 +38,10 @@ public struct SyncProgress: Hashable, Codable, Sendable {
     public var inProgressBytes: Int64
     /// Remote devices' completion of *our* changes, 0...100 (upload side).
     public var remoteCompletion: [DeviceID: Double]
+    /// Files + directories + symlinks in the global index (upstream
+    /// `globalFiles + globalDirectories + globalSymlinks`): "N items received"
+    /// while the index arrives, and the total for the Files list progress.
+    public var globalItems: Int64
 
     public init(
         globalBytes: Int64 = 0,
@@ -38,8 +49,10 @@ public struct SyncProgress: Hashable, Codable, Sendable {
         needBytes: Int64 = 0,
         needItems: Int64 = 0,
         inProgressBytes: Int64 = 0,
-        remoteCompletion: [DeviceID: Double] = [:]
+        remoteCompletion: [DeviceID: Double] = [:],
+        globalItems: Int64 = 0
     ) {
+        self.globalItems = globalItems
         self.globalBytes = globalBytes
         self.localBytes = localBytes
         self.needBytes = needBytes

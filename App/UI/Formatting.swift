@@ -7,6 +7,8 @@ extension FolderSyncState {
         case .upToDate: "Up to date"
         case .syncing: "Syncing"
         case .scanning: "Scanning"
+        case .fetchingIndex: "Getting file list…"
+        case .preparingFiles: "Preparing file list…"
         case .waitingForDevices: "Waiting for devices"
         case .paused: "Paused"
         case .heldByPolicy: "On hold"
@@ -20,6 +22,8 @@ extension FolderSyncState {
         case .upToDate: "checkmark.circle.fill"
         case .syncing: "arrow.triangle.2.circlepath"
         case .scanning: "magnifyingglass"
+        case .fetchingIndex: "arrow.down.doc"
+        case .preparingFiles: "list.bullet.rectangle"
         case .waitingForDevices: "clock"
         case .paused: "pause.circle"
         case .heldByPolicy: "hand.raised.circle"
@@ -31,7 +35,7 @@ extension FolderSyncState {
     var tint: Color {
         switch self {
         case .upToDate: .green
-        case .syncing, .scanning: .blue
+        case .syncing, .scanning, .fetchingIndex, .preparingFiles: .blue
         case .waitingForDevices, .heldByPolicy, .offline: .orange
         case .paused: .secondary
         case .error: .red

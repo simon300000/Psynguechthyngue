@@ -326,7 +326,12 @@ struct StatusCard: View {
         let states = model.folders.map { model.status(of: $0).state }
         if states.contains(.error) { return Summary(title: "Some folders have problems", symbol: "exclamationmark.triangle.fill", tint: .red) }
         if states.contains(.syncing) || states.contains(.scanning) { return Summary(title: "Syncing…", symbol: "arrow.triangle.2.circlepath", tint: .blue) }
+        if states.contains(.fetchingIndex) { return Summary(title: "Getting file lists…", symbol: "arrow.down.doc.fill", tint: .blue) }
+        if states.contains(.preparingFiles) { return Summary(title: "Preparing file lists…", symbol: "list.bullet.rectangle.fill", tint: .blue) }
         if states.contains(.waitingForDevices) { return Summary(title: "Waiting for devices", symbol: "clock.fill", tint: .orange) }
+        if !states.isEmpty, states.allSatisfy({ $0 == .paused }) {
+            return Summary(title: "All folders are paused", symbol: "pause.circle.fill", tint: .secondary)
+        }
         return Summary(title: "Everything is up to date", symbol: "checkmark.circle.fill", tint: .green)
     }
 
@@ -345,6 +350,8 @@ struct StatusCard: View {
                 } else if model.host.decision.reducedResourceUsage {
                     Text("Syncing more slowly while the system saves resources")
                         .font(.subheadline).foregroundStyle(.secondary)
+                } else if case let .failed(_, detail) = model.engineState {
+                    Text(detail).font(.footnote).foregroundStyle(.secondary)
                 } else if !model.devices.isEmpty {
                     Text("\(model.connectedCount) of \(model.devices.count) devices connected")
                         .font(.subheadline).foregroundStyle(.secondary)
@@ -353,8 +360,6 @@ struct StatusCard: View {
                             .font(.footnote).foregroundStyle(.secondary)
                             .accessibilityIdentifier("home.machint")
                     }
-                } else if case let .failed(_, detail) = model.engineState {
-                    Text(detail).font(.footnote).foregroundStyle(.secondary)
                 }
             }
         }
