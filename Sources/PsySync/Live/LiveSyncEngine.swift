@@ -292,6 +292,14 @@ public actor LiveSyncEngine: SyncEngine {
         setState(.failed(code: "engine_unreachable", detail: "\(error)"))
     }
 
+    /// The bridge reported that upstream exited on its own (ExitObserver).
+    /// Marks a running engine failed right away instead of after the event
+    /// pump's repeated poll failures; the host then restarts it.
+    public func bridgeExited(code: String?, detail: String) {
+        guard case .running = engineState else { return }
+        setState(.failed(code: code ?? "engine_exited", detail: detail))
+    }
+
     // MARK: Events
 
     public nonisolated func events() -> AsyncStream<EngineEvent> {

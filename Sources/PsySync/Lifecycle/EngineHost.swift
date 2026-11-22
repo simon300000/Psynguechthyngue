@@ -67,3 +67,30 @@ public enum LifecycleBudget {
     public static let backgroundStopDeadline: Duration = .seconds(10)
     public static let foregroundStartTimeout: Duration = .seconds(20)
 }
+
+/// Exponential backoff for restarting an engine that died or failed to start
+/// while the app is in the foreground: 1, 2, 4 … 60 s. A run that lasted at
+/// least `stableAfter` resets the sequence.
+public struct EngineRestartBackoff: Hashable, Sendable {
+    public var base: Duration = .seconds(1)
+    public var cap: Duration = .seconds(60)
+    public var stableAfter: Duration = .seconds(60)
+    private var attempts = 0
+    private var lastStart: ContinuousClock.Instant?
+
+    public init() {}
+
+    /// The engine reached `.running` at `now`.
+    public mutating func noteStarted(at now: ContinuousClock.Instant) { lastStart = now }
+
+    /// Delay before the next restart after a failure observed at `now`.
+    public mutating func nextDelay(now: ContinuousClock.Instant) -> Duration {
+        if let lastStart, now - lastStart >= stableAfter { attempts = 0 }
+        lastStart = nil
+        let factor = 1 << min(attempts, 16)
+        attempts += 1
+        return min(base * factor, cap)
+    }
+
+    public var attemptCount: Int { attempts }
+}

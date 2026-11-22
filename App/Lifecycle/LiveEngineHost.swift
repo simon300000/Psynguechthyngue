@@ -51,6 +51,10 @@ final class LiveEngineHost: EngineHosting {
     @ObservationIgnored var onEngineWillStop: (@MainActor () async -> Void)?
     /// `didReceiveMemoryWarning` → `psybridge.Engine.OnMemoryWarning`.
     @ObservationIgnored var onMemoryWarning: (@MainActor () -> Void)?
+    /// Watches engine state so a dead engine is restarted in the foreground.
+    @ObservationIgnored private var failureWatch: Task<Void, Never>?
+    @ObservationIgnored private var restartBackoff = EngineRestartBackoff()
+    @ObservationIgnored private var restartScheduled = false
 
     init(
         engine: any SyncEngine,
@@ -72,6 +76,15 @@ final class LiveEngineHost: EngineHosting {
             // Out of band: must not queue behind the running task.
             log.record("bg-expiring")
             backgroundExpired = true
+            // Start the stop now, under its own background-time assertion:
+            // waiting for runBackgroundTask's poll loop (a snapshot can take
+            // 2 s) plus a 5 s stop could overrun the expiration grace period.
+            Task { @MainActor in
+                await self.enqueue {
+                    guard self.isBackgroundRunning, !self.continuedProcessing else { return }
+                    await self.drain(reason: "bg-expired", requireTask: true, deadline: .seconds(5))
+                }
+            }
             return
         case .didBecomeActive:
             appActive = true
@@ -141,9 +154,15 @@ final class LiveEngineHost: EngineHosting {
             pendingBackgroundToken = nil
             endTask(token)
         }
+        watchEngineFailures()
         switch phase {
         case .foregroundRunning:
-            return
+            // Normally nothing to do, but the engine may have died meanwhile.
+            guard case .failed = await engine.state else { return }
+            log.record("engine-restart", "failed engine found on didBecomeActive")
+            await onEngineWillStop?()
+            await stopQuietly()
+            phase = .idle
         case .backgroundRunning:
             // BG task still owns the engine; promote it to the foreground run.
             log.record("foreground-promote")
@@ -161,6 +180,7 @@ final class LiveEngineHost: EngineHosting {
             }
             phase = .foregroundRunning
             lastFailure = nil
+            restartBackoff.noteStarted(at: .now)
             await applyPolicy(force: true)
             log.record("engine-running")
             await onEngineStarted?()
@@ -169,6 +189,47 @@ final class LiveEngineHost: EngineHosting {
             fail("start", error)
             // A timed-out start may still complete later: make sure it is stopped.
             await stopQuietly()
+            if appActive { scheduleRestart(reason: "start-failed") }
+        }
+    }
+
+    // MARK: Restart after failure (foreground)
+
+    /// Subscribes once to engine events: a `.failed` state while running in
+    /// the foreground (bridge exit, REST unreachable) schedules stop + start
+    /// with exponential backoff.
+    private func watchEngineFailures() {
+        guard failureWatch == nil else { return }
+        let stream = engine.events()
+        failureWatch = Task { [weak self] in
+            for await event in stream {
+                guard case .engineStateChanged(.failed(let code, _)) = event else { continue }
+                guard let self else { return }
+                if self.phase == .foregroundRunning && self.appActive {
+                    self.scheduleRestart(reason: "engine-failed code=\(code)")
+                }
+            }
+        }
+    }
+
+    private func scheduleRestart(reason: String) {
+        guard !restartScheduled else { return }
+        restartScheduled = true
+        let delay = restartBackoff.nextDelay(now: .now)
+        log.record("engine-restart-scheduled", "\(reason) in \(delay) attempt=\(restartBackoff.attemptCount)")
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            await self.enqueue {
+                self.restartScheduled = false
+                guard self.appActive, self.phase == .foregroundRunning || self.phase == .idle else { return }
+                if self.phase == .foregroundRunning {
+                    guard case .failed = await self.engine.state else { return }   // recovered meanwhile
+                    await self.onEngineWillStop?()
+                    await self.stopQuietly()
+                    self.phase = .idle
+                }
+                await self.becomeActive()
+            }
         }
     }
 
@@ -243,7 +304,9 @@ final class LiveEngineHost: EngineHosting {
         let reason = backgroundExpired ? "expired" : (settled ? "settled" : "max-runtime")
         await enqueue {
             if self.isBackgroundRunning {
-                await self.drain(reason: "bg-\(reason)", requireTask: false, deadline: .seconds(5))
+                // requireTask: the BG task's own time may be nearly gone
+                // (expiry); an assertion covers the stop (0xdead10cc).
+                await self.drain(reason: "bg-\(reason)", requireTask: true, deadline: .seconds(5))
             }
         }
         return settled
