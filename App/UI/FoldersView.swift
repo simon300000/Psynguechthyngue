@@ -255,6 +255,12 @@ struct FolderWorkProgress: View {
                     .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
             }
             .accessibilityIdentifier("folder.work")
+        case .waitingForDevices where status.progress.sizeIsPartial:
+            // The peer's file list was cut off (app switched away) and the
+            // device is not back yet.
+            Text("File list incomplete; it continues when the device is back")
+                .font(compact ? .caption : .footnote).foregroundStyle(.secondary)
+                .accessibilityIdentifier("folder.work")
         case .waitingForDevices where status.progress.needItems > 0:
             // Downloads the user asked for (opened in Files, Keep Downloaded)
             // or that the folder needs: kept, and they start on reconnect.

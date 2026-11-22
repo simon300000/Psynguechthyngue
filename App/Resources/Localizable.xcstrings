@@ -2881,6 +2881,16 @@
           }
         }
       }
+    },
+    "File list incomplete; it continues when the device is back" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件列表尚不完整，设备重新连接后继续接收"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

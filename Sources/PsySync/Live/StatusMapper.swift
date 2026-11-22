@@ -44,6 +44,8 @@ public struct FolderStatusInputs: Hashable, Sendable {
     public struct IndexPeer: Hashable, Sendable {
         public enum Phase: String, Hashable, Sendable {
             case receiving, awaiting, complete, disconnected
+            /// Offline, and what we hold of its index is known to be partial.
+            case interrupted
         }
         public var phase: Phase
         /// The peer's index entries stored here (deletions included).
@@ -139,7 +141,7 @@ public enum StatusMapper {
             globalItems: i.globalItems,
             indexEntriesReceived: arriving.values.reduce(0) { $0 + $1.entries },
             indexDeletionsReceived: arriving.values.reduce(0) { $0 + $1.deletions },
-            sizeIsPartial: !arriving.isEmpty
+            sizeIsPartial: !arriving.isEmpty || !interruptedIndexPeers(i).isEmpty
         )
         let fileErrors = i.folderErrors.filter { !isTransientDisconnectError($0.error) }
         let state = state(i, validRemotes: validRemotes, fileErrors: fileErrors)
@@ -171,6 +173,12 @@ public enum StatusMapper {
     static func arrivingIndexPeers(_ i: FolderStatusInputs) -> [DeviceID: FolderStatusInputs.IndexPeer] {
         guard i.engineRunning, !i.folderPaused, let peers = i.indexPeers else { return [:] }
         return peers.filter { id, p in p.isArriving && i.remotes[id]?.remoteState != "notSharing" }
+    }
+
+    /// Offline peers whose index we hold only in part.
+    static func interruptedIndexPeers(_ i: FolderStatusInputs) -> [DeviceID: FolderStatusInputs.IndexPeer] {
+        guard i.engineRunning, !i.folderPaused, let peers = i.indexPeers else { return [:] }
+        return peers.filter { _, p in p.phase == .interrupted }
     }
 
     static func state(_ i: FolderStatusInputs, validRemotes: [DeviceID: FolderStatusInputs.RemoteCompletion],
@@ -246,6 +254,9 @@ public enum StatusMapper {
         // unknown, not up to date.
         let knowsAnything = i.globalBytes > 0 || i.globalItems > 0 || i.remotes.values.contains { $0.remoteState == "valid" }
         if !i.remotes.isEmpty && !anyConnected && !knowsAnything { return .waitingForDevices }
+        // A transfer cut off (app switched away, engine stopped) and the peer
+        // not back yet: the list is partial, not up to date.
+        if !interruptedIndexPeers(i).isEmpty { return .waitingForDevices }
         return .upToDate
     }
 

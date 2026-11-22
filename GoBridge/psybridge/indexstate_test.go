@@ -132,8 +132,11 @@ func TestPhaseQuietCases(t *testing.T) {
 	db.apply(1000, 0)
 	tr.batch("f", testPeer, 1000, db.remoteSeq)
 	tr.disconnected(testPeer)
-	if p, _ := tr.phase("f", testPeer, db.remoteSeq); p != IndexPhaseDisconnected {
-		t.Fatalf("disconnected: %s", p)
+	if p, _ := tr.phase("f", testPeer, db.remoteSeq); p != IndexPhaseInterrupted {
+		t.Fatalf("disconnected mid-transfer: %s", p)
+	}
+	if p, _ := tr.phase("other", testPeer, 5); p != IndexPhaseDisconnected {
+		t.Fatalf("disconnected, nothing pending: %s", p)
 	}
 	clock.t = clock.t.Add(time.Minute)
 	tr.clusterConfig(testPeer)

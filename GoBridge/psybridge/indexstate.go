@@ -54,6 +54,9 @@ const (
 	IndexPhaseAwaiting     = "awaiting"
 	IndexPhaseComplete     = "complete"
 	IndexPhaseDisconnected = "disconnected"
+	// Disconnected while its index is known to be incomplete (a transfer
+	// was cut off, or it never sent one): what we have is partial.
+	IndexPhaseInterrupted = "interrupted"
 )
 
 // indexDB is what the tracker reads from upstream's DB.
@@ -384,7 +387,11 @@ func (t *indexTracker) phase(folder string, dev protocol.DeviceID, sequence int6
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.devices[dev]
+	key := indexKey(folder, dev)
 	if d == nil {
+		if t.incomplete[key] || sequence == 0 {
+			return IndexPhaseInterrupted, 0
+		}
 		return IndexPhaseDisconnected, 0
 	}
 	now := t.now()
@@ -396,7 +403,6 @@ func (t *indexTracker) phase(folder string, dev protocol.DeviceID, sequence int6
 	if d.lastBatchAt.After(quietSince) {
 		quietSince = d.lastBatchAt
 	}
-	key := indexKey(folder, dev)
 	f := d.folders[folder]
 	var received int64
 	if f != nil {

@@ -305,6 +305,12 @@ import Testing
         #expect(map(.awaiting) {
             $0.remotes = [a: .init(completion: 0, remoteState: "notSharing", connected: true)]
         }.state == .upToDate)
+        // Cut off mid-transfer and the peer not back yet: partial, waiting.
+        let cut = map(.interrupted) {
+            $0.remotes = [a: .init(completion: 100, remoteState: "unknown", connected: false)]
+        }
+        #expect(cut.state == .waitingForDevices)
+        #expect(cut.progress.sizeIsPartial)
         // Paused: no index work shown.
         #expect(map(.receiving) { $0.folderPaused = true }.state == .paused)
         #expect(!map(.receiving) { $0.folderPaused = true }.progress.sizeIsPartial)
