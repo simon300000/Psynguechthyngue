@@ -171,29 +171,45 @@ public enum ExternalLocation {
         /// Container-manager identifier of the `Containers/Shared/AppGroup/<UUID>`
         /// container the path lives in, if any and readable.
         public var groupContainerIdentifier: String?
+        /// File Provider that serves the directory, read from its bookmark
+        /// (`fp:/…/<provider>//…`). On a device the sandbox cannot read the
+        /// container-manager identifier (EPERM), so this is what identifies
+        /// "On My iPhone / iPad" there.
+        public var fileProviderIdentifier: String?
 
         public init(path: String, isUbiquitous: Bool = false, hasDatalessContent: Bool = false,
-                    groupContainerIdentifier: String? = nil) {
+                    groupContainerIdentifier: String? = nil, fileProviderIdentifier: String? = nil) {
             self.path = path
             self.isUbiquitous = isUbiquitous
             self.hasDatalessContent = hasDatalessContent
             self.groupContainerIdentifier = groupContainerIdentifier
+            self.fileProviderIdentifier = fileProviderIdentifier
         }
 
         public static func probe(_ url: URL) -> LocationFacts {
             let path = url.standardizedFileURL.resolvingSymlinksInPath().path(percentEncoded: false)
             let ubiquitous = (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true
+            let group = groupContainer(of: path)
+            let groupID = group.flatMap(ExternalLocation.containerIdentifier(atGroupPath:))
+            // Only needed where ownership decides the outcome.
+            let provider = (group != nil && groupID == nil)
+                ? (try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil))
+                    .flatMap(ExternalLocation.fileProviderIdentifier(bookmark:))
+                : nil
             return LocationFacts(
                 path: path,
                 isUbiquitous: ubiquitous,
                 hasDatalessContent: ExternalLocation.hasDatalessContent(url),
-                groupContainerIdentifier: groupContainer(of: path).flatMap(ExternalLocation.containerIdentifier(atGroupPath:))
+                groupContainerIdentifier: groupID,
+                fileProviderIdentifier: provider
             )
         }
     }
 
     /// Group container of the system "On My iPhone / iPad" provider.
     public static let localStorageGroup = "group.com.apple.FileProvider.LocalStorage"
+    /// Provider identifier of "On My iPhone / iPad" as it appears in bookmarks.
+    public static let localStorageProvider = "com.apple.FileProvider.LocalStorage"
 
     public static func classify(_ facts: LocationFacts) -> Kind {
         let path = facts.path.hasSuffix("/") ? facts.path : facts.path + "/"
@@ -209,7 +225,8 @@ public enum ExternalLocation {
         // extensions keep "File Provider Storage"): only the system local
         // storage provider is real local disk. Unknown owner → refuse.
         if groupContainer(of: facts.path) != nil || path.contains("/File Provider Storage/") {
-            return facts.groupContainerIdentifier == localStorageGroup ? .local : .cloud
+            if let id = facts.groupContainerIdentifier { return id == localStorageGroup ? .local : .cloud }
+            return facts.fileProviderIdentifier == localStorageProvider ? .local : .cloud
         }
         return .local
     }
@@ -237,6 +254,27 @@ public enum ExternalLocation {
         guard let data = try? Data(contentsOf: plist),
               let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
         return dict["MCMMetadataIdentifier"] as? String
+    }
+
+    /// Provider identifier from the File Provider token a bookmark carries
+    /// (`fp:/<domain-hash>/<provider>//fid=…`, observed on iOS 27). The
+    /// format is not documented: anything unexpected yields nil, which
+    /// `classify` treats as "unknown owner" and refuses.
+    static func fileProviderIdentifier(bookmark: Data) -> String? {
+        var run: [UInt8] = []
+        func provider() -> String? {
+            let token = String(decoding: run, as: UTF8.self)
+            guard token.hasPrefix("fp:/"), let head = token.components(separatedBy: "//").first,
+                  head.count < token.count,
+                  let last = head.split(separator: "/").last, last.contains(".") else { return nil }
+            return String(last)
+        }
+        for byte in bookmark + [0] {
+            if byte >= 0x20 && byte < 0x7f { run.append(byte); continue }
+            if let id = provider() { return id }
+            run.removeAll(keepingCapacity: true)
+        }
+        return nil
     }
 
     /// True if `url` or one of its direct children carries `SF_DATALESS`.
