@@ -195,6 +195,7 @@ final class AppModel {
             pendingFolders = try await engine.pendingFolders()
             debugAutoAccept()
             debugRemoveIfRequested()
+            debugAddDeviceIfRequested()
             debugFileOpsIfRequested()
             let snap = try await engine.snapshot()
             var merged = Dictionary(uniqueKeysWithValues: snap.folders.map { ($0.folderID, $0) })
@@ -601,6 +602,21 @@ extension AppModel {
             LifecycleLog.shared.record("debug-auto-accept", "folder \(folder.folderID.rawValue)")
             Task { _ = await accept(folder, label: folder.label, location: .managed, mode: .everything) }
         }
+        #endif
+    }
+
+    /// `-PsyDebugAddDevice <deviceID>@<address>`: add a test peer (named
+    /// `psy-test-peer`) so the phone dials it; the peer then sees this device
+    /// as pending. Real-device tests without UI automation. Debug only.
+    func debugAddDeviceIfRequested() {
+        #if DEBUG
+        guard !isFixture, let spec = UserDefaults.standard.string(forKey: "PsyDebugAddDevice"),
+              let at = spec.firstIndex(of: "@"), debugAccepted.insert("add-device").inserted else { return }
+        let id = DeviceID(rawValue: String(spec[..<at]))
+        let address = String(spec[spec.index(after: at)...])
+        guard !devices.contains(where: { $0.id == id }) else { return }
+        LifecycleLog.shared.record("debug-add-device", "\(id.short) \(address)")
+        Task { _ = await perform { try await self.engine.addDevice(Device(id: id, name: "psy-test-peer", addresses: [address])) } }
         #endif
     }
 
