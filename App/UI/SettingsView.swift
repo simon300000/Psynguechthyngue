@@ -31,7 +31,11 @@ struct SettingsView: View {
                 Section {
                     Toggle("Pause in Low Power Mode", isOn: $settings.pauseInLowPowerMode)
                         .accessibilityIdentifier("settings.lowpower")
-                } header: { Text("Power") }
+                    Toggle("Pause while the device is hot", isOn: $settings.pauseWhenHot)
+                        .accessibilityIdentifier("settings.thermal")
+                } header: { Text("Power") } footer: {
+                    Text("When the device gets very hot, syncing pauses until it cools down. Turning this off lets syncing continue, but the system may still slow the device down.")
+                }
 
                 if model.isOnMac {
                     Section {

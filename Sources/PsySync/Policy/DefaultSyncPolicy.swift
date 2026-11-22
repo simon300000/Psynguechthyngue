@@ -45,7 +45,7 @@ public struct DefaultSyncPolicy: SyncPolicy {
         if inputs.isLowPowerMode && preferences.pauseInLowPowerMode {
             return PolicyDecision(hold: .lowPowerMode)
         }
-        if inputs.thermalSerious {
+        if inputs.thermalSerious && preferences.pauseWhenHot {
             return PolicyDecision(hold: .thermal)
         }
         var decision = PolicyDecision.run

@@ -10,7 +10,7 @@ import Testing
             (i.network == .cellular && !p.syncOnCellular, .cellularDisallowed),
             (i.isConstrained && p.respectLowDataMode, .lowDataMode),
             (i.isLowPowerMode && p.pauseInLowPowerMode, .lowPowerMode),
-            (i.thermalSerious, .thermal),
+            (i.thermalSerious && p.pauseWhenHot, .thermal),
         ]
         if let hit = rows.first(where: { $0.0 }) { return PolicyDecision(hold: hit.1) }
         var send = 0, recv = 0
@@ -55,15 +55,18 @@ import Testing
         for cellular in [false, true] {
             for ldm in [false, true] {
                 for lpm in [false, true] {
-                    for send in [0, 128, 2048] {
-                        for recv in [0, 512, 8192] {
-                            var p = PolicyPreferences()
-                            p.syncOnCellular = cellular
-                            p.respectLowDataMode = ldm
-                            p.pauseInLowPowerMode = lpm
-                            p.cellularSendLimitKiBps = send
-                            p.cellularReceiveLimitKiBps = recv
-                            out.append(p)
+                    for hot in [false, true] {
+                        for send in [0, 128, 2048] {
+                            for recv in [0, 512, 8192] {
+                                var p = PolicyPreferences()
+                                p.syncOnCellular = cellular
+                                p.respectLowDataMode = ldm
+                                p.pauseInLowPowerMode = lpm
+                                p.pauseWhenHot = hot
+                                p.cellularSendLimitKiBps = send
+                                p.cellularReceiveLimitKiBps = recv
+                                out.append(p)
+                            }
                         }
                     }
                 }
@@ -104,7 +107,17 @@ import Testing
                 count += 1
             }
         }
-        #expect(count == 3 * 2 * 2 * 2 * 2 * 5 * 2 * 2 * (2 * 2 * 2 * 3 * 3))
+        #expect(count == 3 * 2 * 2 * 2 * 2 * 5 * 2 * 2 * (2 * 2 * 2 * 2 * 3 * 3))
+    }
+
+    @Test func thermalPauseIsOnByDefaultAndCanBeTurnedOff() {
+        let policy = DefaultSyncPolicy()
+        let hot = PolicyInputs(network: .wifiOrWired, thermalSerious: true)
+        var prefs = PolicyPreferences()
+        #expect(prefs.pauseWhenHot)
+        #expect(policy.decide(inputs: hot, preferences: prefs).hold == .thermal)
+        prefs.pauseWhenHot = false
+        #expect(policy.decide(inputs: hot, preferences: prefs) == .run)
     }
 
     @Test func defaultsArePermissive() {

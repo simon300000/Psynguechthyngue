@@ -11,6 +11,26 @@
         }
       }
     },
+    "Pause while the device is hot" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备过热时暂停"
+          }
+        }
+      }
+    },
+    "When the device gets very hot, syncing pauses until it cools down. Turning this off lets syncing continue, but the system may still slow the device down." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备温度过高时暂停同步，降温后自动恢复。关闭后会继续同步，但系统仍可能降低设备性能。"
+          }
+        }
+      }
+    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {

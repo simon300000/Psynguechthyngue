@@ -67,6 +67,8 @@ public struct PolicyPreferences: Hashable, Codable, Sendable {
     public var syncOnCellular: Bool = true
     public var respectLowDataMode: Bool = true
     public var pauseInLowPowerMode: Bool = false
+    /// Pause while the device is hot (thermal state serious or critical).
+    public var pauseWhenHot: Bool = true
     /// KiB/s, 0 = unlimited. Applied via Syncthing options.maxSendKbps/maxRecvKbps.
     public var cellularSendLimitKiBps: Int = 0
     public var cellularReceiveLimitKiBps: Int = 0

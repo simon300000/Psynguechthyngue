@@ -13,6 +13,7 @@ final class AppSettings {
     var syncOnCellular: Bool { didSet { defaults.set(syncOnCellular, forKey: "psy.syncOnCellular"); changed() } }
     var respectLowDataMode: Bool { didSet { defaults.set(respectLowDataMode, forKey: "psy.respectLowData"); changed() } }
     var pauseInLowPowerMode: Bool { didSet { defaults.set(pauseInLowPowerMode, forKey: "psy.pauseLowPower"); changed() } }
+    var pauseWhenHot: Bool { didSet { defaults.set(pauseWhenHot, forKey: "psy.pauseWhenHot"); changed() } }
     var cellularSendLimit: Int { didSet { defaults.set(cellularSendLimit, forKey: "psy.cellularSend"); changed() } }
     var cellularReceiveLimit: Int { didSet { defaults.set(cellularReceiveLimit, forKey: "psy.cellularRecv"); changed() } }
     var backgroundSync: Bool { didSet { defaults.set(backgroundSync, forKey: BackgroundScheduler.enabledKey); changed() } }
@@ -30,6 +31,7 @@ final class AppSettings {
         syncOnCellular = bool("psy.syncOnCellular", true)
         respectLowDataMode = bool("psy.respectLowData", true)
         pauseInLowPowerMode = bool("psy.pauseLowPower", false)
+        pauseWhenHot = bool("psy.pauseWhenHot", true)
         cellularSendLimit = defaults.integer(forKey: "psy.cellularSend")
         cellularReceiveLimit = defaults.integer(forKey: "psy.cellularRecv")
         backgroundSync = bool(BackgroundScheduler.enabledKey, true)
@@ -41,6 +43,7 @@ final class AppSettings {
         p.syncOnCellular = syncOnCellular
         p.respectLowDataMode = respectLowDataMode
         p.pauseInLowPowerMode = pauseInLowPowerMode
+        p.pauseWhenHot = pauseWhenHot
         p.cellularSendLimitKiBps = cellularSendLimit
         p.cellularReceiveLimitKiBps = cellularReceiveLimit
         return p
