@@ -127,6 +127,7 @@ public final class FilesStore: @unchecked Sendable {
         INSERT OR IGNORE INTO meta(key, value) VALUES ('generation', 1 + abs(random() % 1000000000));
         CREATE TABLE IF NOT EXISTS materialized_version(
             item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, content_version BLOB NOT NULL);
+        CREATE TABLE IF NOT EXISTS projected(folder_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
         """
 
     private static let schemaSQL = """
@@ -837,6 +838,29 @@ public final class FilesStore: @unchecked Sendable {
 
     /// Random per database file: a rebuilt store (corruption, schema change)
     /// gets new item identifiers, so anchors from the old one must expire.
+    /// Engine index fingerprint the folder was last fully projected from
+    /// (`SyncEngine.indexFingerprint`); nil = never / unknown.
+    public func projectedFingerprint(_ folder: FolderID) throws -> String? {
+        try read { db in
+            let s = try db.prepare("SELECT fingerprint FROM projected WHERE folder_id=?")
+            defer { sqlite3_reset(s.handle) }
+            try s.bind([.text(folder.rawValue)])
+            return try s.step() == SQLITE_ROW ? s.text(at: 0) : nil
+        }
+    }
+
+    public func setProjectedFingerprint(_ folder: FolderID, _ fingerprint: String?) throws {
+        _ = try write { ctx in
+            if let fingerprint {
+                try ctx.db.run("INSERT OR REPLACE INTO projected(folder_id, fingerprint) VALUES (?, ?)",
+                               [.text(folder.rawValue), .text(fingerprint)])
+            } else {
+                try ctx.db.run("DELETE FROM projected WHERE folder_id=?", [.text(folder.rawValue)])
+            }
+            return ctx.anchor
+        }
+    }
+
     public func generation() throws -> Int64 {
         try read { db in try db.scalarInt64("SELECT value FROM meta WHERE key='generation'") ?? 0 }
     }
@@ -947,7 +971,8 @@ extension FilesStore: FilesMetadataWriter {
 
     public func removeFolder(_ folder: FolderID) throws -> Int64 {
         try write { ctx in
-            for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders", "adopted", "materialized_version"] {
+            for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders", "adopted",
+                          "materialized_version", "projected"] {
                 try ctx.db.run("DELETE FROM \(table) WHERE folder_id=?", [.text(folder.rawValue)])
             }
             return ctx.anchor

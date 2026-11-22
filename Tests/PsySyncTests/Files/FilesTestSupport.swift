@@ -15,8 +15,18 @@ final class FilesFakeEngine: SyncEngine, @unchecked Sendable {
     var pageDelay: Duration?
     /// Pages delivered by `globalIndex` (tests wait on it).
     private(set) var pagesServed = 0
+    /// globalIndex calls (passes that actually read the index).
+    var streamsOpened: Int { lock.withLock { _streamsOpened } }
+    private var _streamsOpened = 0
 
     func setIndex(_ folder: FolderID, _ entries: [GlobalIndexEntry]) { lock.withLock { index[folder] = entries } }
+    /// Returned by indexFingerprint (nil: unknown, every pass runs).
+    var fingerprint: String? {
+        get { lock.withLock { _fingerprint } }
+        set { lock.withLock { _fingerprint = newValue } }
+    }
+    private var _fingerprint: String?
+    func indexFingerprint(_ folder: FolderID) async -> String? { fingerprint }
     func record(_ call: String) { lock.withLock { calls.append(call) } }
     var recordedCalls: [String] { lock.withLock { calls } }
 
@@ -67,7 +77,7 @@ final class FilesFakeEngine: SyncEngine, @unchecked Sendable {
     }
     func apply(_ decision: PolicyDecision) async throws {}
     func globalIndex(_ folder: FolderID, pageSize: Int) -> AsyncThrowingStream<[GlobalIndexEntry], Error> {
-        let entries = lock.withLock { index[folder] ?? [] }
+        let entries = lock.withLock { _streamsOpened += 1; return index[folder] ?? [] }
         if let delay = lock.withLock({ pageDelay }) {
             let (stream, continuation) = AsyncThrowingStream<[GlobalIndexEntry], Error>.makeStream()
             let task = Task { [self] in

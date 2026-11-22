@@ -443,6 +443,49 @@ struct ContentHarness {
         #expect(!traces.value.contains { $0.contains("swept=") && !$0.contains("swept=0") }, "\(traces.value)")
     }
 
+    /// Real device: every return to the foreground re-walked every folder
+    /// twice ("folders" then "start", 2.5 s each for 8k entries) although
+    /// nothing had changed. An unchanged engine fingerprint skips the pass;
+    /// explicit requests still run.
+    @Test func unchangedIndexIsNotProjectedAgain() async throws {
+        let h = try ContentHarness(mode: .onDemand)
+        let engine = FilesFakeEngine()
+        engine.setIndex(f1, [FilesFixtures.file("a")])
+        engine.fingerprint = "seq-1"
+        let traces = LockedBox<[String]>([])
+        let projector = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(10), pageSize: 3,
+                                       trace: { line in traces.mutate { $0.append(line) } }) { _ in }
+        await projector.setFolders([f1])
+        #expect(await eventually { traces.value.contains { $0.contains("swept=") } })
+        await projector.start()
+        #expect(await eventually { traces.value.contains { $0.contains("unchanged") } }, "\(traces.value)")
+        #expect(engine.streamsOpened == 1)
+
+        engine.emit(.indexChanged(folderID: f1, paths: nil))
+        #expect(await eventually { traces.value.filter { $0.contains("unchanged") }.count >= 2 }, "\(traces.value)")
+        #expect(engine.streamsOpened == 1)
+
+        // The index changed: projected.
+        engine.setIndex(f1, [FilesFixtures.file("a"), FilesFixtures.file("b")])
+        engine.fingerprint = "seq-2"
+        engine.emit(.indexChanged(folderID: f1, paths: nil))
+        #expect(await eventually { traces.value.filter { $0.contains("swept=") }.count == 2 })
+        #expect(try h.store.itemCount(f1) == 3)  // root + a + b
+        // A new projector (App relaunch) finds the stored fingerprint.
+        await projector.stop()
+        let again = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(10), pageSize: 3,
+                                   trace: { line in traces.mutate { $0.append(line) } }) { _ in }
+        let before = engine.streamsOpened
+        traces.mutate { $0.removeAll() }
+        await again.setFolders([f1])
+        #expect(await eventually { traces.value.last?.contains("unchanged") == true })
+        #expect(engine.streamsOpened == before)
+        // Explicit requests always run.
+        await again.projectNow(f1)
+        #expect(engine.streamsOpened == before + 1)
+        await again.stop()
+    }
+
     /// Regression: two requests waiting on the same running pass both started
     /// together afterwards; the second reset the shared mark set and the first
     /// then swept everything it had not marked since.
