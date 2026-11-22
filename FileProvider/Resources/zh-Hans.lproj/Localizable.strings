@@ -4,3 +4,4 @@
 "FILES_ERROR_TOO_LARGE" = "文件太大，无法在此下载，请打开 Psynguechthyngue 下载。";
 "FILES_ERROR_STALE" = "此文件已在其他设备上更改，请打开 Psynguechthyngue 同步。";
 "FILES_ERROR_LOW_MEMORY" = "当前内存不足，无法在此下载。请打开 Psynguechthyngue 下载此文件。";
+"FILES_ERROR_QUEUED" = "暂时没有可连接的设备。设备可用时 Psynguechthyngue 会自动下载此文件。";

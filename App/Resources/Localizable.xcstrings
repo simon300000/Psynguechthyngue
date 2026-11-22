@@ -39,6 +39,34 @@
         }
       }
     },
+    "%lld files waiting for a device" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld file waiting for a device"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld files waiting for a device"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件等待设备连接"
+          }
+        }
+      }
+    },
     "%lld items received so far" : {
       "localizations" : {
         "en" : {

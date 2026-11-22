@@ -50,6 +50,8 @@ enum ErrorMapping {
             return String(localized: "FILES_ERROR_TOO_LARGE", defaultValue: "This file is too large to download here. Open Psynguechthyngue to download it.")
         case .lowMemory:
             return String(localized: "FILES_ERROR_LOW_MEMORY", defaultValue: "Not enough memory to download here right now. Open Psynguechthyngue to download this file.")
+        case .queuedNoPeer:
+            return String(localized: "FILES_ERROR_QUEUED", defaultValue: "No device is reachable right now. Psynguechthyngue will download this file when one is.")
         case .staleIndex:
             return String(localized: "FILES_ERROR_STALE", defaultValue: "This file has changed on other devices. Open Psynguechthyngue to sync.")
         default:

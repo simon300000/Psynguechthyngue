@@ -242,6 +242,12 @@ struct FolderWorkProgress: View {
                     .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
             }
             .accessibilityIdentifier("folder.work")
+        case .waitingForDevices where status.progress.needItems > 0:
+            // Downloads the user asked for (opened in Files, Keep Downloaded)
+            // or that the folder needs: kept, and they start on reconnect.
+            Text("\(status.progress.needItems) files waiting for a device")
+                .font(compact ? .caption : .footnote).foregroundStyle(.secondary).monospacedDigit()
+                .accessibilityIdentifier("folder.work")
         default:
             EmptyView()
         }

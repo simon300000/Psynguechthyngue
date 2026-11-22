@@ -103,6 +103,10 @@ final class FilesIntegration {
                     switch event {
                     case .configurationChanged:
                         await self?.foldersChanged()
+                    case .deviceConnectionChanged(let c) where c.state == .connected:
+                        // Files backs off after "server unreachable" until
+                        // told otherwise; a device is back, so retry now.
+                        await self?.deviceConnected()
                     default:
                         break
                     }
@@ -153,6 +157,12 @@ final class FilesIntegration {
     /// Local files Files has not materialized yet (FolderDetailView hint).
     func notYetInFiles(_ folder: FolderID) -> Int {
         (try? store?.unmaterializedLocalFileCount(folder)) ?? 0
+    }
+
+    private func deviceConnected() async {
+        let folders = (try? await engine.folders()) ?? []
+        let managed = folders.filter { if case .managed = $0.location { return true } else { return false } }
+        await DomainManager.resolveErrors(managed.map(\.id))
     }
 
     func foldersChanged() async {
