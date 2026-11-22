@@ -410,7 +410,11 @@ final class EngineSettingsUITests: PsyUITestCase {
     /// so it may already be expanded and scrolled.
     private func openAdvancedSettings() {
         tab("Settings")
-        XCTAssertTrue(app.switches["settings.cellular"].waitForExistence(timeout: 5))
+        // The form keeps its scroll position across tab switches; when it is
+        // scrolled to the end, the first (lazily built) rows do not exist.
+        let cellular = app.switches["settings.cellular"]
+        for _ in 0..<6 where !cellular.waitForExistence(timeout: 1) { app.swipeDown() }
+        XCTAssertTrue(cellular.waitForExistence(timeout: 5))
         // Advanced is the last section: scroll to the end so lazily built rows exist,
         // then expand only if it is still collapsed (tapping again would collapse it).
         for _ in 0..<4 { app.swipeUp() }
