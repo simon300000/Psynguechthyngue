@@ -64,6 +64,9 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
             return [.allowsReading, .allowsContentEnumerating, .allowsAddingSubItems, .allowsRenaming, .allowsReparenting,
                     .allowsDeleting, .allowsEvicting]
         }
+        if !FilesItemPolicy.allowsNamespaceChanges(record, contentMode: contentMode) {
+            return [.allowsReading, .allowsWriting, .allowsEvicting]
+        }
         return [.allowsReading, .allowsWriting, .allowsRenaming, .allowsReparenting, .allowsDeleting, .allowsEvicting]
     }
 

@@ -187,6 +187,15 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             guard !record.isReadOnly else { throw CocoaError(.fileWriteNoPermission) }
             let fm = FileManager.default
 
+            if changedFields.contains(.filename) || changedFields.contains(.parentItemIdentifier),
+               try context.isOnDemand && context.store.hasRemoteOnlyFiles(context.folder, at: record.path)
+            {
+                // Cannot propagate (finding A1): answer with the unchanged
+                // item, so the system puts the name/location back.
+                log.info("modifyItem rename/move rejected: not downloaded id=\(item.itemIdentifier.rawValue, privacy: .public)")
+                completionHandler(context.item(for: record), [], false, nil)
+                return Progress()
+            }
             if changedFields.contains(.filename) || changedFields.contains(.parentItemIdentifier) {
                 let parent = changedFields.contains(.parentItemIdentifier)
                     ? try context.record(item.parentItemIdentifier) : try context.reader.item(record.parentID)
@@ -211,6 +220,27 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 }
             }
 
+            if changedFields.contains(.contents), let newContents, !record.isDirectory,
+               version.contentVersion != record.contentVersion
+            {
+                // Edited on top of an older version than ours (finding A4):
+                // keep both, like Syncthing. The user's bytes become a
+                // conflict copy; the item stays at the newer version, which
+                // the system then fetches.
+                let copy = FilesItemPolicy.conflictPath(for: record.path)
+                try Self.atomicWrite(from: newContents, to: try context.containment.url(for: copy), replacing: false)
+                let attributes = try fm.attributesOfItem(atPath: try context.containment.url(for: copy).path(percentEncoded: false))
+                _ = try context.store.recordLocalWrite(
+                    context.folder, path: copy, isDirectory: false,
+                    size: (attributes[.size] as? NSNumber)?.int64Value ?? 0,
+                    modified: attributes[.modificationDate] as? Date ?? Date())
+                try context.store.append(context.folder, kind: .created, path: copy, previousPath: nil)
+                DarwinNotifier.post(DarwinNotification.filesRequestPosted)
+                context.manager?.signalEnumerator(for: .workingSet) { _ in }
+                log.info("modifyItem conflict: base version is stale; kept the edit as a conflict copy")
+                completionHandler(context.item(for: record), [], false, nil)
+                return Progress()
+            }
             if changedFields.contains(.contents), let newContents, !record.isDirectory {
                 let target = try context.containment.url(for: record.path)
                 try Self.atomicWrite(from: newContents, to: target, replacing: true)
@@ -247,6 +277,19 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 return Progress()
             }
             guard !record.isReadOnly, !record.path.isRoot else { throw CocoaError(.fileWriteNoPermission) }
+            if try context.isOnDemand && context.store.hasRemoteOnlyFiles(context.folder, at: record.path) {
+                // Cannot propagate (finding A1): the system restores the item.
+                log.info("deleteItem rejected: not downloaded id=\(identifier.rawValue, privacy: .public)")
+                completionHandler(NSError.fileProviderErrorForRejectedDeletion(of: context.item(for: record)))
+                return Progress()
+            }
+            if !record.isDirectory, version.contentVersion != record.contentVersion {
+                // Changed elsewhere since the system last saw it (finding A4):
+                // deleting would discard that newer version; keep it.
+                log.info("deleteItem rejected: base version is stale id=\(identifier.rawValue, privacy: .public)")
+                completionHandler(NSError.fileProviderErrorForRejectedDeletion(of: context.item(for: record)))
+                return Progress()
+            }
             if record.isDirectory, !options.contains(.recursive),
                 !(try context.reader.children(of: record.itemID, after: nil, limit: 1).items.isEmpty)
             {

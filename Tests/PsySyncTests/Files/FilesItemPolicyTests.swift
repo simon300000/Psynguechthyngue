@@ -65,6 +65,36 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(try store.reannounceForCapabilitiesIfNeeded().isEmpty)
     }
 
+    /// Finding A1: in an on-demand folder a not-downloaded file is ignored
+    /// locally, so deleting/moving it could never propagate.
+    @Test func remoteOnlyFilesInOnDemandFoldersCannotBeDeletedOrMoved() throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir(), mode: .onDemand)
+        _ = try store.applyIndexBatch(f1, entries: [
+            FilesFixtures.dir("d"), FilesFixtures.file("d/remote.txt", local: false), FilesFixtures.file("d2/here.txt"),
+        ])
+        let remote = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "d/remote.txt")))
+        let here = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "d2/here.txt")))
+        #expect(!FilesItemPolicy.allowsNamespaceChanges(remote, contentMode: .onDemand))
+        #expect(FilesItemPolicy.allowsNamespaceChanges(remote, contentMode: .everything))
+        #expect(FilesItemPolicy.allowsNamespaceChanges(here, contentMode: .onDemand))
+        #expect(try store.hasRemoteOnlyFiles(f1, at: RelativePath(rawValue: "d")))
+        #expect(try !store.hasRemoteOnlyFiles(f1, at: RelativePath(rawValue: "d2")))
+        #expect(try !store.hasRemoteOnlyFiles(f1, at: RelativePath(rawValue: "d2/here.txt")))
+        // "d" must not match "d2" by prefix.
+        #expect(try store.hasRemoteOnlyFiles(f1, at: RelativePath(rawValue: "d/remote.txt")))
+        // The flag reaches the exposed version, so cached capabilities refresh.
+        #expect(FilesItemPolicy.exposedMetadataVersion(for: remote) != FilesItemPolicy.exposedMetadataVersion(for: here))
+    }
+
+    @Test func conflictCopyNameFollowsUpstreamPattern() {
+        let at = Date(timeIntervalSince1970: 1_795_000_000)
+        let copy = FilesItemPolicy.conflictPath(for: RelativePath(rawValue: "报告/a b.txt"), now: at)
+        #expect(copy.rawValue.hasPrefix("报告/a b.sync-conflict-"))
+        #expect(copy.rawValue.hasSuffix("-FILESAP.txt"))
+        #expect(StatusMapper.isConflictCopy(copy.rawValue))
+        #expect(FilesItemPolicy.conflictPath(for: RelativePath(rawValue: "Makefile"), now: at).rawValue.hasSuffix("-FILESAP"))
+    }
+
     /// Simulator acceptance: after Receive Only → Send & Receive, items synced
     /// meanwhile stayed read-only in Files (no new anchor / version).
     @Test func readOnlyFlipReannouncesExistingItems() throws {
