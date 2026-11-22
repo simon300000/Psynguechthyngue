@@ -241,6 +241,18 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertTrue(el("newfolder.create").exists, "the New Folder form stays open under the picker")
     }
 
+    /// The whole folder card opens the detail, not just its text. (On an iOS 27.3
+    /// device only the text reacted; the simulator never reproduced it, so this
+    /// guards the hit area rather than reproducing that bug.)
+    func testFolderCardOpensFromEmptyArea() {
+        launch("errors")
+        tab("Folders")
+        let row = el("folder.row.Notes")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.5)).tap()
+        XCTAssertTrue(text("Not enough storage").waitForExistence(timeout: 5), "detail opened")
+    }
+
     func testFolderDetailShowsErrorsConflictsAndAdvanced() {
         launch("errors")
         tab("Folders")

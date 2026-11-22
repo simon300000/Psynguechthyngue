@@ -72,6 +72,9 @@ struct GlassCard: ViewModifier {
                 shape.strokeBorder(.primary.opacity(contrast == .increased ? 0.45 : 0.12), lineWidth: 1)
             }
         }
+        // The glass background is not hit-testable: without this, a card used as a
+        // NavigationLink / Button label only reacts to taps on its text and icons.
+        .contentShape(shape)
     }
 
     private var glass: Glass {
