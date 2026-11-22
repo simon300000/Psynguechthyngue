@@ -8,6 +8,7 @@ struct FolderDetailView: View {
     let folderID: FolderID
     @State private var confirmRemove = false
     @State private var issue: SyncIssue?
+    @State private var notYetInFiles = 0
 
     var body: some View {
         if let folder = model.folders.first(where: { $0.id == folderID }) {
@@ -56,7 +57,16 @@ struct FolderDetailView: View {
                     Section {
                         Button { openURL(URL(string: "shareddocuments://")!) } label: { Label("Open in Files", systemImage: "folder") }
                             .accessibilityIdentifier("folder.openfiles")
+                    } footer: {
+                        // FilesMaterializer hands local files to Files; until the
+                        // system has taken them (just synced, App was in the
+                        // background, iOS 26 ignores the request) Files shows a
+                        // cloud badge on them, but opening needs no network.
+                        if notYetInFiles > 0 {
+                            Text("Files on this device open offline in the Files app.")
+                        }
                     }
+                    .task(id: status.progress.localBytes) { notYetInFiles = await model.notYetInFiles(folder.id) }
                 }
 
                 Section {
@@ -210,13 +220,6 @@ struct StorageRow: View {
                 ProgressView(value: min(fraction, 1))
                 Text("\(Format.bytes(local)) of \(Format.bytes(total)) downloaded (\(fraction, format: .percent.precision(.fractionLength(0))))")
                     .font(.footnote).foregroundStyle(.secondary).monospacedDigit()
-            }
-            if local > 0 {
-                // FilesMaterializer hands every local file to Files; until the
-                // system has taken them (App in background, just synced) Files
-                // may still show a cloud badge, but opening needs no network.
-                Text("Files on this device open offline in the Files app.")
-                    .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)

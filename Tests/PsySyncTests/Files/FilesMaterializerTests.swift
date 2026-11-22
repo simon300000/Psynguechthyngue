@@ -57,9 +57,11 @@ private let f1 = FolderID(rawValue: "f1")
         _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.dir("d"), FilesFixtures.file("d/up.txt")])
         let up = try #require(try store.record(folder: f1, path: RelativePath(rawValue: "d/up.txt")))
         #expect(try store.unmaterializedLocalFiles(f1, limit: 10).map(\.id) == [up.itemID])
+        #expect(try store.unmaterializedLocalFileCount(f1) == 1)
         _ = try store.recordLocalWrite(
             f1, path: RelativePath(rawValue: "d/up.txt"), isDirectory: false, size: 1, modified: Date())
         #expect(try store.unmaterializedLocalFiles(f1, limit: 10).isEmpty)
+        #expect(try store.unmaterializedLocalFileCount(f1) == 0)
     }
 
     /// iOS 26.5 simulator: requests for items the system had not enumerated

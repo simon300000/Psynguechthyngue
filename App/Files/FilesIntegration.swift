@@ -125,6 +125,11 @@ final class FilesIntegration {
         return domainStatuses
     }
 
+    /// Local files Files has not materialized yet (FolderDetailView hint).
+    func notYetInFiles(_ folder: FolderID) -> Int {
+        (try? store?.unmaterializedLocalFileCount(folder)) ?? 0
+    }
+
     func foldersChanged() async {
         guard let store, let projector else { return }
         do {

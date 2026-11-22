@@ -58,6 +58,10 @@ final class AppModel {
     private(set) var filesLocation: FilesLocationState = .unknown
     @ObservationIgnored var filesStatus: (any FilesLocationStatusProviding)?
 
+    func notYetInFiles(_ folder: FolderID) async -> Int {
+        await filesStatus?.notYetInFiles(folder) ?? 0
+    }
+
     func refreshFilesLocation() async {
         guard let filesStatus else { return }
         filesLocation = await filesStatus.currentState()

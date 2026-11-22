@@ -636,6 +636,16 @@ public final class FilesStore: @unchecked Sendable {
         }
     }
 
+    public func unmaterializedLocalFileCount(_ folder: FolderID) throws -> Int {
+        try read { db in
+            Int(try db.scalarInt64(
+                """
+                SELECT COUNT(*) FROM items WHERE folder_id=? AND is_dir=0 AND is_local=1 AND pending_upload=0
+                  AND item_id NOT IN (SELECT item_id FROM materialized WHERE folder_id=?)
+                """, [.text(folder.rawValue), .text(folder.rawValue)]) ?? 0)
+        }
+    }
+
     /// Gives every child of `parents` a new change anchor. Returns the count.
     private static func reannounceChildren(_ ctx: WriteContext, of parents: some Collection<String>) throws -> Int {
         var children: [String] = []

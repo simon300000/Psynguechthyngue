@@ -16,6 +16,8 @@ final class FilesLocationStatusProvider: FilesLocationStatusProviding {
         return Self.reduce(Array(statuses.values))
     }
 
+    func notYetInFiles(_ folder: FolderID) async -> Int { files.notYetInFiles(folder) }
+
     nonisolated static func reduce(_ statuses: [FilesDomainStatus]) -> FilesLocationState {
         if statuses.contains(.disabledByUser) { return .disabled }
         if !statuses.isEmpty, statuses.allSatisfy({ $0 == .enabled }) { return .enabled }
