@@ -128,6 +128,8 @@ public final class FilesStore: @unchecked Sendable {
         CREATE TABLE IF NOT EXISTS materialized_version(
             item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, content_version BLOB NOT NULL);
         CREATE TABLE IF NOT EXISTS projected(folder_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS materialize_attempts(
+            item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, content_version BLOB NOT NULL, attempted_at REAL NOT NULL);
         """
 
     private static let schemaSQL = """
@@ -725,6 +727,34 @@ public final class FilesStore: @unchecked Sendable {
         }
     }
 
+    /// Materialization attempts (FilesMaterializer): an item asked for with
+    /// this content version since `since` is not asked again, across App
+    /// runs (the device re-requested the same 996 items on every start).
+    public func materializeAttemptedSince(_ folder: FolderID, since: Date) throws -> [String: Data] {
+        try read { db in
+            let s = try db.prepare(
+                "SELECT item_id, content_version FROM materialize_attempts WHERE folder_id=? AND attempted_at>=?")
+            try s.bind([.text(folder.rawValue), .real(since.timeIntervalSince1970)])
+            var out: [String: Data] = [:]
+            while try s.step() == SQLITE_ROW { out[s.text(at: 0)] = s.data(at: 1) }
+            return out
+        }
+    }
+
+    public func recordMaterializeAttempts(_ folder: FolderID, _ items: [(id: ItemIdentifier, contentVersion: Data)],
+                                          at date: Date = Date()) throws
+    {
+        guard !items.isEmpty else { return }
+        _ = try write { ctx in
+            for item in items {
+                try ctx.db.run(
+                    "INSERT OR REPLACE INTO materialize_attempts(item_id, folder_id, content_version, attempted_at) VALUES (?, ?, ?, ?)",
+                    [.text(item.id.rawValue), .text(folder.rawValue), .blob(item.contentVersion), .real(date.timeIntervalSince1970)])
+            }
+            return ctx.anchor
+        }
+    }
+
     public func unmaterializedLocalFileCount(_ folder: FolderID) throws -> Int {
         try read { db in
             Int(try db.scalarInt64(
@@ -972,7 +1002,7 @@ extension FilesStore: FilesMetadataWriter {
     public func removeFolder(_ folder: FolderID) throws -> Int64 {
         try write { ctx in
             for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders", "adopted",
-                          "materialized_version", "projected"] {
+                          "materialized_version", "projected", "materialize_attempts"] {
                 try ctx.db.run("DELETE FROM \(table) WHERE folder_id=?", [.text(folder.rawValue)])
             }
             return ctx.anchor

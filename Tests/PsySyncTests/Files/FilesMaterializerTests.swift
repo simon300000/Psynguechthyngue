@@ -50,6 +50,18 @@ private let f1 = FolderID(rawValue: "f1")
         await materializer.refresh(f1)
         await materializer.settle(f1)
         #expect(recorder.all == [a.itemID.rawValue, a.itemID.rawValue])
+
+        // Device: every App start re-requested the same 996 items. A new
+        // materializer (next run) remembers the attempt...
+        let next = FilesMaterializer(store: store) { _, id in recorder.add(id) }
+        await next.refresh(f1)
+        await next.settle(f1)
+        #expect(recorder.all.count == 2)
+        // ...until the retry interval has passed.
+        let later = FilesMaterializer(store: store, retryInterval: 0) { _, id in recorder.add(id) }
+        await later.refresh(f1)
+        await later.settle(f1)
+        #expect(recorder.all.count == 3)
     }
 
     @Test func pendingUploadsAndDirectoriesAreSkipped() throws {

@@ -15,9 +15,10 @@ import Foundation
 /// present from before a mode switch. "Remove Download" drops the engine copy
 /// (no longer local) and evicts the Files copy.
 ///
-/// Each (item, content version) is requested at most once per App run, so an
-/// item the system refuses or evicts again is not hammered; a new version or
-/// the next App start retries it.
+/// Each (item, content version) is requested at most once per
+/// `retryInterval`, recorded in files.sqlite so it holds across App runs: an
+/// item the system refuses or evicts again is not hammered; a new version
+/// retries at once.
 public actor FilesMaterializer {
     public typealias Request = @Sendable (FolderID, ItemIdentifier) async throws -> Void
     public typealias Trace = @Sendable (String) -> Void
@@ -26,7 +27,7 @@ public actor FilesMaterializer {
     private let request: Request
     private let trace: Trace?
     private let batchLimit: Int
-    private var requested: [String: Data] = [:]
+    private let retryInterval: TimeInterval
     private var running: [FolderID: Task<Void, Never>] = [:]
     private var again: Set<FolderID> = []
 
@@ -38,9 +39,10 @@ public actor FilesMaterializer {
     /// item the system has not enumerated yet is never acknowledged), so a
     /// stalled request cannot hold up the rest.
     public init(store: FilesStore, batchLimit: Int = 20_000, width: Int = 8, timeout: Duration = .seconds(20),
-                trace: Trace? = nil, request: @escaping Request)
+                retryInterval: TimeInterval = 6 * 3600, trace: Trace? = nil, request: @escaping Request)
     {
         self.store = store
+        self.retryInterval = retryInterval
         self.request = request
         self.trace = trace
         self.batchLimit = batchLimit
@@ -80,15 +82,17 @@ public actor FilesMaterializer {
             if again.remove(folder) != nil, !Task.isCancelled { refresh(folder) }
         }
         let candidates: [(id: ItemIdentifier, contentVersion: Data)]
+        let attempted: [String: Data]
         do {
             candidates = try store.unmaterializedLocalFiles(folder, limit: batchLimit)
+            attempted = try store.materializeAttemptedSince(folder, since: Date(timeIntervalSinceNow: -retryInterval))
         } catch {
             trace?("folder=\(folder.rawValue) failed=\(error)")
             return
         }
-        let todo = candidates.filter { requested[$0.id.rawValue] != $0.contentVersion }
+        let todo = candidates.filter { attempted[$0.id.rawValue] != $0.contentVersion }
         guard !todo.isEmpty else { return }
-        for item in todo { requested[item.id.rawValue] = item.contentVersion }
+        try? store.recordMaterializeAttempts(folder, todo)
         let request = request
         let timeout = timeout
         await withTaskGroup(of: String?.self) { group in

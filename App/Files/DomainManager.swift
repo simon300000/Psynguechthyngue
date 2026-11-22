@@ -115,6 +115,41 @@ enum DomainManager {
         try await manager.requestDownloadForItem(withIdentifier: NSFileProviderItemIdentifier(item.rawValue))
     }
 
+    /// Makes the system download an item now: a coordinated read of its
+    /// user-visible URL (the system materializes a dataless file before it
+    /// grants the read, i.e. calls fetchContents; the extension answers a
+    /// local file with a clone). `requestDownloadForItem` is acknowledged but
+    /// never executed on iOS 26 and on device (iOS 27.3: 996 requests, ~121
+    /// fetches in total), so it is only the fallback.
+    static func materialize(_ folder: FolderID, item: ItemIdentifier) async throws {
+        let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(folder.rawValue), displayName: "")
+        guard let manager = NSFileProviderManager(for: domain) else { return }
+        let identifier = NSFileProviderItemIdentifier(item.rawValue)
+        let url: URL
+        do {
+            url = try await manager.getUserVisibleURL(for: identifier)
+        } catch {
+            try await manager.requestDownloadForItem(withIdentifier: identifier)
+            return
+        }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            NSFileCoordinator(filePresenter: nil).coordinate(
+                with: [.readingIntent(with: url, options: [])], queue: coordinationQueue
+            ) { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            }
+        }
+    }
+
+    private static let coordinationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "psy.files.materialize"
+        queue.maxConcurrentOperationCount = 4
+        return queue
+    }()
+
     /// The extension answers `.serverUnreachable` / `.notAuthenticated` when it
     /// cannot serve contents (no peer, App busy, restricted core refused).
     /// The system then shows the domain as "paused" and backs off *until it is
