@@ -25,6 +25,9 @@ public enum FilesContentError: Error, Hashable, Sendable {
 
     case noSuchItem
     case isDirectory
+    /// Excluded by the user's own ignore rules on this device: it would be
+    /// written into the folder and never sync.
+    case excludedByIgnoreRules
     case openAppRequired(OpenAppReason)
     case cancelled
     case requestFailed(String)
@@ -54,6 +57,9 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         /// Current jetsam headroom in bytes (`os_proc_available_memory()` in
         /// the extension); fits GOMEMLIMIT per fetch. nil / 0 = unknown.
         public var availableMemory: (@Sendable () -> UInt64)?
+        /// The user's own rules (IgnoreRulesGenerator.userRules) match this
+        /// path. nil = not checked.
+        public var isUserIgnored: (@Sendable (RelativePath) -> Bool)?
         public init() {}
     }
 
@@ -100,6 +106,9 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         progress.totalUnitCount = max(record.size, 1)
 
         let fileURL = try containment.url(for: record.path)
+        if !Self.isLocallyAvailable(record, at: fileURL), configuration.isUserIgnored?(record.path) == true {
+            throw FilesContentError.excludedByIgnoreRules
+        }
         if Self.isLocallyAvailable(record, at: fileURL) {
             let clone = try cloneToTemporary(fileURL)
             progress.completedUnitCount = progress.totalUnitCount

@@ -20,6 +20,10 @@ enum ErrorMapping {
             switch error {
             case .noSuchItem: return NSFileProviderError(.noSuchItem)
             case .isDirectory: return CocoaError(.fileReadUnknown)
+            case .excludedByIgnoreRules:
+                return CocoaError(.fileReadNoPermission, userInfo: [NSLocalizedDescriptionKey: String(
+                    localized: "FILES_ERROR_IGNORED",
+                    defaultValue: "This file is excluded by this folder's ignore rules on this device, so it is not downloaded here.")])
             case .cancelled: return CocoaError(.userCancelled)
             case .openAppRequired(let reason):
                 return NSFileProviderError(

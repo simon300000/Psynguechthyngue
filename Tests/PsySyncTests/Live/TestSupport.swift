@@ -165,8 +165,20 @@ final class FakeBridge: SyncthingBridge, @unchecked Sendable {
         return cursor
     }
 
+    /// Suffix matcher standing in for psybridge.NewIgnoreMatcher; records the lines.
+    var ignoreLinesSeen: [String]?
+    func ignoreMatcher(folderRoot: URL, lines: [String]) throws -> (any IgnoreMatching)? {
+        lock.withLock { ignoreLinesSeen = lines }
+        return SuffixMatcher(suffixes: lines.filter { $0.hasPrefix("*.") }.map { String($0.dropFirst()) })
+    }
+
     var callList: [String] { lock.withLock { calls } }
     var labels: [String] { lock.withLock { queueLabels } }
+}
+
+struct SuffixMatcher: IgnoreMatching {
+    let suffixes: [String]
+    func isIgnored(_ path: RelativePath) -> Bool { suffixes.contains { path.rawValue.hasSuffix($0) } }
 }
 
 final class FakeCursor: GlobalIndexCursor {

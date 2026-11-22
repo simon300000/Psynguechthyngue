@@ -364,3 +364,55 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(FilesAnchor.decode("x:1") == nil)
     }
 }
+
+@Suite struct UserIgnoredProjectionTests {
+    let f1 = FolderID(rawValue: "f1")
+
+    @Test func pathsTheUserExcludedLeaveTheFilesList() throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir(), mode: .onDemand)
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("a.skip", local: false), FilesFixtures.file("b.txt", local: false)])
+        #expect(try store.record(folder: f1, path: RelativePath(rawValue: "a.skip")) != nil)
+        var ignored = FilesFixtures.file("a.skip", local: false)
+        ignored.userIgnored = true
+        _ = try store.applyIndexBatch(f1, entries: [ignored, FilesFixtures.file("b.txt", local: false)])
+        #expect(try store.record(folder: f1, path: RelativePath(rawValue: "a.skip")) == nil)
+        #expect(try store.record(folder: f1, path: RelativePath(rawValue: "b.txt")) != nil)
+    }
+}
+
+/// Report risk #4: the system's eviction in an on-demand folder must drop the
+/// engine copy (DESIGN §6.3), except for kept files and update evictions.
+@Suite struct SystemEvictionTests {
+    let f1 = FolderID(rawValue: "f1")
+
+    func id(_ store: FilesStore, _ p: String) throws -> ItemIdentifier {
+        try #require(try store.record(folder: f1, path: RelativePath(rawValue: p))).itemID
+    }
+
+    @Test func evictionsDropEngineCopiesOnlyWhereThatIsWhatTheyMean() throws {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir(), mode: .onDemand)
+        _ = try store.applyIndexBatch(f1, entries: [
+            FilesFixtures.file("a.txt"), FilesFixtures.dir("kept"), FilesFixtures.file("kept/c.txt"),
+            FilesFixtures.file("e.txt"), FilesFixtures.file("f.txt", local: false),
+        ])
+        _ = try store.setPinned(try id(store, "kept"), pinned: true)
+        let all = try ["a.txt", "kept/c.txt", "e.txt", "f.txt"].map { try id(store, $0) }
+        _ = try store.updateMaterialized(f1, ids: all + [FilesStore.rootItemID(f1)])
+        // e.txt changes on a peer: the system evicts the old content.
+        _ = try store.applyIndexBatch(f1, entries: [FilesFixtures.file("e.txt", version: "v2", blocks: "ZTI=")])
+        let result = try store.updateMaterialized(f1, ids: [FilesStore.rootItemID(f1)])
+        #expect(result.evicted.map(\.path.rawValue) == ["a.txt"])
+    }
+
+    @Test func everythingFoldersAndMassResetsAreLeftAlone() throws {
+        let all = try FilesFixtures.store(FilesFixtures.tempDir(), mode: .everything)
+        _ = try all.applyIndexBatch(f1, entries: [FilesFixtures.file("a.txt")])
+        _ = try all.updateMaterialized(f1, ids: [try id(all, "a.txt")])
+        #expect(try all.updateMaterialized(f1, ids: []).evicted.isEmpty)
+
+        let od = try FilesFixtures.store(FilesFixtures.tempDir(), mode: .onDemand)
+        _ = try od.applyIndexBatch(f1, entries: (0..<30).map { FilesFixtures.file("f\($0)") })
+        _ = try od.updateMaterialized(f1, ids: try (0..<30).map { try id(od, "f\($0)") })
+        #expect(try od.updateMaterialized(f1, ids: []).evicted.isEmpty)   // looks like a reset
+    }
+}

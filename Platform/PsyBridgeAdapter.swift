@@ -277,6 +277,18 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
         }
     }
 
+    public func ignoreMatcher(folderRoot: URL, lines: [String]) throws -> (any IgnoreMatching)? {
+        try Self.makeIgnoreMatcher(folderRoot: folderRoot, lines: lines)
+    }
+
+    /// psybridge.NewIgnoreMatcher (upstream lib/ignore semantics).
+    public static func makeIgnoreMatcher(folderRoot: URL, lines: [String]) throws -> any IgnoreMatching {
+        var error: NSError?
+        guard let m = PsybridgeNewIgnoreMatcher(folderRoot.path(percentEncoded: false), lines.joined(separator: "\n"), &error)
+        else { throw PsyBridgeError(error ?? NSError(domain: "psybridge", code: -1)) }
+        return GoIgnoreMatcher(m)
+    }
+
     // MARK: Restricted fetch (File Provider extension)
 
     /// Routes restricted-core logs (fetch / recordFetchedFile) to `handler`.
@@ -401,4 +413,11 @@ private extension Duration {
         let (seconds, attoseconds) = components
         return seconds * 1_000 + attoseconds / 1_000_000_000_000_000
     }
+}
+
+/// gomobile object; upstream's Matcher is internally synchronised.
+private final class GoIgnoreMatcher: IgnoreMatching, @unchecked Sendable {
+    private let matcher: PsybridgeIgnoreMatcher
+    init(_ matcher: PsybridgeIgnoreMatcher) { self.matcher = matcher }
+    func isIgnored(_ path: RelativePath) -> Bool { matcher.match(path.rawValue) }
 }

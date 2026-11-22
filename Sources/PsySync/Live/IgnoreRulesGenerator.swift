@@ -149,4 +149,20 @@ public enum IgnoreRulesGenerator {
         }
         return out.sorted { $0.rawValue < $1.rawValue }
     }
+
+    /// The user's own rules for a folder, from disk: `.stignore-user` when
+    /// the folder is on-demand (managed `.stignore`), else `.stignore` minus
+    /// the helper lines. Never the managed on-demand rules (`*`).
+    public static func userRules(folderRoot: URL) -> [String] {
+        func lines(_ name: String) -> [String] {
+            guard let data = FileManager.default.contents(atPath: folderRoot.appending(path: name).path(percentEncoded: false))
+            else { return [] }
+            return String(decoding: data, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: false)
+                .map { $0.hasSuffix("\r") ? String($0.dropLast()) : String($0) }
+        }
+        let main = lines(".stignore")
+        var rules = isManaged(main) ? lines(userFile) : userLines(fromEverything: main)
+        while rules.last?.isEmpty == true { rules.removeLast() }
+        return rules
+    }
 }

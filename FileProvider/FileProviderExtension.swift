@@ -358,8 +358,33 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             completionHandler()
         }) { [log] ids in
             do {
-                let reannounced = try context.store.setMaterialized(context.folder, ids: ids)
-                log.info("materialized set updated count=\(ids.count) reannounced=\(reannounced)")
+                let (reannounced, systemEvicted) = try context.store.updateMaterialized(context.folder, ids: ids)
+                log.info("materialized set updated count=\(ids.count) reannounced=\(reannounced) evicted=\(systemEvicted.count)")
+                // On-demand: the system reclaimed these; drop the Syncthing
+                // copy too (same path as "Remove Download"), or eviction frees
+                // nothing and the materializer would bring them back.
+                // A file under a kept directory rule (`!/dir`: Keep Downloaded,
+                // or a fully local directory at the switch to on-demand) cannot
+                // be dropped alone; the engine refuses, so leave it to the
+                // materializer.
+                let stignore = context.layout.managedFolder(context.folder).appending(path: ".stignore")
+                let kept = (try? String(contentsOf: stignore, encoding: .utf8)).map {
+                    IgnoreRulesGenerator.presentPaths(from: $0.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
+                } ?? []
+                let evicted = systemEvicted.filter { r in
+                    var a = r.path.parent
+                    while !a.isRoot { if kept.contains(a) { return false }; a = a.parent }
+                    return true
+                }
+                for r in evicted {
+                    try? context.store.requestPresence(context.folder, path: r.path, present: false)
+                }
+                if !evicted.isEmpty {
+                    #if DEBUG
+                    FootprintProbe.file?.append("evicted-by-system folder=\(context.folder.rawValue) count=\(evicted.count)")
+                    #endif
+                    DarwinNotifier.post(DarwinNotification.filesRequestPosted)
+                }
                 if reannounced { manager.signalEnumerator(for: .workingSet) { _ in } }
             } catch {
                 log.error("materialized update failed: \(String(describing: error), privacy: .public)")
@@ -393,6 +418,16 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             }
             DarwinNotifier.post(DarwinNotification.filesRequestPosted)
             context.manager?.signalEnumerator(for: .workingSet) { _ in }
+            // The pin flag is in the item's version and userInfo; signalling
+            // the listing that shows it (its parent) makes the system re-read
+            // it now, so the menu flips to Remove/Keep right away.
+            var parents = Set<NSFileProviderItemIdentifier>()
+            for identifier in itemIdentifiers {
+                if let record = try? context.record(identifier) {
+                    parents.insert(FileProviderItem.identifier(record.parentID, rootID: context.rootID))
+                }
+            }
+            for parent in parents { context.manager?.signalEnumerator(for: parent) { _ in } }
             if !keep, let manager = context.manager {
                 // The App drops the engine copy; drop the Files copy too, or
                 // the item stays "downloaded" in Files (FilesMaterializer

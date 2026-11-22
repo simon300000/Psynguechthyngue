@@ -1038,6 +1038,9 @@ public actor LiveSyncEngine: SyncEngine {
             try await client.setIgnores(folder.rawValue, lines: IgnoreRulesGenerator.everythingLines(user: lines))
         }
         try? await scan(folder, paths: nil)
+        // The Files list leaves out what the user's rules exclude (globalIndex
+        // marks it); re-project even if upstream announces nothing.
+        broadcaster.yield(.indexChanged(folderID: folder, paths: []))
     }
 
     /// `.stignore-user` for on-demand folders; nil when rules live in `.stignore` itself.
@@ -1154,6 +1157,18 @@ public actor LiveSyncEngine: SyncEngine {
 
     // MARK: Global index
 
+    /// The user's own ignore rules for `folder` (never the on-demand `*`),
+    /// matched with upstream semantics; nil when there are none or the bridge
+    /// cannot match (fakes). A rule error leaves entries unmarked.
+    private func userIgnoreMatcher(_ folder: FolderID) async -> (any IgnoreMatching)? {
+        guard let dto = try? await folderConfig(folder) else { return nil }
+        let root = URL(filePath: dto.path, directoryHint: .isDirectory)
+        let lines = IgnoreRulesGenerator.userRules(folderRoot: root)
+        guard lines.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return nil }
+        let bridge = bridge
+        return try? await executor.run { try bridge.ignoreMatcher(folderRoot: root, lines: lines) }
+    }
+
     public nonisolated func globalIndex(_ folder: FolderID, pageSize: Int) -> AsyncThrowingStream<[GlobalIndexEntry], Error> {
         let (stream, continuation) = AsyncThrowingStream<[GlobalIndexEntry], Error>.makeStream()
         let task = Task { [weak self] in
@@ -1161,12 +1176,16 @@ public actor LiveSyncEngine: SyncEngine {
             do {
                 guard case .running = await self.state else { throw EngineError.notRunning }
                 let bridge = self.bridge, executor = self.executor
+                let matcher = await self.userIgnoreMatcher(folder)
                 let box = try await executor.run { CursorBox(try bridge.openIndexStream(folder: folder)) }
                 defer { box.close(on: executor) }
                 while true {
                     try Task.checkCancellation()
-                    let page = try await executor.run { try box.cursor.next(maxEntries: max(1, pageSize)) }
+                    var page = try await executor.run { try box.cursor.next(maxEntries: max(1, pageSize)) }
                     if page.isEmpty { break }
+                    if let matcher {
+                        for i in page.indices where matcher.isIgnored(page[i].name) { page[i].userIgnored = true }
+                    }
                     continuation.yield(page)
                 }
                 // Finish normally only when the cursor is exhausted: a normal

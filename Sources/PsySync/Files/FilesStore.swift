@@ -106,7 +106,7 @@ public final class FilesStore: @unchecked Sendable {
         if version != schemaVersion {
             try connection.transaction {
                 if version != 0 {
-                    for table in ["items", "tombstones", "meta", "journal", "requests", "folders", "materialized", "presence", "adopted"] {
+                    for table in ["items", "tombstones", "meta", "journal", "requests", "folders", "materialized", "presence", "adopted", "materialized_version"] {
                         try connection.execute("DROP TABLE IF EXISTS \(table)")
                     }
                 }
@@ -125,6 +125,8 @@ public final class FilesStore: @unchecked Sendable {
     private static let additiveSQL = """
         CREATE TABLE IF NOT EXISTS adopted(item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, hash BLOB NOT NULL);
         INSERT OR IGNORE INTO meta(key, value) VALUES ('generation', 1 + abs(random() % 1000000000));
+        CREATE TABLE IF NOT EXISTS materialized_version(
+            item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, content_version BLOB NOT NULL);
         """
 
     private static let schemaSQL = """
@@ -610,7 +612,21 @@ public final class FilesStore: @unchecked Sendable {
     /// signals the working set).
     @discardableResult
     public func setMaterialized(_ folder: FolderID, ids: [ItemIdentifier]) throws -> Bool {
-        try write { ctx in
+        try updateMaterialized(folder, ids: ids).reannounced
+    }
+
+    /// `setMaterialized` plus the files the system evicted in an on-demand
+    /// folder (DESIGN §6.3 "系统回收→删除引擎副本"): local, not pending, not
+    /// kept (pinned itself or below a pinned folder), and still at the
+    /// content version they had when they were materialized — an eviction
+    /// after a remote update (EvictOnRemoteUpdate) is not a removal; the
+    /// materializer brings the new version back. A drop of more than half of
+    /// a non-trivial set looks like a system reset and is ignored.
+    public func updateMaterialized(_ folder: FolderID, ids: [ItemIdentifier]) throws
+        -> (reannounced: Bool, evicted: [FileItemRecord])
+    {
+        let onDemand = try folderInfo(folder)?.contentMode == .onDemand
+        return try write { ctx in
             var previous = Set<String>()
             let s = try ctx.db.prepare("SELECT item_id FROM materialized WHERE folder_id=?")
             try s.bind([.text(folder.rawValue)])
@@ -621,9 +637,48 @@ public final class FilesStore: @unchecked Sendable {
                     "INSERT OR IGNORE INTO materialized(item_id, folder_id) VALUES (?,?)",
                     [.text(id.rawValue), .text(folder.rawValue)])
             }
-            let added = Set(ids.map(\.rawValue)).subtracting(previous)
-            return try Self.reannounceChildren(ctx, of: added) > 0
+            let now = Set(ids.map(\.rawValue))
+            let added = now.subtracting(previous)
+            for id in added {
+                try ctx.db.run(
+                    """
+                    INSERT OR REPLACE INTO materialized_version(item_id, folder_id, content_version)
+                    SELECT item_id, folder_id, content_version FROM items WHERE item_id=? AND is_dir=0
+                    """, [.text(id)])
+            }
+            var evicted: [FileItemRecord] = []
+            let dropped = previous.subtracting(now)
+            let looksLikeReset = dropped.count > 20 && dropped.count * 2 > previous.count
+            if onDemand && !looksLikeReset {
+                for id in dropped {
+                    guard let r = try Self.fetchRecord(ctx.db, id: ItemIdentifier(rawValue: id)),
+                          !r.isDirectory, r.isLocal, !r.pendingUpload, !r.isPinned,
+                          try !Self.hasPinnedAncestor(ctx.db, r),
+                          let v = try Self.materializedVersion(ctx.db, id), v == r.contentVersion
+                    else { continue }
+                    evicted.append(r)
+                }
+            }
+            for id in dropped { try ctx.db.run("DELETE FROM materialized_version WHERE item_id=?", [.text(id)]) }
+            return (try Self.reannounceChildren(ctx, of: added) > 0, evicted)
         }
+    }
+
+    private static func materializedVersion(_ db: SQLiteConnection, _ id: String) throws -> Data? {
+        let s = try db.prepare("SELECT content_version FROM materialized_version WHERE item_id=?")
+        try s.bind([.text(id)])
+        return try s.step() == SQLITE_ROW ? s.data(at: 0) : nil
+    }
+
+    private static func hasPinnedAncestor(_ db: SQLiteConnection, _ record: FileItemRecord) throws -> Bool {
+        var parent = record.parentID
+        for _ in 0..<512 {
+            guard let p = try fetchRecord(db, id: parent) else { return false }
+            if p.isPinned { return true }
+            if p.parentID == p.itemID { return false }   // root
+            parent = p.parentID
+        }
+        return false
     }
 
     /// Whether `path` is, or contains, a file that is not on this device (and
@@ -825,12 +880,15 @@ extension FilesStore: FilesMetadataWriter {
                 let path = entry.name
                 guard Self.isValidPath(path), !Self.isHidden(path), entry.type != .symlink else { continue }
                 let existing = try Self.fetchRecord(ctx.db, folder: folder, path: path)
-                if tracking && !entry.deleted && !entry.invalid {
+                if tracking && !entry.deleted && !entry.invalid && !entry.userIgnored {
                     var p = path
                     while !p.isRoot, seen.insert(p.rawValue).inserted { p = p.parent }
                 }
                 if let existing, existing.pendingUpload { continue }
-                if entry.deleted || entry.invalid {
+                // Excluded by the user's own rules on this device: never syncs
+                // here, so not offered in Files (an open fetched it into the
+                // folder where it stayed unsynced).
+                if entry.deleted || entry.invalid || entry.userIgnored {
                     if existing != nil { try Self.deleteSubtree(ctx, folder: folder, path: path) }
                     continue
                 }
@@ -889,7 +947,7 @@ extension FilesStore: FilesMetadataWriter {
 
     public func removeFolder(_ folder: FolderID) throws -> Int64 {
         try write { ctx in
-            for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders", "adopted"] {
+            for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders", "adopted", "materialized_version"] {
                 try ctx.db.run("DELETE FROM \(table) WHERE folder_id=?", [.text(folder.rawValue)])
             }
             return ctx.anchor

@@ -45,6 +45,14 @@ final class ExtensionContext: @unchecked Sendable {
             #endif
             return available
         }
+        let root = layout.managedFolder(folder)
+        configuration.isUserIgnored = { path in
+            let lines = IgnoreRulesGenerator.userRules(folderRoot: root)
+            guard lines.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
+                  let matcher = try? PsyBridgeAdapter.makeIgnoreMatcher(folderRoot: root, lines: lines)
+            else { return false }
+            return matcher.isIgnored(path)
+        }
         content = LiveContentProvider(
             layout: layout, store: store, folder: folder, engineLock: FlockEngineLock(layout: layout),
             fetchBridge: services.bridge, identity: services.identity, temporaryDirectory: temporary,
