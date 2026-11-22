@@ -350,6 +350,57 @@ struct ContentHarness {
         #expect(signals.value == before)
         await projector.stop()
     }
+
+    /// Regression (device, big-folder folder): the App went to background while a
+    /// pass was streaming a large index; `stop()` cancelled the pass, the
+    /// cancelled stream *ended* instead of throwing, and the sweep deleted
+    /// every row not yet reached. Files then showed only a few root items.
+    @Test func stopMidPassDoesNotSweepUnreadRows() async throws {
+        let h = try ContentHarness(mode: .onDemand)
+        let engine = FilesFakeEngine()
+        let entries = [FilesFixtures.dir("d")] + (0..<20).map { FilesFixtures.file("f\($0)") }
+        engine.setIndex(f1, entries)
+        let traces = LockedBox<[String]>([])
+        let projector = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(50), pageSize: 3,
+                                       trace: { line in traces.mutate { $0.append(line) } }) { _ in }
+        await projector.setFolders([f1])
+        await projector.projectNow(f1)
+        #expect(try h.store.itemCount(f1) == 22)
+        let anchor = try h.store.currentAnchor()
+
+        engine.pageDelay = .milliseconds(200)
+        let pass = Task { await projector.projectNow(f1) }
+        #expect(await eventually { engine.pagesServed >= 1 })
+        await projector.stop()
+        await pass.value
+
+        #expect(try h.store.itemCount(f1) == 22)
+        #expect(try h.store.currentAnchor() == anchor)
+        #expect(traces.value.last?.contains("cancelled") == true, "\(traces.value)")
+        #expect(!traces.value.contains { $0.contains("swept=") && !$0.contains("swept=0") }, "\(traces.value)")
+    }
+
+    /// Regression: two requests waiting on the same running pass both started
+    /// together afterwards; the second reset the shared mark set and the first
+    /// then swept everything it had not marked since.
+    @Test func overlappingRequestsRunOneAtATime() async throws {
+        let h = try ContentHarness(mode: .onDemand)
+        let engine = FilesFakeEngine()
+        engine.setIndex(f1, [FilesFixtures.dir("d")] + (0..<12).map { FilesFixtures.file("f\($0)") })
+        let traces = LockedBox<[String]>([])
+        let projector = FilesProjector(engine: engine, store: h.store, debounce: .milliseconds(50), pageSize: 3,
+                                       trace: { line in traces.mutate { $0.append(line) } }) { _ in }
+        await projector.setFolders([f1])
+        await projector.projectNow(f1)
+        engine.pageDelay = .milliseconds(20)
+        async let a: Void = projector.projectNow(f1)
+        async let b: Void = projector.projectNow(f1)
+        async let c: Void = projector.projectNow(f1)
+        _ = await (a, b, c)
+        #expect(try h.store.itemCount(f1) == 14)
+        #expect(!traces.value.contains { !$0.contains("swept=0") }, "\(traces.value)")
+        await projector.stop()
+    }
 }
 
 final class LockedBox<T: Sendable>: @unchecked Sendable {

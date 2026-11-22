@@ -938,11 +938,14 @@ public actor LiveSyncEngine: SyncEngine {
                 let bridge = self.bridge, executor = self.executor
                 let box = try await executor.run { CursorBox(try bridge.openIndexStream(folder: folder)) }
                 defer { box.close(on: executor) }
-                while !Task.isCancelled {
+                while true {
+                    try Task.checkCancellation()
                     let page = try await executor.run { try box.cursor.next(maxEntries: max(1, pageSize)) }
                     if page.isEmpty { break }
                     continuation.yield(page)
                 }
+                // Finish normally only when the cursor is exhausted: a normal
+                // end tells the projector the index is complete.
                 continuation.finish()
             } catch {
                 continuation.finish(throwing: Self.map(error))

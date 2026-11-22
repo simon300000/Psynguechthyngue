@@ -10,6 +10,11 @@ final class FilesFakeEngine: SyncEngine, @unchecked Sendable {
     /// Called when prioritize() is invoked (simulate a pull).
     var onPrioritize: (@Sendable (FolderID, RelativePath) -> Void)?
     var failScan = false
+    /// When set, `globalIndex` yields one page per delay from a producer task
+    /// (like LiveSyncEngine), so a pass can be interrupted mid-stream.
+    var pageDelay: Duration?
+    /// Pages delivered by `globalIndex` (tests wait on it).
+    private(set) var pagesServed = 0
 
     func setIndex(_ folder: FolderID, _ entries: [GlobalIndexEntry]) { lock.withLock { index[folder] = entries } }
     func record(_ call: String) { lock.withLock { calls.append(call) } }
@@ -61,6 +66,22 @@ final class FilesFakeEngine: SyncEngine, @unchecked Sendable {
     func apply(_ decision: PolicyDecision) async throws {}
     func globalIndex(_ folder: FolderID, pageSize: Int) -> AsyncThrowingStream<[GlobalIndexEntry], Error> {
         let entries = lock.withLock { index[folder] ?? [] }
+        if let delay = lock.withLock({ pageDelay }) {
+            let (stream, continuation) = AsyncThrowingStream<[GlobalIndexEntry], Error>.makeStream()
+            let task = Task { [self] in
+                var start = 0
+                while start < entries.count {
+                    if start > 0 { try? await Task.sleep(for: delay) }
+                    if Task.isCancelled { return continuation.finish(throwing: CancellationError()) }
+                    continuation.yield(Array(entries[start..<min(start + pageSize, entries.count)]))
+                    lock.withLock { pagesServed += 1 }
+                    start += pageSize
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+            return stream
+        }
         return AsyncThrowingStream { continuation in
             var start = 0
             while start < entries.count {

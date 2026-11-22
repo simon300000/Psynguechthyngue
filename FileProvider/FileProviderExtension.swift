@@ -53,6 +53,8 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             if identifier == .rootContainer, #available(iOS 27.0, *) {
                 FootprintProbe.file?.append("item root folder=\(context.folder.rawValue) namespacePolicy=\(item.namespacePolicy.rawValue)")
             }
+            FootprintProbe.file?.append(
+                "item folder=\(context.folder.rawValue) path=/\(item.record.path) dir=\(item.record.isDirectory) userInfo=\(Self.describe(item.userInfo))")
             #endif
             completionHandler(item, nil)
         } catch {
@@ -318,11 +320,18 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
         onItemsWithIdentifiers itemIdentifiers: [NSFileProviderItemIdentifier],
         completionHandler: @escaping (Error?) -> Void
     ) -> Progress {
+        #if DEBUG
+        FootprintProbe.file?.append("performAction id=\(actionIdentifier.rawValue) items=\(itemIdentifiers.count)")
+        #endif
         do {
             let context = try context()
             let keep = actionIdentifier == Self.keepDownloadedAction
             for identifier in itemIdentifiers {
                 let record = try context.record(identifier)
+                #if DEBUG
+                FootprintProbe.file?.append(
+                    "performAction folder=\(context.folder.rawValue) path=/\(record.path) dir=\(record.isDirectory) pinned=\(record.isPinned)->\(keep)")
+                #endif
                 _ = try context.store.setPinned(record.itemID, pinned: keep)
                 try context.store.requestPresence(context.folder, path: record.path, present: keep)
             }
@@ -330,10 +339,20 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             context.manager?.signalEnumerator(for: .workingSet) { _ in }
             completionHandler(nil)
         } catch {
+            #if DEBUG
+            FootprintProbe.file?.append("performAction failed: \(error)")
+            #endif
             completionHandler(ErrorMapping.map(error))
         }
         return Progress()
     }
+
+    #if DEBUG
+    static func describe(_ userInfo: [AnyHashable: Any]?) -> String {
+        guard let userInfo else { return "nil" }
+        return userInfo.map { "\($0.key)=\($0.value)(\(type(of: $0.value)))" }.sorted().joined(separator: ",")
+    }
+    #endif
 }
 
 // The framework calls the extension from arbitrary queues; all state is
