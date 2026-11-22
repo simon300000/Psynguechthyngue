@@ -35,6 +35,12 @@ final class DeviceDriverUITests: XCTestCase {
         }
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+        // The runner container survives reinstalls: drop the previous run's
+        // commands so they are not replayed (sequence numbers restart at 1).
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: docs.path)) ?? []
+        where name.hasPrefix("cmd-") || name.hasPrefix("res-") || name.hasPrefix("shot-") || name.hasPrefix("tree-") {
+            try? FileManager.default.removeItem(at: docs.appendingPathComponent(name))
+        }
         try "ready \(Date())".write(to: docs.appendingPathComponent("driver-ready.txt"), atomically: true, encoding: .utf8)
         var current = XCUIApplication(bundleIdentifier: appBundleID)
         var seq = 0
