@@ -44,6 +44,10 @@ final class BackgroundScheduler {
     /// (unavailable in the Simulator).
     var simulateContinuedProcessing = false
     private(set) var continuedRunning = false
+    /// Set by AppModel: engine statuses plus App-side work (Files listing),
+    /// and folder labels for the task's title.
+    var composeStatuses: (@MainActor ([FolderStatus]) -> [FolderStatus])?
+    var folderLabel: (@MainActor (FolderID) -> String?)?
 
     var isEnabled: Bool { defaults.object(forKey: Self.enabledKey) == nil ? true : defaults.bool(forKey: Self.enabledKey) }
 
@@ -85,7 +89,9 @@ final class BackgroundScheduler {
         if simulateContinuedProcessing {
             log.record("continued-submit", "simulated")
             let progress = Progress(totalUnitCount: 100)
-            Task { @MainActor in await self.runContinued(progress: progress, isExpired: { false }, finish: { _ in }) }
+            Task { @MainActor in
+                await self.runContinued(progress: progress, isExpired: { false }, retitle: { _, _ in }, finish: { _ in })
+            }
             return true
         }
         guard let prefix = Self.continuedPrefix else { return false }
@@ -113,43 +119,77 @@ final class BackgroundScheduler {
         task.expirationHandler = { expired.set() }
         nonisolated(unsafe) let unsafeTask = task
         Task { @MainActor in
-            await self.runContinued(progress: task.progress, isExpired: { expired.isSet }, finish: { ok in
+            await self.runContinued(progress: task.progress, isExpired: { expired.isSet }, retitle: { title, subtitle in
+                unsafeTask.updateTitle(title, subtitle: subtitle)
+            }, finish: { ok in
                 unsafeTask.setTaskCompleted(success: ok)
             })
         }
     }
 
-    /// Shared by the real task and the UI-test simulation: report byte progress
-    /// until every folder is settled (or cannot progress), then end.
-    private func runContinued(progress: Progress, isExpired: @escaping () -> Bool, finish: @escaping (Bool) -> Void) async {
+    /// Shared by the real task and the UI-test simulation: report progress
+    /// through every phase of the work (file list, Files list, scan, sync),
+    /// named in the title, and end once nothing has been left to do for a
+    /// while (ContinuedWorkTracker).
+    private func runContinued(progress: Progress, isExpired: @escaping () -> Bool,
+                              retitle: @escaping (String, String) -> Void, finish: @escaping (Bool) -> Void) async {
         continuedRunning = true
         host.beginContinuedProcessing()
+        let started = ContinuousClock.now
+        var tracker = ContinuedWorkTracker()
         var reason = "done"
+        var shownTitle = ""
+        var lastPhase: ContinuedWorkTracker.Phase?
         while true {
             if isExpired() { reason = "expired"; break }
             guard let status = try? await host.engine.snapshot() else { reason = "engine-unavailable"; break }
-            let total = status.folders.reduce(Int64(0)) { $0 + max($1.progress.globalBytes, 0) }
-            let need = status.folders.reduce(Int64(0)) { $0 + max($1.progress.needBytes, 0) }
-            progress.totalUnitCount = max(total, 1)
-            progress.completedUnitCount = max(total - need, 0)
-            // Receiving a peer's file list is progress too (a folder with a
-            // long history spends minutes on index batches before any byte
-            // moves; this ended the task as "stalled" after 2 s on device).
-            let active = status.folders.contains { [.syncing, .scanning, .fetchingIndex].contains($0.state) }
-            if !active {
-                // Up to date, or waiting for devices / on hold: nothing more to do in background.
-                reason = need == 0 ? "done" : "stalled"
+            let folders = composeStatuses?(status.folders) ?? status.folders
+            let step = tracker.step(folders)
+            progress.totalUnitCount = max(step.total, 1)
+            progress.completedUnitCount = step.completed
+            if step.phase != lastPhase {
+                log.record("continued-phase", "\(step.phase.rawValue) folder=\(step.folder?.rawValue ?? "-") "
+                           + "after=\(Self.seconds(since: started))s")
+                lastPhase = step.phase
+            }
+            if let (title, subtitle) = Self.title(for: step, label: step.folder.flatMap { folderLabel?($0) }),
+               title + subtitle != shownTitle {
+                shownTitle = title + subtitle
+                retitle(title, subtitle)
+            }
+            if step.finished {
+                reason = step.stalled ? "stalled" : "done"
                 break
             }
             try? await Task.sleep(for: .seconds(1))
         }
-        log.record("continued-finished", "reason=\(reason)")
+        log.record("continued-finished", "reason=\(reason) ran=\(Self.seconds(since: started))s")
         continuedRunning = false
         // Drain first, then complete the task: setTaskCompleted ends the
         // task's background time, and a suspension while the engine still
         // holds the App Group lock is killed with 0xdead10cc.
         await host.endContinuedProcessing(reason: reason)
         finish(reason == "done")
+    }
+
+    private static func seconds(since start: ContinuousClock.Instant) -> Int64 {
+        (ContinuousClock.now - start).components.seconds
+    }
+
+    /// "Getting file list · big-folder" / "Syncing files · big-folder" for the
+    /// system's progress UI; nil while idle (the title stays).
+    static func title(for step: ContinuedWorkTracker.Step, label: String?) -> (String, String)? {
+        let title: String
+        switch step.phase {
+        case .fetchingIndex: title = String(localized: "Getting file list")
+        case .preparingFiles: title = String(localized: "Preparing file list")
+        case .syncing: title = String(localized: "Syncing files")
+        case .idle: return nil
+        }
+        let subtitle = String(localized: "Psynguechthyngue keeps syncing until your transfers finish.")
+        guard let label else { return (title, subtitle) }
+        let name = step.otherFolders > 0 ? String(localized: "\(label) and \(step.otherFolders) more") : label
+        return ("\(title) · \(name)", subtitle)
     }
 
     /// Built outside the main actor so the closure carries no actor-isolation

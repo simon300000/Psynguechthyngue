@@ -50,7 +50,16 @@ final class AppModel {
     /// Counts of engine start/stop transitions (fixture diagnostics for UI tests).
     private(set) var engineStarts = 0
     private(set) var engineStops = 0
-    var isActive = false { didSet { if isActive && !oldValue { autoContinueIfNeeded() } } }
+    var isActive = false {
+        didSet {
+            if isActive && !oldValue { autoContinueIfNeeded() }
+            // Last chance (scene resigning active, still allowed to submit):
+            // work is under way and no task covers it yet.
+            if !isActive && oldValue && folders.contains(where: { Self.isBackgroundWork(status(of: $0).state) }) {
+                continueForUserAction("resign-active")
+            }
+        }
+    }
     /// Menu / keyboard command waiting to be handled by the UI.
     var pendingCommand: AppCommand?
     /// Transfers in progress (Mac closure confirmation, accessory).
@@ -59,7 +68,18 @@ final class AppModel {
     private(set) var engineOptions: EngineOptions?
     private(set) var syncthingVersion = ""
     /// BG continued processing, set by AppEnvironment.
-    @ObservationIgnored var scheduler: BackgroundScheduler?
+    @ObservationIgnored var scheduler: BackgroundScheduler? {
+        didSet {
+            scheduler?.composeStatuses = { [weak self] engine in
+                guard let self else { return engine }
+                return engine.map {
+                    FolderStatusComposer.compose(folderID: $0.folderID, engine: $0, engineRunning: true,
+                                                 listing: self.listings[$0.folderID])
+                }
+            }
+            scheduler?.folderLabel = { [weak self] id in self?.folders.first { $0.id == id }?.label }
+        }
+    }
     private(set) var filesLocation: FilesLocationState = .unknown
     @ObservationIgnored var filesStatus: (any FilesLocationStatusProviding)?
 
@@ -174,6 +194,7 @@ final class AppModel {
             pendingDevices = try await engine.pendingDevices()
             pendingFolders = try await engine.pendingFolders()
             debugAutoAccept()
+            debugRemoveIfRequested()
             debugFileOpsIfRequested()
             let snap = try await engine.snapshot()
             var merged = Dictionary(uniqueKeysWithValues: snap.folders.map { ($0.folderID, $0) })
@@ -294,7 +315,7 @@ final class AppModel {
     private func autoContinueIfNeeded() {
         // Index exchange counts: stopping the engine on every app switch
         // restarted it from the last full batch each time.
-        let transfersActive = !syncingFolders.isEmpty || folders.contains { status(of: $0).state == .fetchingIndex }
+        let transfersActive = folders.contains { Self.isBackgroundWork(status(of: $0).state) }
         if !transfersActive { autoContinueFailed = false }
         guard autoContinueGate.shouldRequest(
             enabled: settings.autoContinueInBackground, appActive: isActive, canContinue: canContinueInBackground,
@@ -307,6 +328,28 @@ final class AppModel {
                 subtitle: String(localized: "Psynguechthyngue keeps syncing until your transfers finish.")
             )
             // Silent either way: no banner for something the user did not just tap.
+            autoContinueFailed = !ok
+        }
+    }
+
+    /// Work a continued background task keeps going: the file list, the
+    /// Files list, scanning and syncing.
+    nonisolated static func isBackgroundWork(_ state: FolderSyncState) -> Bool {
+        [.syncing, .scanning, .fetchingIndex, .preparingFiles].contains(state)
+    }
+
+    /// The user just accepted a share / added a folder or device: with
+    /// "Keep syncing in background automatically" on, request the task now,
+    /// before any status says there is work (closing the app right after
+    /// accepting lost it: the request waited for a later status event).
+    func continueForUserAction(_ reason: String, label: String? = nil) {
+        guard settings.autoContinueInBackground, canContinueInBackground, !isContinuingInBackground,
+              let scheduler else { return }
+        LifecycleLog.shared.record("continued-auto-request", "reason=\(reason)")
+        let title = label.map { "\(String(localized: "Getting file list")) · \($0)" } ?? String(localized: "Syncing files")
+        Task {
+            let ok = await scheduler.continueInBackground(
+                title: title, subtitle: String(localized: "Psynguechthyngue keeps syncing until your transfers finish."))
             autoContinueFailed = !ok
         }
     }
@@ -406,6 +449,8 @@ final class AppModel {
     }
 
     func acceptPending(_ device: PendingDevice) async {
+        // Its folders follow (offered, or auto-accepted).
+        continueForUserAction("accept-device")
         _ = await addDevice(id: device.id, name: device.name)
     }
 
@@ -462,6 +507,7 @@ final class AppModel {
     func createFolder(label: String, location: FolderLocation, mode: PsySync.ContentMode, devices: [DeviceID]) async -> Bool {
         let folder = Folder(id: Self.makeFolderID(), label: label, location: location,
                             contentMode: location == .managed ? mode : .everything, devices: devices)
+        continueForUserAction("add-folder", label: label)
         let ok = await perform { try await engine.addFolder(folder) }
         if ok { await refreshAll() }
         return ok
@@ -470,6 +516,7 @@ final class AppModel {
     func accept(_ pending: PendingFolder, label: String, location: FolderLocation, mode: PsySync.ContentMode) async -> Bool {
         let folder = Folder(id: pending.folderID, label: label, location: location,
                             contentMode: location == .managed ? mode : .everything, devices: [pending.offeredBy])
+        continueForUserAction("accept-folder", label: label)
         let ok = await perform { try await engine.acceptPendingFolder(pending, as: folder) }
         if ok { await refreshAll() }
         return ok
@@ -553,6 +600,28 @@ extension AppModel {
         for folder in pendingFolders where folder.label.hasPrefix(prefix) && debugAccepted.insert(folder.id).inserted {
             LifecycleLog.shared.record("debug-auto-accept", "folder \(folder.folderID.rawValue)")
             Task { _ = await accept(folder, label: folder.label, location: .managed, mode: .everything) }
+        }
+        #endif
+    }
+
+    /// `-PsyDebugRemovePrefix <prefix>`: remove folders (deleting their local
+    /// files) and devices whose label/name starts with `<prefix>`, to clean
+    /// up after a real-device test. Compiled out of Release.
+    func debugRemoveIfRequested() {
+        #if DEBUG
+        guard !isFixture, let prefix = UserDefaults.standard.string(forKey: "PsyDebugRemovePrefix"), !prefix.isEmpty,
+              debugAccepted.insert("remove-prefix").inserted else { return }
+        let folders = self.folders.filter { $0.label.hasPrefix(prefix) }
+        let devices = self.devices.filter { $0.name.hasPrefix(prefix) }
+        Task {
+            for f in folders {
+                LifecycleLog.shared.record("debug-remove", "folder \(f.id.rawValue)")
+                _ = await remove(f, deleteLocalFiles: true)
+            }
+            for d in devices {
+                LifecycleLog.shared.record("debug-remove", "device \(d.id.short)")
+                _ = await remove(d)
+            }
         }
         #endif
     }

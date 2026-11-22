@@ -2891,6 +2891,54 @@
           }
         }
       }
+    },
+    "Getting file list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在获取文件列表"
+          }
+        }
+      }
+    },
+    "Preparing file list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成文件列表"
+          }
+        }
+      }
+    },
+    "%@ and %lld more" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ and %2$lld more"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ and %2$lld more"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 等 %2$lld 个"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
