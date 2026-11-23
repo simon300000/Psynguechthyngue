@@ -39,7 +39,7 @@ enum EventAction: Hashable, Sendable {
     case resync
 }
 
-/// Pure translation of upstream `/rest/events` entries (DESIGN.md §3.2).
+/// Pure translation of upstream `/rest/events` entries.
 enum EventTranslator {
     static let mask = [
         "DeviceConnected", "DeviceDisconnected", "DevicePaused", "DeviceResumed",

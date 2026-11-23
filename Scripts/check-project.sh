@@ -14,7 +14,7 @@ for f in Package.swift Config/Base.xcconfig Config/CI.xcconfig Config/UITests.xc
 done
 
 for gone in GoCore Sources/PsyCore Tests/PsyCoreTests Platform/GoCoreClient.swift; do
-    [[ ! -e "${ROOT_DIR}/${gone}" ]] || fail "${gone} was removed by the rewrite and must not come back"
+    [[ ! -e "${ROOT_DIR}/${gone}" ]] || fail "${gone} was removed and must not come back"
 done
 
 # No live references to the removed stack (docs archive and design history excepted).

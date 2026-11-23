@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Repository verification gate (DESIGN.md §10, WP-E).
+# Repository verification gate.
 #
 #   bash Scripts/verify.sh [all|sanity|swift|go|licenses|ios|ui|format]
 #

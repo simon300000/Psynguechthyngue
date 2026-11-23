@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
-# GoBridge verification: vet, unit + §10.2 integration tests, race detector.
+# GoBridge verification: vet, unit + integration tests, race detector.
 # Usage: GoBridge/Scripts/test.sh [--quick]   (--quick skips -race)
 set -eu
 cd "$(dirname "$0")/.."

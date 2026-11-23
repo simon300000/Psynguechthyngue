@@ -9,7 +9,7 @@ import UIKit
 // detail shows (`AppModel.status(of:).progress.localBytes`); file counts come
 // from `SyncEngine.folderDetails`; capacity from the volume's resource values.
 // The page keeps its own snapshot and rebuilds it at most once a second, so
-// sync events do not re-render it more often (Docs/REWRITE/notes/perf).
+// sync events do not re-render it more often.
 
 /// Volume capacity of the device (`URLResourceValues`).
 enum DeviceStorage {

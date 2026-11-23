@@ -78,7 +78,7 @@ public struct PolicyPreferences: Hashable, Codable, Sendable {
 
 /// Output of the policy layer. The *only* things policy may do are pause /
 /// resume the whole engine's networking and set rate limits. It never
-/// restructures folders or schedules work (DESIGN.md §4.4).
+/// restructures folders or schedules work.
 public struct PolicyDecision: Hashable, Codable, Sendable {
     public enum HoldReason: String, Codable, Sendable {
         case noNetwork

@@ -17,7 +17,7 @@ import (
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
-// Peer address cache (Docs/REWRITE/notes/wp-a-peer-address-cache.md).
+// Peer address cache.
 //
 // The App engine records, per device, addresses that are known to be
 // dialable: the address of every *outgoing* connection that completed, plus

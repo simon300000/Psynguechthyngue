@@ -1,5 +1,5 @@
 #!/bin/bash
-# DEV/TEST ONLY: WP-C Files acceptance on the simulator against the official
+# DEV/TEST ONLY: Files acceptance on the simulator against the official
 # Syncthing (see e2e.py for topology and safety rules). Expects the phone
 # instance running and `e2e.py setup` done. Usage: run-acceptance.sh <udid> [test-name...]
 set -uo pipefail

@@ -66,8 +66,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             }
             // Closing the last window on Mac terminates the app without a
             // `UIScene.didDisconnectNotification`; `willTerminate` is delivered and
-            // drains the engine (measured on macOS 27: drain ≈0.8 s, then exit;
-            // Docs/REWRITE/notes/accept-mac/README.md).
+            // drains the engine (measured on macOS 27: drain ≈0.8 s, then exit).
             center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { _ = Task { await env.host.handle(.willTerminate) } }
             }

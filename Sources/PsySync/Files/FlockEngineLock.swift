@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// `EngineLock` over flock(2) on `AppGroupLayout.engineLock` (DESIGN.md §1.1 I1, §6.6).
+/// `EngineLock` over flock(2) on `AppGroupLayout.engineLock`.
 ///
 /// After acquiring, the holder writes "<owner> <pid>\n" into the lock file so
 /// other processes can tell *who* holds it (`currentHolder`). The file itself

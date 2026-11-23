@@ -2,7 +2,7 @@
 import Foundation
 import PsySync
 
-/// DEBUG-only stand-in for psybridge.FetchFile until WP-A's adapter is linked.
+/// DEBUG-only stand-in for psybridge.FetchFile until adapter is linked.
 /// Active only when `<AppGroup>/DevFetchSource/` exists (created by the
 /// simulator acceptance script); serves `DevFetchSource/<folder>/<path>` as
 /// if a peer had sent it, block by block, honouring cancellation. Everything

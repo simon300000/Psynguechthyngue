@@ -1,7 +1,7 @@
 import Foundation
 @testable import PsySync
 
-/// Minimal scriptable SyncEngine for Files tests (independent of WP-D's FakeSyncEngine).
+/// Minimal scriptable SyncEngine for Files tests (independent of FakeSyncEngine).
 final class FilesFakeEngine: SyncEngine, @unchecked Sendable {
     private let lock = NSLock()
     private var index: [FolderID: [GlobalIndexEntry]] = [:]

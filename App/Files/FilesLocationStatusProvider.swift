@@ -1,9 +1,9 @@
 import Foundation
 import PsySync
 
-/// Implements WP-D's `FilesLocationStatusProviding` from the real domain state.
+/// Implements `FilesLocationStatusProviding` from the real domain state.
 /// `.disabled` when any managed folder's domain is user-disabled (the default
-/// on Mac / Designed for iPad, Docs/REWRITE/MAC_SPIKE.md), `.enabled` when all
+/// on Mac / Designed for iPad), `.enabled` when all
 /// are enabled, `.unknown` when there is no managed folder or no domain yet.
 @MainActor
 final class FilesLocationStatusProvider: FilesLocationStatusProviding {

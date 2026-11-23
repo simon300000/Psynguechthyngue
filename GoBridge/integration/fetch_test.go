@@ -27,7 +27,7 @@ const (
 	crossSize = 2*(128<<10) + 1000 // spans three 128 KiB blocks
 )
 
-// TestFetchFile: §10.2 — A is a full engine, B's restricted core fetches
+// TestFetchFile: A is a full engine, B's restricted core fetches
 // from it. B first runs as a full engine with ignore-all, so its DB holds the
 // global index but no content (the on-demand situation).
 func TestFetchFile(t *testing.T) {
@@ -201,7 +201,7 @@ func TestFetchFile(t *testing.T) {
 	}
 
 	t.Run("commit then rescan keeps global version", func(t *testing.T) {
-		// WP-C commit path: staging → folder, un-ignore, App engine scans.
+		// commit path: staging → folder, un-ignore, App engine scans.
 		// A is offline here, so B can only adopt what it has on disk.
 		o := b.fetch(t, helperArgs{Path: "cross.bin", Dest: dest("commit")})
 		if o.Error != "" {
@@ -288,7 +288,7 @@ func recordRSS(t *testing.T, o fetchOutcome) {
 			f.Close()
 		}
 	}
-	// Gross regression guard only; the real budget is measured on device (WP-C).
+	// Gross regression guard only; the real budget is measured on device.
 	if mib > 160 {
 		t.Fatalf("restricted fetch peak RSS %.1f MiB is far above budget", mib)
 	}

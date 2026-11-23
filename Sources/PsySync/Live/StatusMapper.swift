@@ -121,9 +121,9 @@ public struct FolderStatusInputs: Hashable, Sendable {
     }
 }
 
-/// Pure mapping from upstream folder state to `FolderStatus` (DESIGN.md §5.2).
+/// Pure mapping from upstream folder state to `FolderStatus`.
 ///
-/// Key property (fixes AUDIT P0): an offline device never makes a folder look
+/// Key property: an offline device never makes a folder look
 /// failed or stuck. If work is outstanding and *no* sharing peer is connected
 /// the state is `waitingForDevices`; as soon as one peer is connected and up
 /// to date, offline peers are ignored.

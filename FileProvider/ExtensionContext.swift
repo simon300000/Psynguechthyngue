@@ -81,10 +81,10 @@ final class ExtensionContext: @unchecked Sendable {
     }
 }
 
-/// Bridge + identity for the restricted fetch (DESIGN.md §6.4).
+/// Bridge + identity for the restricted fetch.
 ///
-/// Production: WP-A's `PsyBridgeAdapter` (Platform/PsyBridgeAdapter.swift +
-/// Artifacts/PsyBridge.xcframework linked into this target) and WP-B's
+/// Production: `PsyBridgeAdapter` (Platform/PsyBridgeAdapter.swift +
+/// Artifacts/PsyBridge.xcframework linked into this target) and 
 /// `KeychainIdentityStore` on the shared access group (`PsyKeychainAccessGroup`).
 /// DEBUG only: if `<AppGroup>/DevFetchSource/` exists, `DevRestrictedFetchBridge`
 /// stands in for the network (simulator harness). Without the xcframework the
@@ -109,7 +109,7 @@ enum RestrictedFetchServices {
             #endif
         }
         #if DEBUG
-        // "trace": one line per fetch phase with footprint=/footprintPeak= (WP-A).
+        // "trace": one line per fetch phase with footprint=/footprintPeak=.
         PsyBridgeAdapter.setRestrictedLog(level: "trace", sink)
         #else
         PsyBridgeAdapter.setRestrictedLog(level: "warn", sink)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Generates the `.stignore` for on-demand folders (DESIGN.md §6.3):
+/// Generates the `.stignore` for on-demand folders:
 ///
 /// ```
 /// // === Psynguechthyngue managed — do not edit below ===

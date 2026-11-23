@@ -48,6 +48,6 @@ verify-app-store-export:
 	@test -n "$(APP_STORE_IPA)" || { echo "APP_STORE_IPA is required" >&2; exit 64; }
 	bash Scripts/verify-app-store-export.sh --archive "$(APP_STORE_ARCHIVE)" --ipa "$(APP_STORE_IPA)"
 
-# E2E against the official Syncthing on this Mac (DESIGN §10.3, local only).
+# E2E against the official Syncthing on this Mac.
 e2e-local:
 	bash Scripts/e2e-local-syncthing.sh

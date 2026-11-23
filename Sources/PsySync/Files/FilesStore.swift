@@ -37,8 +37,7 @@ public struct PresenceRequest: Hashable, Sendable {
 /// `Files/files.sqlite` (WAL). Holds the File Provider projection of the
 /// global index, stable item identity, tombstones for change enumeration,
 /// the local-mutation journal and the content-request inbox
-/// (DESIGN.md §6.1–6.6).
-///
+/// ///
 /// Ownership (invariant I3): only the App's `FilesProjector` writes the global
 /// projection (`applyIndexBatch`, full-sync sweep). The extension writes the
 /// journal, requests, pins/presence, materialized set and local-write rows
@@ -351,7 +350,7 @@ public final class FilesStore: @unchecked Sendable {
         return digest("v:" + entry.version)
     }
 
-    /// metadataVersion = version vector token + mtime (DESIGN.md §6.2).
+    /// metadataVersion = version vector token + mtime.
     static func metadataVersion(version: String, modified: Date) -> Data {
         digest(version + "|" + String(Int64((modified.timeIntervalSince1970 * 1000).rounded())))
     }
@@ -637,7 +636,7 @@ public final class FilesStore: @unchecked Sendable {
     }
 
     /// `setMaterialized` plus the files the system evicted in an on-demand
-    /// folder (DESIGN §6.3 "系统回收→删除引擎副本"): local, not pending, not
+    /// folder: local, not pending, not
     /// kept (pinned itself or below a pinned folder), and still at the
     /// content version they had when they were materialized — an eviction
     /// after a remote update (EvictOnRemoteUpdate) is not a removal; the

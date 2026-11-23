@@ -29,10 +29,10 @@ ui = project.new_target(:ui_test_bundle, "FilesUITests", :ios, "17.0")
 add_dir(project, ui, File.join(HERE, "UITests"), "UITests")
 ui.add_dependency(app)
 add_dir(project, app, File.join(ROOT, "App/Files"), "AppFiles")
-# WP-D's protocol implemented by App/Files/FilesLocationStatusProvider.swift.
+# protocol implemented by App/Files/FilesLocationStatusProvider.swift.
 app.add_file_references([project.main_group.new_reference(File.join(ROOT, "App/UI/FilesLocationStatus.swift"), :absolute)])
 fp = add_dir(project, ext, File.join(ROOT, "FileProvider"), "FileProvider")
-# Real bridge (WP-A): Swift adapter + static xcframework in both targets.
+# Real bridge: Swift adapter + static xcframework in both targets.
 platform = project.main_group.new_group("Platform", File.join(ROOT, "Platform"), :absolute)
 adapter = platform.new_reference(File.join(ROOT, "Platform/PsyBridgeAdapter.swift"), :absolute)
 xcf = platform.new_reference(File.join(ROOT, "Artifacts/PsyBridge.xcframework"), :absolute)

@@ -142,7 +142,7 @@ struct ContentHarness {
         #expect(bridge.calls == 1)
     }
 
-    /// Contract change WP-A record-fetched-file: fetch → rename → recordFetchedFile
+    /// fetch → rename → recordFetchedFile
     /// → `.stignore` `!/path` → journal → unlock.
     @Test func restrictedFetchCommitOrder() async throws {
         let h = try ContentHarness(mode: .onDemand)

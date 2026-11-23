@@ -2,7 +2,7 @@ import BackgroundTasks
 import Foundation
 import PsySync
 
-/// Registers and schedules BGAppRefresh / BGProcessing tasks (DESIGN.md §4.2).
+/// Registers and schedules BGAppRefresh / BGProcessing tasks.
 /// Both reuse the single `LiveEngineHost`; only the run context differs.
 ///
 /// Debug: with the app running under Xcode/simulator, pause in the debugger and run

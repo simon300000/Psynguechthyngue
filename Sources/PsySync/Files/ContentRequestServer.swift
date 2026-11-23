@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// App-side counterpart of the extension (DESIGN.md §6.2 delegatedToApp, §6.5).
+/// App-side counterpart of the extension.
 ///
 /// - `ContentRequestInbox`: posted → accepted (un-ignore + prio) → completed
 ///   when the engine reports `itemFinished` (or the file is already local).
@@ -268,7 +268,7 @@ public actor ContentRequestServer {
         // deletion, the deletion is recorded as "ignored" and never propagates
         // (observed against Syncthing 2.1.6). A leftover rule for a
         // nonexistent path is harmless; the generated .stignore is rebuilt
-        // from files.sqlite (DESIGN.md §6.3) and drops it.
+        // from files.sqlite and drops it.
         _ = gone
         try store.clearPendingUpload(folder, paths: Self.unique(present))
         log.info("journal folder=\(folder.rawValue, privacy: .public) scanned=\(scan.count)")

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Runtime memory profiles (DESIGN.md §3.5). Values in MiB.
+// Runtime memory profiles. Values in MiB.
 const (
 	// App foreground engine: soft limit; GC works harder near it, never OOMs by itself.
 	DefaultForegroundMemoryLimitMiB = 256

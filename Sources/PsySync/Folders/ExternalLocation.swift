@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// Security-scoped bookmark primitives, injectable for tests.
-/// Extracted from the legacy `ExternalDirectoryBookmarkAccess` (DESIGN.md §8.2).
+/// Extracted from the legacy `ExternalDirectoryBookmarkAccess`.
 public struct ExternalLocationAccess: Sendable {
     public typealias Create = @Sendable (URL) throws -> Data
     public typealias Resolve = @Sendable (Data) throws -> (url: URL, isStale: Bool)
@@ -57,7 +57,7 @@ public struct ExternalLocationAccess: Sendable {
 
 public enum ExternalLocationError: Error, Hashable, Sendable {
     case notADirectory
-    /// iCloud Drive / a cloud or third-party File Provider location (DESIGN.md §6.7, Q2).
+    /// iCloud Drive / a cloud or third-party File Provider location.
     /// "On My iPhone / iPad" (LocalStorage) is allowed.
     case cloudBacked
     case accessDenied
@@ -152,7 +152,7 @@ public enum ExternalLocation {
     /// File Provider (including our own domain): content there can be
     /// dataless, so Syncthing reading it would trigger downloads or fail.
     /// "On My iPhone / iPad" (the system LocalStorage provider) is local disk
-    /// and allowed (DESIGN.md §6.7, Q2).
+    /// and allowed.
     public static func isFileProviderBacked(_ url: URL) -> Bool {
         classify(LocationFacts.probe(url)) == .cloud
     }

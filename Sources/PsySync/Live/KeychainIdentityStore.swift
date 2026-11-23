@@ -22,8 +22,8 @@ public protocol KeychainBackend: Sendable {
     func delete(service: String, account: String) throws
 }
 
-/// Keychain-backed identity (DESIGN.md §5.3, decision Q4: reuse the legacy
-/// identity so the device ID survives the rewrite).
+/// Keychain-backed identity (reuses an existing
+/// identity so the device ID stays stable).
 ///
 /// - Current format: account `device-identity-v2`, JSON
 ///   `{"certificatePEM": base64, "privateKeyPEM": base64}`.

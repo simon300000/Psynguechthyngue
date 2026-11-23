@@ -3,7 +3,7 @@ import PsySync
 import UserNotifications
 
 /// Local notifications for things that need the user (new device request,
-/// folder invitation, errors). Source is `EngineEvent` (DESIGN.md §8.2);
+/// folder invitation, errors). Source is `EngineEvent`;
 /// delivery only happens while the app is not active (BGTask runs).
 @MainActor
 final class AppNotifier {

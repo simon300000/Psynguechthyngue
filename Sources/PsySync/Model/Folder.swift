@@ -9,7 +9,7 @@ public enum FolderLocation: Hashable, Codable, Sendable {
     /// "On My iPhone/…" or an external drive. Synced in place; not exposed
     /// through our File Provider domain (it is already visible in Files).
     /// Rejected for locations that are themselves File Provider backed
-    /// (iCloud Drive, other cloud apps) — see DESIGN.md §6.7.
+    /// (iCloud Drive, other cloud apps)
     case external(bookmark: Data, displayPath: String)
 }
 
@@ -26,7 +26,7 @@ public enum ContentMode: String, Codable, Sendable, CaseIterable {
     case everything
     /// Only files the user opened or marked "Keep Downloaded" are local; the
     /// rest are placeholders in Files. Implemented with a generated
-    /// `.stignore` (DESIGN.md §6.3).
+    /// `.stignore`.
     case onDemand
 }
 

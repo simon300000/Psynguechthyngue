@@ -3,7 +3,7 @@ import Foundation
 import PsySync
 import os
 
-/// One NSFileProvider domain per *managed* folder (DESIGN.md §6.1); external
+/// One NSFileProvider domain per *managed* folder; external
 /// folders are already visible in Files and get none. Domain identifier =
 /// folder ID, display name = folder label.
 /// User-visible state of a folder's Files location (Mac spike: domains start
@@ -199,7 +199,7 @@ enum DomainManager {
         }
     }
 
-    /// Fresh install / reset (DESIGN.md §8.4).
+    /// Fresh install / reset.
     static func removeAll() async {
         try? await NSFileProviderManager.removeAllDomains()
     }

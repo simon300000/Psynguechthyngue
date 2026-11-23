@@ -39,7 +39,7 @@ enum AppMenu {
 }
 
 /// Mac only: closing the last window quits a Designed-for-iPad app and stops
-/// syncing (Docs/REWRITE/MAC_SPIKE.md). While transfers are running, iOS 27's
+/// syncing. While transfers are running, iOS 27's
 /// `UISceneClosureConfirmation` asks before the window closes.
 @MainActor
 enum ClosureConfirmation {

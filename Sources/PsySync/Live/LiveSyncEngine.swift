@@ -3,7 +3,7 @@ import Foundation
 public struct LiveSyncEngineConfiguration: Sendable {
     public var layout: AppGroupLayout
     public var deviceName: String
-    /// Wait for the File Provider's restricted fetch to yield (DESIGN.md §4.1).
+    /// Wait for the File Provider's restricted fetch to yield.
     public var lockTimeout: Duration = .seconds(5)
     public var startTimeout: Duration = LifecycleBudget.foregroundStartTimeout
     /// iOS has no FSEvents; the bridge disables the watcher there. New folders
@@ -30,7 +30,7 @@ public struct LiveSyncEngineConfiguration: Sendable {
 }
 
 /// `SyncEngine` over the gomobile bridge (lifecycle only) + Syncthing REST
-/// (everything else) + `/rest/events` long-poll (DESIGN.md §3, §5).
+/// (everything else) + `/rest/events` long-poll.
 ///
 /// Concurrency: actor-isolated state; every blocking call (bridge, Keychain)
 /// goes through `BridgeExecutor` (dedicated GCD queue). REST is URLSession
@@ -270,8 +270,7 @@ public actor LiveSyncEngine: SyncEngine {
                     // already gone
                 } else {
                     // stop_timeout: the bridge keeps shutting down in the
-                    // background and its next Start waits for that (WP-A
-                    // 6261e01), so the process is not poisoned: a later
+                    // background and its next Start waits for that                     // 6261e01), so the process is not poisoned: a later
                     // `start` is allowed and simply takes longer.
                     failure = mapped
                 }

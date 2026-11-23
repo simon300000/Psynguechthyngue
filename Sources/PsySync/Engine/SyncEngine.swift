@@ -23,7 +23,7 @@ public enum EngineError: Error, Hashable, Sendable {
 
 /// The single owner of "the" Syncthing instance inside the App process.
 ///
-/// Implementation (WP-B): `LiveSyncEngine` = bridge (`SyncthingBridge`) for
+/// Implementation: `LiveSyncEngine` = bridge (`SyncthingBridge`) for
 /// start/stop + `SyncthingRESTClient` for everything else + an event pump that
 /// turns `/rest/events` into `events`. All methods are safe to call from any
 /// actor; long-running bridge calls run on a dedicated thread, never on the
@@ -87,7 +87,7 @@ public protocol SyncEngine: AnyObject, Sendable {
     /// over an index it already projected.
     func indexFingerprint(_ folder: FolderID) async -> String?
 
-    // MARK: Settings (contract change WP-D engine options)
+    // MARK: Settings 
 
     /// Current engine options (requires a running engine).
     func options() async throws -> EngineOptions

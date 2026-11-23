@@ -2,7 +2,7 @@ import Foundation
 import os
 
 /// App-side: keeps `files.sqlite` in sync with the engine's global index
-/// (DESIGN.md §6.2). Subscribes to `indexChanged`, debounces per folder, runs a
+/// Subscribes to `indexChanged`, debounces per folder, runs a
 /// full mark-and-sweep pass over `engine.globalIndex`, then signals the
 /// folder's File Provider domain. Unchanged rows keep their anchors, so a pass
 /// over an unchanged index produces no enumeration work in the system.

@@ -3,7 +3,7 @@ import Foundation
 import os
 
 /// Why the extension could not produce contents. The extension maps these to
-/// NSFileProviderError (DESIGN.md §6.4 "失败映射").
+/// NSFileProviderError.
 public enum FilesContentError: Error, Hashable, Sendable {
     public enum OpenAppReason: String, Sendable {
         /// No reachable peer / deadline (restricted fetch) — "open the app".
@@ -37,7 +37,7 @@ public enum FilesContentError: Error, Hashable, Sendable {
 /// restricted fetch. Returns nil when no identity exists yet.
 public typealias DeviceIdentityProvider = @Sendable () throws -> DeviceIdentity?
 
-/// Extension-side `ContentProviding` (decision tree, DESIGN.md §6.2):
+/// Extension-side `ContentProviding` (decision tree):
 /// localClone → delegatedToApp → restrictedFetch.
 public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
     public struct Configuration: Sendable {
@@ -102,7 +102,7 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         guard let record = try reader.item(item) else { throw FilesContentError.noSuchItem }
         guard !record.isDirectory else { throw FilesContentError.isDirectory }
         if let requestedVersion, requestedVersion != record.contentVersion {
-            // Not an error (AUDIT P1): serve the current version; the system
+            // Not an error: serve the current version; the system
             // updates from the returned item.
             log.info("fetchContents: requested version differs; serving current for \(record.itemID.rawValue, privacy: .public)")
         }
@@ -370,7 +370,7 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
             throw mapped
         }
 
-        // Commit order (contract change WP-A record-fetched-file), all under the lock:
+        // Commit order (record-fetched-file), all under the lock:
         // 1 fetch (done) → 2 rename into folder → 3 recordFetchedFile →
         // 4 `.stignore` `!/path` (on-demand) → 5 journal → (6 unlock in defer).
         let destination = try containment.url(for: record.path)
@@ -500,7 +500,7 @@ final class AsyncGate: @unchecked Sendable {
 }
 
 /// Runs blocking bridge calls on a dedicated thread, never on the
-/// cooperative pool (DESIGN.md §4.3).
+/// cooperative pool.
 public enum BlockingThread {
     public static func run<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in

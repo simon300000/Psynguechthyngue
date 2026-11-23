@@ -1,6 +1,6 @@
 import XCTest
 
-/// WP-C acceptance in the Files app (DESIGN.md §11): browse, open via all three
+/// acceptance in the Files app: browse, open via all three
 /// content paths, create, edit, rename, delete. Run in order by
 /// `Tools/FilesHarness/run-acceptance.sh`, which also prepares the peers and
 /// verifies the results on the official Syncthing instance between steps.
@@ -14,7 +14,7 @@ final class FilesAcceptanceUITests: XCTestCase {
     }
 
     func dump(_ name: String) {
-        try? files.debugDescription.write(toFile: "/Users/user/SyncthingTest/wpc/ui-\(name).txt", atomically: true, encoding: .utf8)
+        try? files.debugDescription.write(toFile: (ProcessInfo.processInfo.environment["PSY_HARNESS_DUMP_DIR"] ?? NSTemporaryDirectory()) + "/ui-\(name).txt", atomically: true, encoding: .utf8)
     }
 
     func launchHarness(_ extra: [String] = []) {

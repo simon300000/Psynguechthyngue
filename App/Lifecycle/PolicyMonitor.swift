@@ -4,7 +4,7 @@ import PsySync
 import UIKit
 
 /// Collects network / power / thermal state and forwards it to the host as
-/// `PolicyInputs`. It never talks to the engine (DESIGN.md §4.4, I5).
+/// `PolicyInputs`. It never talks to the engine.
 @MainActor
 final class PolicyMonitor {
     private let monitor = NWPathMonitor()
