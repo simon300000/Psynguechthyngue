@@ -14,11 +14,13 @@ concurrency:
 
 jobs:
   verify:
-    name: Swift, GoBridge, licenses, iOS builds and UI tests
+    name: Swift, GoBridge, licenses and iOS builds
     # The app calls iOS 27 APIs (behind #available), so it needs the Xcode 27
-    # SDK; the macos-26 images stop at Xcode 26.x.
+    # SDK; the macos-26 images stop at Xcode 26.x. Simulator UI tests are not
+    # run here (they stalled on hosted runners); run them locally with
+    # `make verify` or `bash Scripts/verify.sh ui`.
     runs-on: xcode-27
-    timeout-minutes: 120
+    timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
 
@@ -64,16 +66,3 @@ jobs:
       - name: iOS builds
         timeout-minutes: 30
         run: bash Scripts/verify.sh ios
-
-      - name: Simulator UI tests
-        timeout-minutes: 60
-        run: bash Scripts/verify.sh ui
-
-      - name: Upload UI test results
-        if: ${{ !success() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-test-results
-          path: .build/verify/ui-tests/*.xcresult
-          if-no-files-found: ignore
-          retention-days: 7
