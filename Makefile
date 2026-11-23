@@ -11,8 +11,9 @@ bootstrap:
 project:
 	ruby Scripts/generate-xcodeproj.rb
 
-# Full gate: sanity, swift test, GoBridge tests (noassets), licenses,
-# iOS Simulator + device builds, Simulator UI tests.
+# Full gate: sanity, then swift test + GoBridge tests (noassets) + licenses,
+# iOS Simulator + device builds and Simulator UI tests as parallel lanes
+# (logs in .build/verify/logs; `bash Scripts/verify.sh serial` runs them in turn).
 verify:
 	bash Scripts/verify.sh
 
