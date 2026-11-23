@@ -29,7 +29,10 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/psy-xcodeproj.XXXXXX")"
 trap 'rm -rf "${tmp}"' EXIT
 PSY_XCODEPROJ_PATH="${tmp}/Psynguechthyngue.xcodeproj" ruby "${ROOT_DIR}/Scripts/generate-xcodeproj.rb" >/dev/null 2>&1 \
     || fail "Scripts/generate-xcodeproj.rb failed"
-diff -r "${tmp}/Psynguechthyngue.xcodeproj" "${ROOT_DIR}/Psynguechthyngue.xcodeproj" -x xcuserdata -x project.xcworkspace >/dev/null \
-    || fail "Psynguechthyngue.xcodeproj is stale; run: ruby Scripts/generate-xcodeproj.rb"
+if ! out="$(diff -r "${tmp}/Psynguechthyngue.xcodeproj" "${ROOT_DIR}/Psynguechthyngue.xcodeproj" \
+    -x xcuserdata -x project.xcworkspace)"; then
+    printf '%s\n' "${out}" | head -40 >&2
+    fail "Psynguechthyngue.xcodeproj is stale (or the xcodeproj gem is not 1.23.0); run: ruby Scripts/generate-xcodeproj.rb"
+fi
 
 printf 'Project and repository sanity passed.\n'

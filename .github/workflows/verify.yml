@@ -15,8 +15,12 @@ concurrency:
 jobs:
   verify:
     name: Swift, GoBridge, licenses, iOS builds and UI tests
-    runs-on: macos-15
+    # The app calls iOS 27 APIs (behind #available), so it needs the Xcode 27
+    # SDK; the macos-26 images stop at Xcode 26.x.
+    runs-on: xcode-27
     timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
 
     steps:
       - name: Check out repository
@@ -28,14 +32,17 @@ jobs:
           go-version-file: GoBridge/go.mod
           cache-dependency-path: GoBridge/go.sum
 
+      # Pinned: the committed project is compared byte-for-byte with the
+      # generator output, and other xcodeproj versions serialize differently.
       - name: Install xcodeproj gem
-        run: gem install --user-install xcodeproj && echo "$(ruby -e 'print Gem.user_dir')/bin" >> "$GITHUB_PATH"
+        run: gem install --user-install xcodeproj -v 1.23.0 && echo "$(ruby -e 'print Gem.user_dir')/bin" >> "$GITHUB_PATH"
 
       - name: Record Apple toolchain
         run: |
           xcodebuild -version
           swift --version
           go version
+          ruby -e 'require "xcodeproj"; puts "xcodeproj #{Xcodeproj::VERSION}"'
 
       - name: Verify repository
         run: make verify
