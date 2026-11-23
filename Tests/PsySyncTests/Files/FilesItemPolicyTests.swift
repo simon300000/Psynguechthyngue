@@ -21,25 +21,6 @@ private let f1 = FolderID(rawValue: "f1")
         }
     }
 
-    /// Part 9: the kept-on-device badge only where Keep Downloaded exists.
-    @Test func keptBadgeOnlyForKeptItemsInOnDemandFolders() throws {
-        let (store, reader) = try setup(.onDemand)
-        let x = try #require(try reader.item(at: RelativePath(rawValue: "a/x.txt")))
-        let a = try #require(try reader.item(at: RelativePath(rawValue: "a")))
-        #expect(!FilesItemPolicy.showsKeptBadge(x, contentMode: .onDemand))
-        _ = try store.setPinned(x.itemID, pinned: true)
-        _ = try store.setPinned(a.itemID, pinned: true)
-        let keptX = try #require(try reader.item(x.itemID))
-        let keptA = try #require(try reader.item(a.itemID))
-        #expect(FilesItemPolicy.showsKeptBadge(keptX, contentMode: .onDemand))
-        #expect(FilesItemPolicy.showsKeptBadge(keptA, contentMode: .onDemand))
-        #expect(!FilesItemPolicy.showsKeptBadge(keptX, contentMode: .everything))
-        #expect(!FilesItemPolicy.showsKeptBadge(keptX, contentMode: nil))
-        // The pin is in the exposed version: the system re-reads the decorations.
-        #expect(FilesItemPolicy.exposedMetadataVersion(for: keptX, contentMode: .onDemand)
-                != FilesItemPolicy.exposedMetadataVersion(for: x, contentMode: .onDemand))
-    }
-
     @Test func pinnedFoldersAreEagerFilesAndOthersInherit() throws {
         let (store, reader) = try setup(.onDemand)
         let a = try #require(try reader.item(at: RelativePath(rawValue: "a")))

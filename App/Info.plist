@@ -75,30 +75,5 @@
     </array>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
-	<!-- Part 9: icon of the File Provider "kept on this device" badge (same UTI as the extension's). -->
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>$(PRODUCT_BUNDLE_IDENTIFIER).FileProvider.decoration.keep-downloaded</string>
-			<key>UTTypeDescription</key>
-			<string>Kept on this device</string>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>com.apple.icon-decoration.badge</string>
-			</array>
-			<key>UTTypeIconFiles</key>
-			<array>
-				<string>KeepDownloadedBadge</string>
-			</array>
-			<key>UTTypeIcons</key>
-			<dict>
-				<key>UTTypeIconName</key>
-				<string>KeepDownloadedBadge</string>
-				<key>UTTypeIconBadgeName</key>
-				<string>KeepDownloadedBadge</string>
-			</dict>
-		</dict>
-	</array>
 </dict>
 </plist>

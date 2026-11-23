@@ -6,4 +6,3 @@
 "FILES_ERROR_LOW_MEMORY" = "Not enough memory to download here right now. Open Psynguechthyngue to download this file.";
 "FILES_ERROR_QUEUED" = "No device is reachable right now. Psynguechthyngue will download this file when one is.";
 "FILES_ERROR_IGNORED" = "This file is excluded by this folder's ignore rules on this device, so it is not downloaded here.";
-"FILE_PROVIDER_KEPT_ON_DEVICE" = "Kept on this device";

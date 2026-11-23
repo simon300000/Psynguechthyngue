@@ -118,14 +118,6 @@ provider.resources_build_phase.add_file_reference(provider_resources.new_file("P
 provider_strings = provider_resources.new_variant_group("Localizable.strings")
 %w[en zh-Hans].each { |lang| provider_strings.new_file("#{lang}.lproj/Localizable.strings").name = lang }
 provider.resources_build_phase.add_file_reference(provider_strings)
-provider.resources_build_phase.add_file_reference(provider_resources.new_file("Decorations.xcassets"))
-# Decoration badge icon (UTTypeIconFiles of the exported badge UTI).
-provider_decorations = provider_resources.new_group("Decorations", "Decorations")
-%w[KeepDownloadedBadge.png KeepDownloadedBadge@2x.png KeepDownloadedBadge@3x.png].each do |name|
-  ref = provider_decorations.new_file(name)
-  provider.resources_build_phase.add_file_reference(ref)
-  app.resources_build_phase.add_file_reference(ref)
-end
 
 # --- Linking: PsySync (SwiftPM, local package) + PsyBridge (static gomobile framework) ---
 package = project.new(Xcodeproj::Project::Object::XCLocalSwiftPackageReference)
