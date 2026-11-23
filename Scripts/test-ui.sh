@@ -2,15 +2,21 @@
 # Runs PsynguechthyngueUITests (FakeSyncEngine fixtures, en + zh-Hans) on a
 # fresh, ephemeral iPhone and iPad simulator, then deletes them.
 #
+# Builds the tests once, then runs the iPhone and iPad sets at the same time,
+# each spread over PSY_UI_WORKERS simulator clones (Xcode parallel testing;
+# every test launches the app with its own fixture, so clones share nothing).
+#
 # Env: PSY_UI_IPHONE / PSY_UI_IPAD   device type names (defaults: newest available)
+#      PSY_UI_WORKERS                 clones per device (default 3; 1 = no parallel testing)
 #      PSY_XCODE_CONFIGURATION        Debug (default) or Release
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERIFY_ROOT="${PSY_VERIFY_BUILD_ROOT:-${ROOT_DIR}/.build/verify}"
 DERIVED_DATA="${PSY_UI_DERIVED_DATA_PATH:-${VERIFY_ROOT}/ui-tests/DerivedData}"
-RESULTS="${VERIFY_ROOT}/ui-tests/Results-$(date +%Y%m%d-%H%M%S).xcresult"
+RESULTS_PREFIX="${VERIFY_ROOT}/ui-tests/Results-$(date +%Y%m%d-%H%M%S)"
 CONFIGURATION="${PSY_XCODE_CONFIGURATION:-Debug}"
+WORKERS="${PSY_UI_WORKERS:-3}"
 
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
@@ -61,28 +67,42 @@ for udid in "${iphone}" "${ipad}"; do
     printf 'Booted %s in %ss\n' "${udid}" "$(( $(date +%s) - start ))"
 done
 
-mkdir -p "$(dirname "${RESULTS}")"
-xcodebuild -quiet \
-    -project "${ROOT_DIR}/Psynguechthyngue.xcodeproj" \
-    -scheme Psynguechthyngue \
-    -configuration "${CONFIGURATION}" \
-    -destination "platform=iOS Simulator,id=${iphone}" \
-    -destination "platform=iOS Simulator,id=${ipad}" \
-    -derivedDataPath "${DERIVED_DATA}" \
-    -resultBundlePath "${RESULTS}" \
-    -xcconfig "${ROOT_DIR}/Config/UITests.xcconfig" \
-    -parallel-testing-enabled NO \
-    -test-timeouts-enabled YES \
-    -default-test-execution-time-allowance 300 \
-    COMPILER_INDEX_STORE_ENABLE=NO \
-    test
+mkdir -p "$(dirname "${RESULTS_PREFIX}")"
+common=(-project "${ROOT_DIR}/Psynguechthyngue.xcodeproj" -scheme Psynguechthyngue
+    -configuration "${CONFIGURATION}" -derivedDataPath "${DERIVED_DATA}"
+    -xcconfig "${ROOT_DIR}/Config/UITests.xcconfig")
 
-summary="$(xcrun xcresulttool get test-results summary --path "${RESULTS}" 2>/dev/null || true)"
-printf '%s\n' "${summary}" | python3 -I -c '
+xcodebuild -quiet "${common[@]}" -destination "platform=iOS Simulator,id=${iphone}" \
+    COMPILER_INDEX_STORE_ENABLE=NO build-for-testing
+
+if [[ "${WORKERS}" -gt 1 ]]; then
+    parallel=(-parallel-testing-enabled YES -parallel-testing-worker-count "${WORKERS}")
+else
+    parallel=(-parallel-testing-enabled NO)
+fi
+# One device per xcodebuild: with several destinations in one invocation
+# Xcode cannot also run tests in parallel on each of them.
+run_device() { # name udid
+    xcodebuild -quiet "${common[@]}" -destination "platform=iOS Simulator,id=$2" \
+        -resultBundlePath "${RESULTS_PREFIX}-$1.xcresult" "${parallel[@]}" \
+        -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
+        test-without-building
+}
+run_device iphone "${iphone}" & iphone_pid=$!
+run_device ipad "${ipad}" & ipad_pid=$!
+status=0
+wait "${iphone_pid}" || status=1
+wait "${ipad_pid}" || status=1
+
+for name in iphone ipad; do
+    xcrun xcresulttool get test-results summary --path "${RESULTS_PREFIX}-${name}.xcresult" 2>/dev/null \
+        | python3 -I -c '
 import json, sys
 try:
     s = json.load(sys.stdin)
 except Exception:
-    sys.exit(0)
-print("UI tests: %d passed, %d failed, %d skipped (total %d)" % (s.get("passedTests", 0), s.get("failedTests", 0), s.get("skippedTests", 0), s.get("totalTestCount", 0)))
-sys.exit(1 if s.get("failedTests", 0) else 0)'
+    s = {}
+print("UI tests: %d passed, %d failed, %d skipped (total %d) on %s" % (s.get("passedTests", 0), s.get("failedTests", 0), s.get("skippedTests", 0), s.get("totalTestCount", 0), sys.argv[1]))
+' "${name}" || true
+done
+exit "${status}"
