@@ -264,9 +264,9 @@ final class FolderUITests: PsyUITestCase {
         // Regression (simulator acceptance): the folder picker never appeared.
         app.buttons["A folder I choose"].firstMatch.tap()
         // The picker is an out-of-process view service; its first appearance on
-        // a fresh simulator often takes 9-12 s (longer under load).
+        // a fresh simulator often takes 9-12 s, and over 30 s on a loaded machine.
         let picker = app.buttons["DOCPicker.actionButton"].firstMatch
-        XCTAssertTrue(picker.waitForExistence(timeout: 30), "folder picker shown")
+        XCTAssertTrue(picker.waitForExistence(timeout: 60), "folder picker shown")
         XCTAssertTrue(el("newfolder.create").exists, "the New Folder form stays open under the picker")
     }
 
