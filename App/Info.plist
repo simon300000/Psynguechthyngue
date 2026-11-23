@@ -27,6 +27,9 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <!-- Industry-standard encryption only, not distributed in France. Before adding the France storefront: complete the ANSSI declaration, set this to YES and add ITSEncryptionExportComplianceCode. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UILaunchScreen</key>
