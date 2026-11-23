@@ -89,10 +89,13 @@ func stopWhilePeerDies(t *testing.T, upload bool, sig syscall.Signal, wait time.
 				OutBytesTotal int64 `json:"outBytesTotal"`
 			} `json:"total"`
 		}
-		restTry(ep, "/rest/system/connections", &conns)
-		moved := conns.Total.InBytesTotal
+		// Bytes moved, counted on A's side: B's own /rest/system/connections
+		// trips the race detector on an upstream race (rawConnection.Start
+		// sets startTime after the connection is listed).
+		restTry(aEP, "/rest/system/connections", &conns)
+		moved := conns.Total.OutBytesTotal
 		if upload {
-			moved = conns.Total.OutBytesTotal
+			moved = conns.Total.InBytesTotal
 		}
 		if time.Since(lastLog) > 3*time.Second {
 			t.Logf("B: state=%s need=%d global=%d moved=%d", st.State, st.NeedBytes, st.GlobalBytes, moved)

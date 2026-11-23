@@ -104,7 +104,7 @@ class PsyUITestCase: XCTestCase {
     }
 }
 
-final class PsynguechthyngueUITests: PsyUITestCase {
+final class HomeUITests: PsyUITestCase {
     // MARK: Sync tab
 
     func testHomeShowsStatusTransfersAndDeviceID() {
@@ -161,6 +161,9 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertTrue(el("folder.row.Photos").waitForExistence(timeout: 5))
     }
 
+}
+
+final class DeviceUITests: PsyUITestCase {
     // MARK: Devices tab
 
     func testAddDeviceByEnteringID() {
@@ -233,6 +236,9 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertFalse(anyLabel("rejected the request").exists, "no error banner after removing")
     }
 
+}
+
+final class FolderUITests: PsyUITestCase {
     // MARK: Folders tab
 
     func testCreateManagedOnDemandFolderSharedWithDevice() {
@@ -257,8 +263,10 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertTrue(anyLabel("In this app").exists)
         // Regression (simulator acceptance): the folder picker never appeared.
         app.buttons["A folder I choose"].firstMatch.tap()
+        // The picker is an out-of-process view service; its first appearance on
+        // a fresh simulator often takes 9-12 s, and over 30 s on a loaded machine.
         let picker = app.buttons["DOCPicker.actionButton"].firstMatch
-        XCTAssertTrue(picker.waitForExistence(timeout: 10), "folder picker shown")
+        XCTAssertTrue(picker.waitForExistence(timeout: 60), "folder picker shown")
         XCTAssertTrue(el("newfolder.create").exists, "the New Folder form stays open under the picker")
     }
 
@@ -303,6 +311,9 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertTrue(waitGone(el("folder.row.Documents"), timeout: 5))
     }
 
+}
+
+final class SettingsOnboardingUITests: PsyUITestCase {
     // MARK: Settings
 
     func testSettingsApplyImmediatelyAndAdvancedIsCollapsed() {
@@ -349,6 +360,9 @@ final class PsynguechthyngueUITests: PsyUITestCase {
         XCTAssertTrue(el("folders.empty.new").waitForExistence(timeout: 3))
     }
 
+}
+
+final class LifecycleUITests: PsyUITestCase {
     // MARK: Lifecycle (fixture engine)
 
     func testReturningFromBackgroundRestartsEngine() {
@@ -451,7 +465,10 @@ final class EngineSettingsUITests: PsyUITestCase {
         XCTAssertTrue(scrollTo(el("settings.syncthingversion")))
         XCTAssertTrue(anyLabel("v2.1.6").exists, "version from engine.syncthingVersion")
     }
+}
 
+/// Engine options outside Settings ▸ Advanced (ignore patterns, background).
+final class EngineOptionsUITests: PsyUITestCase {
     func testIgnorePatternsEditorSavesToEngine() {
         launch()
         tab("Folders")
