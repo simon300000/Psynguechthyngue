@@ -14,18 +14,29 @@ CONFIGURATION="${PSY_XCODE_CONFIGURATION:-Debug}"
 
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
-runtime="$(xcrun simctl list runtimes -j | python3 -I -c '
-import json, sys
+# Newest iOS runtime that supports both an iPhone and an iPad Pro, with the
+# newest such device types. Device types are taken from the runtime's own
+# supportedDeviceTypes, since not every installed type works with every
+# runtime (some CI images ship runtimes limited to a few models).
+IFS=$'\t' read -r runtime iphone_type ipad_type < <(xcrun simctl list runtimes -j | python3 -I -c '
+import json, os, sys
+want_iphone = os.environ.get("PSY_UI_IPHONE", "")
+want_ipad = os.environ.get("PSY_UI_IPAD", "")
+def pick(types, prefix, wanted):
+    names = [t["name"] for t in types]
+    if wanted:
+        return wanted if wanted in names else ""
+    names = [n for n in names if n.startswith(prefix) and "Max" not in n and "mini" not in n]
+    return sorted(names)[-1] if names else ""
 rs = [r for r in json.load(sys.stdin)["runtimes"] if r["isAvailable"] and r["platform"] == "iOS"]
-print(sorted(rs, key=lambda r: [int(x) for x in r["version"].split(".")])[-1]["identifier"])')"
-pick_type() { # prefix
-    xcrun simctl list devicetypes -j | python3 -I -c '
-import json, sys
-names = [t["name"] for t in json.load(sys.stdin)["devicetypes"] if t["name"].startswith(sys.argv[1]) and "Max" not in t["name"] and "mini" not in t["name"]]
-print(sorted(names)[-1] if names else "")' "$1"
-}
-iphone_type="${PSY_UI_IPHONE:-$(pick_type 'iPhone 1')}"
-ipad_type="${PSY_UI_IPAD:-$(pick_type 'iPad Pro')}"
+for r in sorted(rs, key=lambda r: [int(x) for x in r["version"].split(".")], reverse=True):
+    types = r.get("supportedDeviceTypes", [])
+    phone, pad = pick(types, "iPhone 1", want_iphone), pick(types, "iPad Pro", want_ipad)
+    if phone and pad:
+        print(r["identifier"], phone, pad, sep="\t")
+        break
+') || true
+[[ -n "${runtime:-}" ]] || fail "no iOS runtime supports both an iPhone and an iPad Pro"
 [[ -n "${iphone_type}" && -n "${ipad_type}" ]] || fail "no iPhone/iPad device types available"
 
 created=()
