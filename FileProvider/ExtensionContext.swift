@@ -71,6 +71,14 @@ final class ExtensionContext: @unchecked Sendable {
             record: record, rootID: rootID, folderLabel: info?.label ?? folder.rawValue, contentMode: info?.contentMode)
     }
 
+    /// Paths the engine keeps local in this on-demand folder (`!/path` rules
+    /// of the managed `.stignore`); empty when unreadable.
+    func keptPaths() -> Set<RelativePath> {
+        let stignore = layout.managedFolder(folder).appending(path: ".stignore")
+        guard let text = try? String(contentsOf: stignore, encoding: .utf8) else { return [] }
+        return IgnoreRulesGenerator.presentPaths(from: text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
+    }
+
     func storeID(_ identifier: NSFileProviderItemIdentifier) -> ItemIdentifier {
         identifier == .rootContainer ? rootID : ItemIdentifier(rawValue: identifier.rawValue)
     }

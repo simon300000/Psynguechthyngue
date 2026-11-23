@@ -690,7 +690,7 @@ public final class FilesStore: @unchecked Sendable {
         return try s.step() == SQLITE_ROW ? s.data(at: 0) : nil
     }
 
-    private static func hasPinnedAncestor(_ db: SQLiteConnection, _ record: FileItemRecord) throws -> Bool {
+    static func hasPinnedAncestor(_ db: SQLiteConnection, _ record: FileItemRecord) throws -> Bool {
         var parent = record.parentID
         for _ in 0..<512 {
             guard let p = try fetchRecord(db, id: parent) else { return false }

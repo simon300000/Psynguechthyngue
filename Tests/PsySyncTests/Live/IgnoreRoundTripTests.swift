@@ -123,7 +123,10 @@ extension LiveSyncEngineTests {
 
     /// Regression (latent): removing a download inside a kept folder left the
     /// file un-ignored, so deleting it would spread the deletion to peers.
-    @Test func removingDownloadInsideKeptFolderIsRefused() async throws {
+    /// Now the folder's rule is split into rules for what stays local
+    /// (a directory kept as one rule at the switch to on-demand; the
+    /// extension never asks this below a "Keep Downloaded" pin).
+    @Test func removingDownloadInsideKeptFolderSplitsItsRule() async throws {
         let h = try makeHarness()
         defer { try? FileManager.default.removeItem(at: h.root) }
         try await h.engine.start(context: .foreground)
@@ -131,18 +134,37 @@ extension LiveSyncEngineTests {
         try await h.engine.addFolder(Folder(id: id, label: "K", contentMode: .onDemand))
         let dir = AppGroupLayout(root: h.root).managedFolder(id)
         let file = dir.appending(path: "Photos/a.jpg")
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("x".utf8).write(to: file)
-        try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "Photos")], present: true)
-        await #expect(throws: EngineError.self) {
-            try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "Photos/a.jpg")], present: false)
+        for p in ["Photos/a.jpg", "Photos/b.jpg", "Photos/2024/c.jpg", "Other/d.txt"] {
+            let url = dir.appending(path: p)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: url)
         }
-        #expect(FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
-        #expect(IgnoreRulesGenerator.presentPaths(from: try stignore(dir)) == [RelativePath(rawValue: "Photos")])
-        // Removing the kept folder itself still works.
-        try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "Photos")], present: false)
+        try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "Photos")], present: true)
+        try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "Other")], present: true)
+        try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "Photos/a.jpg")], present: false)
         #expect(!FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
+        #expect(FileManager.default.fileExists(atPath: dir.appending(path: "Photos/b.jpg").path(percentEncoded: false)))
+        #expect(IgnoreRulesGenerator.presentPaths(from: try stignore(dir))
+                == Set(["Photos/b.jpg", "Photos/2024", "Other"].map(RelativePath.init(rawValue:))))
+        // Removing a kept folder itself drops everything below it.
+        try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "Photos")], present: false)
+        #expect(!FileManager.default.fileExists(atPath: dir.appending(path: "Photos/b.jpg").path(percentEncoded: false)))
+        #expect(IgnoreRulesGenerator.presentPaths(from: try stignore(dir)) == [RelativePath(rawValue: "Other")])
         try await h.engine.stop(deadline: .seconds(1))
+    }
+
+    @Test func splitKeptOnlyTouchesTheAncestorsOfTheRemovedPath() {
+        let r = { (s: [String]) in Set(s.map(RelativePath.init(rawValue:))) }
+        let local = ["A/x", "A/B/y", "A/B/z", "A/C/w", "Q/q"].map(RelativePath.init(rawValue:))
+        #expect(LiveSyncEngine.splitKept(r(["A", "Q"]), removing: RelativePath(rawValue: "A/B/y"), local: local)
+                == r(["A/x", "A/B/z", "A/C", "Q"]))
+        // Removing a directory below the rule keeps nothing of it.
+        #expect(LiveSyncEngine.splitKept(r(["A"]), removing: RelativePath(rawValue: "A/B"), local: local)
+                == r(["A/x", "A/C"]))
+        // Nested rules are split down to the removed path.
+        #expect(LiveSyncEngine.splitKept(r(["A", "A/B"]), removing: RelativePath(rawValue: "A/B/y"), local: local)
+                == r(["A/x", "A/B/z", "A/C"]))
+        #expect(LiveSyncEngine.splitKept(r(["Q"]), removing: RelativePath(rawValue: "A/x"), local: local) == r(["Q"]))
     }
 
     /// Regression: a folder scheduled while flushRefresh awaited
