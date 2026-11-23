@@ -18,7 +18,7 @@ jobs:
     # The app calls iOS 27 APIs (behind #available), so it needs the Xcode 27
     # SDK; the macos-26 images stop at Xcode 26.x.
     runs-on: xcode-27
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
 
@@ -44,5 +44,36 @@ jobs:
           go version
           ruby -e 'gem "xcodeproj", "1.23.0"; require "xcodeproj"; puts "xcodeproj #{Xcodeproj::VERSION}"'
 
-      - name: Verify repository
-        run: make verify
+      # Separate steps with their own limits: a step that times out fails
+      # and keeps its log, while a job that times out is cancelled and
+      # GitHub may drop the whole log.
+      - name: Project and repository sanity
+        run: bash Scripts/verify.sh sanity
+
+      - name: SwiftPM tests
+        timeout-minutes: 20
+        run: bash Scripts/verify.sh swift
+
+      - name: GoBridge tests
+        timeout-minutes: 20
+        run: bash Scripts/verify.sh go
+
+      - name: Licenses
+        run: bash Scripts/verify.sh licenses
+
+      - name: iOS builds
+        timeout-minutes: 30
+        run: bash Scripts/verify.sh ios
+
+      - name: Simulator UI tests
+        timeout-minutes: 60
+        run: bash Scripts/verify.sh ui
+
+      - name: Upload UI test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: .build/verify/ui-tests/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
