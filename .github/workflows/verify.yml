@@ -42,7 +42,7 @@ jobs:
           xcodebuild -version
           swift --version
           go version
-          ruby -e 'require "xcodeproj"; puts "xcodeproj #{Xcodeproj::VERSION}"'
+          ruby -e 'gem "xcodeproj", "1.23.0"; require "xcodeproj"; puts "xcodeproj #{Xcodeproj::VERSION}"'
 
       - name: Verify repository
         run: make verify

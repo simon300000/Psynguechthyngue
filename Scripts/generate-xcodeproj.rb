@@ -18,6 +18,10 @@
 
 require "digest"
 require "fileutils"
+
+# Exact version: other releases serialize the project differently, and
+# Scripts/check-project.sh compares the output byte-for-byte.
+gem "xcodeproj", "1.23.0"
 require "xcodeproj"
 
 # Deterministic object IDs: the script creates objects in a fixed order, so a
