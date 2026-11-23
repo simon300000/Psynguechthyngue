@@ -26,7 +26,7 @@ Syncthing's anonymous usage reporting and crash reporting are permanently disabl
 
 **Changes.** If this policy changes, the updated version will be published at the same address with a new date.
 
-**Contact.** For questions about this policy, open an issue at <https://github.com/simon300000/psynguechthyngue-site/issues>.
+**Contact.** For questions about this policy, open an issue at <https://github.com/simon300000/Psynguechthyngue/issues>.
 
 ## 简体中文
 
@@ -52,4 +52,4 @@ Psynguechthyngue（以下称"本 App"）是一款独立开发的 iPhone / iPad S
 
 **变更。** 如本政策有变更，更新后的版本会发布在同一地址，并注明新的日期。
 
-**联系。** 如对本政策有疑问，请在 <https://github.com/simon300000/psynguechthyngue-site/issues> 提交 issue。
+**联系。** 如对本政策有疑问，请在 <https://github.com/simon300000/Psynguechthyngue/issues> 提交 issue。
