@@ -13,6 +13,11 @@ struct SettingsView: View {
         @Bindable var settings = settings
         NavigationStack {
             Form {
+                Section {
+                    NavigationLink { StorageView() } label: { Label("Storage", systemImage: "internaldrive") }
+                        .accessibilityIdentifier("settings.storage")
+                }
+
                 // Mac (Designed for iPad): no cellular and no BGTaskScheduler, so the
                 // cellular and background-sync options would have no effect there.
                 if !model.isOnMac {
