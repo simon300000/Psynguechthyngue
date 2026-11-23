@@ -406,6 +406,12 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
         #endif
         do {
             let context = try context()
+            guard context.isOnDemand else {
+                // "Download everything": every file is kept anyway (the menu
+                // hides both actions there; a stale menu lands here).
+                completionHandler(nil)
+                return Progress()
+            }
             let keep = actionIdentifier == Self.keepDownloadedAction
             for identifier in itemIdentifiers {
                 let record = try context.record(identifier)

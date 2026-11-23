@@ -33,10 +33,16 @@ public enum FilesItemPolicy {
     /// Bumped whenever the extension's item capabilities change, so the system
     /// re-reads items it cached under the old set (1: `.allowsEvicting`).
     /// Existing rows are re-announced once (`FilesStore.reannounceForCapabilitiesIfNeeded`).
-    public static let capabilityRevision: Int64 = 2
+    /// 3: userInfo.onDemand (Keep/Remove Download only in on-demand folders).
+    public static let capabilityRevision: Int64 = 3
 
-    public static func exposedMetadataVersion(for record: FileItemRecord) -> Data {
+    /// The folder's content mode is folded in for every item: the custom
+    /// actions' activation rules read it from userInfo, which the system
+    /// re-reads only when the version changes (`FilesStore.upsertFolder`
+    /// re-announces a folder's rows when its mode changes).
+    public static func exposedMetadataVersion(for record: FileItemRecord, contentMode: ContentMode? = nil) -> Data {
         var v = record.metadataVersion + Data("|c\(capabilityRevision)".utf8)
+        if contentMode == .onDemand { v += Data("|od".utf8) }
         if record.isPinned { v += Data("|pinned".utf8) }
         if record.isReadOnly { v += Data("|readonly".utf8) }
         if isRemoteOnlyFile(record) { v += Data("|remote".utf8) }
