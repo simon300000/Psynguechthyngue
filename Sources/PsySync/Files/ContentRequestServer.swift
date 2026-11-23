@@ -21,7 +21,10 @@ public actor ContentRequestServer {
     private let requestProjection: ProjectionHook
     private let requestTimeout: TimeInterval
     private let pollInterval: Duration
-    private var inFlight: [UUID: (request: ContentRequest, acceptedAt: Date)] = [:]
+    /// `active`: accepted, or last moved (DownloadProgress); a request
+    /// expires after `requestTimeout` without either, so a large file that
+    /// keeps arriving is not cut off.
+    private var inFlight: [UUID: (request: ContentRequest, active: Date)] = [:]
     private var eventTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
     private var observation: DarwinObservation?
@@ -72,7 +75,7 @@ public actor ContentRequestServer {
         // Requests left "accepted" are failed so the extension stops waiting
         // and falls back to the restricted fetch once the lock is free.
         for (id, _) in inFlight {
-            try? store.update(id, state: .failed, failureCode: "app_stopping")
+            try? store.update(id, state: .failed, failureCode: ContentRequest.appStoppingCode)
         }
         if !inFlight.isEmpty { DarwinNotifier.post(DarwinNotification.filesRequestUpdated) }
         inFlight.removeAll()
@@ -165,6 +168,14 @@ public actor ContentRequestServer {
                 if let error { fail(id, code: error) } else { complete(id) }
             }
             await requestProjection(folder)
+        case .downloadProgress(let folder, let path, let done, let total):
+            let matches = inFlight.filter { $0.value.request.folderID == folder && $0.value.request.path == path }
+            guard !matches.isEmpty else { return }
+            for (id, entry) in matches {
+                try? store.setProgress(id, done: done, total: total)
+                inFlight[id] = (entry.request, Date())
+            }
+            DarwinNotifier.post(DarwinNotification.filesRequestUpdated)
         case .indexChanged:
             // Projection may have flipped isLocal for something we wait for.
             for (_, entry) in inFlight { _ = try? completeIfLocal(entry.request) }
@@ -191,7 +202,7 @@ public actor ContentRequestServer {
 
     private func expireRequests() {
         let now = Date()
-        for (id, entry) in inFlight where now.timeIntervalSince(entry.acceptedAt) > requestTimeout {
+        for (id, entry) in inFlight where now.timeIntervalSince(entry.active) > requestTimeout {
             fail(id, code: BridgeContract.Code.deadline.rawValue)
         }
         try? store.pruneRequests(olderThan: 3600)

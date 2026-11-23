@@ -123,6 +123,9 @@ public struct ContentRequest: Hashable, Codable, Sendable, Identifiable {
     /// Failure code: no device sharing the folder is connected; the App kept
     /// the download (presence rule) and the engine fetches it later.
     public static let queuedNoPeerCode = "no_peer_queued"
+    /// Failure code: the App engine stopped (App left the foreground) before
+    /// the file arrived; the extension continues with the restricted fetch.
+    public static let appStoppingCode = "app_stopping"
     public enum State: String, Codable, Sendable {
         case posted       // written by extension
         case accepted     // App engine took it (un-ignored + prio)
@@ -137,8 +140,13 @@ public struct ContentRequest: Hashable, Codable, Sendable, Identifiable {
     public var state: State
     public var failureCode: String?
     public var postedAt: Date
+    /// Bytes the App engine has pulled for this file so far (DownloadProgress),
+    /// 0 until the transfer starts; the extension moves Files' progress with it.
+    public var bytesDone: Int64
+    public var bytesTotal: Int64
 
-    public init(id: UUID, folderID: FolderID, path: RelativePath, requestedVersion: Data, state: State, failureCode: String?, postedAt: Date) {
+    public init(id: UUID, folderID: FolderID, path: RelativePath, requestedVersion: Data, state: State, failureCode: String?, postedAt: Date,
+                bytesDone: Int64 = 0, bytesTotal: Int64 = 0) {
         self.id = id
         self.folderID = folderID
         self.path = path
@@ -146,6 +154,8 @@ public struct ContentRequest: Hashable, Codable, Sendable, Identifiable {
         self.state = state
         self.failureCode = failureCode
         self.postedAt = postedAt
+        self.bytesDone = bytesDone
+        self.bytesTotal = bytesTotal
     }
 }
 
@@ -156,6 +166,8 @@ public protocol ContentRequestInbox: Sendable {
     func get(_ id: UUID) throws -> ContentRequest?
     func update(_ id: UUID, state: ContentRequest.State, failureCode: String?) throws
     func open(limit: Int) throws -> [ContentRequest]
+    /// App side: transfer progress of an accepted request.
+    func setProgress(_ id: UUID, done: Int64, total: Int64) throws
 }
 
 // MARK: - Restricted fetch (extension-only, App not running)

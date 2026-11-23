@@ -130,6 +130,8 @@ public final class FilesStore: @unchecked Sendable {
         CREATE TABLE IF NOT EXISTS projected(folder_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS materialize_attempts(
             item_id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, content_version BLOB NOT NULL, attempted_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS request_progress(
+            id TEXT PRIMARY KEY, folder_id TEXT NOT NULL, bytes_done INTEGER NOT NULL, bytes_total INTEGER NOT NULL);
         """
 
     private static let schemaSQL = """
@@ -1018,7 +1020,7 @@ extension FilesStore: FilesMetadataWriter {
     public func removeFolder(_ folder: FolderID) throws -> Int64 {
         try write { ctx in
             for table in ["items", "tombstones", "materialized", "journal", "requests", "presence", "folders", "adopted",
-                          "materialized_version", "projected", "materialize_attempts"] {
+                          "materialized_version", "projected", "materialize_attempts", "request_progress"] {
                 try ctx.db.run("DELETE FROM \(table) WHERE folder_id=?", [.text(folder.rawValue)])
             }
             return ctx.anchor
@@ -1147,7 +1149,12 @@ extension FilesStore: ContentRequestInbox {
     public func get(_ id: UUID) throws -> ContentRequest? {
         try read { db in
             let s = try db.prepare(
-                "SELECT id, folder_id, path, requested_version, state, failure_code, posted_at FROM requests WHERE id=?")
+                """
+                SELECT r.id, r.folder_id, r.path, r.requested_version, r.state, r.failure_code, r.posted_at,
+                       coalesce(p.bytes_done, 0), coalesce(p.bytes_total, 0)
+                FROM requests r LEFT JOIN request_progress p ON p.id = r.id
+                WHERE r.id=?
+                """)
             try s.bind([.text(id.uuidString)])
             return try s.step() == SQLITE_ROW ? Self.request(from: s) : nil
         }
@@ -1165,13 +1172,27 @@ extension FilesStore: ContentRequestInbox {
         try read { db in
             let s = try db.prepare(
                 """
-                SELECT id, folder_id, path, requested_version, state, failure_code, posted_at FROM requests
-                WHERE state IN ('posted','accepted') ORDER BY posted_at LIMIT ?
+                SELECT r.id, r.folder_id, r.path, r.requested_version, r.state, r.failure_code, r.posted_at,
+                       coalesce(p.bytes_done, 0), coalesce(p.bytes_total, 0)
+                FROM requests r LEFT JOIN request_progress p ON p.id = r.id
+                WHERE r.state IN ('posted','accepted') ORDER BY r.posted_at LIMIT ?
                 """)
             try s.bind([.int(Int64(limit))])
             var result: [ContentRequest] = []
             while try s.step() == SQLITE_ROW { result.append(Self.request(from: s)) }
             return result
+        }
+    }
+
+    public func setProgress(_ id: UUID, done: Int64, total: Int64) throws {
+        try write { ctx in
+            try ctx.db.run(
+                """
+                INSERT INTO request_progress(id, folder_id, bytes_done, bytes_total)
+                SELECT id, folder_id, ?, ? FROM requests WHERE id=?
+                ON CONFLICT(id) DO UPDATE SET bytes_done=excluded.bytes_done, bytes_total=excluded.bytes_total
+                """,
+                [.int(done), .int(total), .text(id.uuidString)])
         }
     }
 
@@ -1181,6 +1202,7 @@ extension FilesStore: ContentRequestInbox {
             try ctx.db.run(
                 "DELETE FROM requests WHERE state IN ('completed','failed') AND updated_at<?",
                 [.real(Date().timeIntervalSince1970 - age)])
+            try ctx.db.run("DELETE FROM request_progress WHERE id NOT IN (SELECT id FROM requests)")
         }
     }
 
@@ -1189,7 +1211,7 @@ extension FilesStore: ContentRequestInbox {
             id: UUID(uuidString: s.text(at: 0)) ?? UUID(), folderID: FolderID(rawValue: s.text(at: 1)),
             path: RelativePath(rawValue: s.text(at: 2)), requestedVersion: s.data(at: 3),
             state: ContentRequest.State(rawValue: s.text(at: 4)) ?? .failed, failureCode: s.optionalText(at: 5),
-            postedAt: Date(timeIntervalSince1970: s.double(at: 6)))
+            postedAt: Date(timeIntervalSince1970: s.double(at: 6)), bytesDone: s.int64(at: 7), bytesTotal: s.int64(at: 8))
     }
 }
 

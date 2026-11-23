@@ -12,6 +12,10 @@ public struct LiveSyncEngineConfiguration: Sendable {
     public var externalAccess: ExternalLocationAccess = .system
     public var sessionConfiguration: @Sendable () -> URLSessionConfiguration = { .ephemeral }
     public var folderRefreshDebounce: Duration = .milliseconds(250)
+    /// While files are being pulled: at most one live status per folder in
+    /// this interval, re-mapped from the last REST read plus the bytes
+    /// DownloadProgress reports (no REST calls).
+    public var liveProgressInterval: Duration = .seconds(1)
     public var eventPollTimeoutSeconds: Int = 50
     /// Move the sync listener off 22000 even when it looks free (Mac: the
     /// official Syncthing may start later and would share it via SO_REUSEPORT).
@@ -53,6 +57,13 @@ public actor LiveSyncEngine: SyncEngine {
     private var refreshAll = false
     private var refreshTask: Task<Void, Never>?
     private var inProgress: [FolderID: [RelativePath: Int64]] = [:]
+    /// Sizes of the files in `inProgress` (DownloadProgress bytesTotal).
+    private var inProgressTotal: [FolderID: [RelativePath: Int64]] = [:]
+    /// Last REST-based status per folder, re-mapped with live transfer bytes
+    /// between refreshes (`emitLiveProgress`).
+    private var lastInputs: [FolderID: (inputs: FolderStatusInputs, lastScan: Date?, lastSyncedFile: RelativePath?)] = [:]
+    private var liveProgressTasks: [FolderID: Task<Void, Never>] = [:]
+    private var liveProgressAt: [FolderID: ContinuousClock.Instant] = [:]
     /// Conflict copies per folder (global index walk at start, then re-walked
     /// when an event mentions a `.sync-conflict-` path).
     private var conflicts: [FolderID: [FolderStatusInputs.Conflict]] = [:]
@@ -240,6 +251,10 @@ public actor LiveSyncEngine: SyncEngine {
         pendingRefresh = []
         refreshAll = false
         inProgress = [:]
+        inProgressTotal = [:]
+        liveProgressTasks.values.forEach { $0.cancel() }
+        liveProgressTasks = [:]
+        lastInputs = [:]
         conflictScans.values.forEach { $0.cancel() }
         conflictScans = [:]
         conflicts = [:]
@@ -339,6 +354,7 @@ public actor LiveSyncEngine: SyncEngine {
     /// the pending lists, and tell index consumers to re-read each folder.
     private func resync() async {
         inProgress = [:]
+        inProgressTotal = [:]
         if let client, let folders = try? await client.configFolders() {
             for f in folders {
                 let id = FolderID(rawValue: f.id)
@@ -353,10 +369,21 @@ public actor LiveSyncEngine: SyncEngine {
 
     private func track(_ event: EngineEvent) {
         switch event {
-        case .downloadProgress(let f, let p, let done, _):
+        case .downloadProgress(let f, let p, let done, let total):
             inProgress[f, default: [:]][p] = done
-        case .itemFinished(let f, let p, _):
+            inProgressTotal[f, default: [:]][p] = total
+            scheduleLiveProgress(f)
+        case .itemFinished(let f, let p, let error):
             inProgress[f]?[p] = nil
+            let size = inProgressTotal[f]?.removeValue(forKey: p)
+            // Until the next refresh reads the real counters: a pulled file
+            // moves from "in progress" to "on this device", so the live
+            // status does not dip between the two.
+            if error == nil, let size, size > 0, var cached = lastInputs[f] {
+                cached.inputs.localBytes += size
+                cached.inputs.needBytes = max(cached.inputs.needBytes - size, 0)
+                lastInputs[f] = cached
+            }
             if StatusMapper.isConflictCopy(p.rawValue) { scheduleConflictScan(f) }
         case .indexChanged(let f, let paths):
             if paths?.contains(where: { StatusMapper.isConflictCopy($0.rawValue) }) == true { scheduleConflictScan(f) }
@@ -364,6 +391,37 @@ public actor LiveSyncEngine: SyncEngine {
         default:
             break
         }
+    }
+
+    /// "On this device" and the transfer bar move while a file is pulled:
+    /// upstream's counters change only when a file completes (a 2 GB file
+    /// showed the same size for minutes). Re-maps the last REST read with
+    /// the bytes DownloadProgress reports, at most once per
+    /// `liveProgressInterval` per folder.
+    private func scheduleLiveProgress(_ id: FolderID) {
+        guard liveProgressTasks[id] == nil, lastInputs[id] != nil else { return }
+        let clock = ContinuousClock()
+        let due = liveProgressAt[id].map { $0.advanced(by: config.liveProgressInterval) } ?? clock.now
+        liveProgressTasks[id] = Task { [weak self] in
+            if due > clock.now { try? await Task.sleep(until: due, clock: clock) }
+            await self?.emitLiveProgress(id)
+        }
+    }
+
+    private func emitLiveProgress(_ id: FolderID) {
+        liveProgressTasks[id] = nil
+        guard case .running = engineState, var cached = lastInputs[id] else { return }
+        liveProgressAt[id] = ContinuousClock().now
+        cached.inputs.inProgressBytes = inProgress[id]?.values.reduce(0, +) ?? 0
+        lastInputs[id] = cached
+        broadcaster.yield(.folderStatusChanged(Self.finish(cached.inputs, lastScan: cached.lastScan, lastSyncedFile: cached.lastSyncedFile)))
+    }
+
+    static func finish(_ inputs: FolderStatusInputs, lastScan: Date?, lastSyncedFile: RelativePath?) -> FolderStatus {
+        var result = StatusMapper.map(inputs)
+        result.lastScan = lastScan
+        if let lastSyncedFile { result.lastSyncedFile = lastSyncedFile }
+        return result
     }
 
     private func scheduleIndexRecheck(_ id: FolderID) {
@@ -671,14 +729,14 @@ public actor LiveSyncEngine: SyncEngine {
             conflicts: conflicts[id] ?? [],
             stateChanged: SyncthingDate.parseNonZero(status.stateChanged)
         )
-        var result = StatusMapper.map(inputs)
+        let s = stats[id.rawValue]
+        let lastScan = s.flatMap { SyncthingDate.parseNonZero($0.lastScan) }
+        let lastFile = s?.lastFile?.filename.flatMap { $0.isEmpty ? nil : RelativePath(rawValue: $0) }
+        lastInputs[id] = (inputs, lastScan, lastFile)
+        let result = Self.finish(inputs, lastScan: lastScan, lastSyncedFile: lastFile)
         // The tracker's phases also end by time (a peer with nothing to
         // send never says so): look again while any index is arriving.
         if result.progress.sizeIsPartial { scheduleIndexRecheck(id) }
-        if let s = stats[id.rawValue] {
-            result.lastScan = SyncthingDate.parseNonZero(s.lastScan)
-            if let name = s.lastFile?.filename, !name.isEmpty { result.lastSyncedFile = RelativePath(rawValue: name) }
-        }
         return result
     }
 
@@ -886,6 +944,12 @@ public actor LiveSyncEngine: SyncEngine {
         let existing = try await folderConfig(folder)
         let root = URL(filePath: existing.path, directoryHint: .isDirectory)
         var current = IgnoreRulesGenerator.presentPaths(from: try await client.ignores(folder.rawValue))
+        if present, paths.allSatisfy({ current.contains($0) }) {
+            // Already kept (a download Files asks for while the engine pulls
+            // it): the rules would not change; rewriting them rescans.
+            for p in paths { try? await prioritize(folder, path: p) }
+            return
+        }
         for p in paths {
             do { _ = try IgnoreRulesGenerator.pattern(for: p) } catch {
                 throw EngineError.invalidArgument("path cannot be expressed as an ignore rule: \(p.rawValue)")

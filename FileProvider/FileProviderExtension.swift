@@ -94,6 +94,21 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 #endif
                 FootprintProbe.log("fetch-start")
                 defer { FootprintProbe.log("fetch-end") }
+                #if DEBUG
+                // E2E evidence: the byte progress Files is given (once a second while it moves).
+                let sampler = Task {
+                    var last: Int64 = -1
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(1))
+                        let p = progressBox.value
+                        if p.completedUnitCount != last {
+                            last = p.completedUnitCount
+                            FootprintProbe.file?.append("fetch-progress id=\(itemIdentifier.rawValue) \(p.completedUnitCount)/\(p.totalUnitCount)")
+                        }
+                    }
+                }
+                defer { sampler.cancel() }
+                #endif
                 let context = try self.context()
                 let id = context.storeID(itemIdentifier)
                 let result = try await context.content.provideContents(

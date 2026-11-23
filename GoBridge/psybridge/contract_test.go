@@ -155,6 +155,11 @@ func TestEngineConfigPolicy(t *testing.T) {
 	if c.Options.URAccepted != -1 || c.Options.AutoUpgradeIntervalH != 0 || c.Options.CREnabled || c.Options.StartBrowser {
 		t.Fatalf("options policy not applied: %+v", c.Options)
 	}
+	// DownloadProgress every second: Files' progress for delegated
+	// downloads and the live "On this device" follow it.
+	if c.Options.ProgressUpdateIntervalS != 1 {
+		t.Fatalf("progressUpdateIntervalS = %d", c.Options.ProgressUpdateIntervalS)
+	}
 	dev, _ := c.DeviceMap()[myID]
 	if dev.Name != "My Phone" {
 		t.Fatalf("device name = %q", dev.Name)

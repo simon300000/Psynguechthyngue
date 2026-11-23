@@ -166,6 +166,10 @@ func applyEngineConfig(c *config.Configuration, myID protocol.DeviceID, apiAddr,
 	c.Options.CREnabled = false
 	c.Options.StartBrowser = false
 	c.Options.SetLowPriority = false
+	// DownloadProgress every second (upstream default 5 s): it drives the
+	// byte progress Files shows for a delegated download and the folder's
+	// "On this device" while a file is being pulled.
+	c.Options.ProgressUpdateIntervalS = 1
 
 	applyFolderPolicy(&c.Defaults.Folder)
 	for i := range c.Folders {

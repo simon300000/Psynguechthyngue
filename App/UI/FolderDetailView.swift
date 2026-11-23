@@ -226,7 +226,7 @@ struct StorageRow: View {
 
     var body: some View {
         let total = max(progress.globalBytes, 0)
-        let local = min(max(progress.localBytes, 0), max(total, progress.localBytes))
+        let local = progress.bytesOnDevice
         let fraction = total > 0 ? Double(local) / Double(total) : 0
         VStack(alignment: .leading, spacing: 6) {
             LabeledContent("On this device") {

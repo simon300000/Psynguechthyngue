@@ -23,6 +23,7 @@ final class FilesIntegration {
     private var projector: FilesProjector?
     private var server: ContentRequestServer?
     private var materializer: FilesMaterializer?
+    private var mirror: FilesDownloadMirror?
     private var configTask: Task<Void, Never>?
     private let log = Logger(subsystem: FilesLog.subsystem, category: "integration")
 
@@ -75,6 +76,9 @@ final class FilesIntegration {
             let materializer = FilesMaterializer(store: store, width: 4, trace: materializeTrace) { folder, id in
                 try await DomainManager.materialize(folder, item: id)
             }
+            let mirror = FilesDownloadMirror(store: store, trace: materializeTrace) { folder, id in
+                try await DomainManager.materializeWhileDownloading(folder, item: id)
+            }
             // Hops to the main actor may reorder; a sequence number drops
             // stale updates (a late "N of M" after the pass ended would
             // leave the folder stuck as "preparing").
@@ -93,6 +97,7 @@ final class FilesIntegration {
             self.projector = projector
             self.server = server
             self.materializer = materializer
+            self.mirror = mirror
             // Subscribe before the first reconcile: a folder accepted while it
             // and the drain run (seconds after engine start) changed the
             // configuration unseen, and it got no domain and no projection
@@ -115,6 +120,8 @@ final class FilesIntegration {
                         // Files backs off after "server unreachable" until
                         // told otherwise; a device is back, so retry now.
                         await self?.deviceConnected()
+                    case .downloadProgress, .itemFinished:
+                        await mirror.handle(event)
                     default:
                         break
                     }
@@ -142,6 +149,8 @@ final class FilesIntegration {
         await projector?.stop()
         await materializer?.stop()
         materializer = nil
+        await mirror?.stop()
+        mirror = nil
         server = nil
         projector = nil
         store?.close()
