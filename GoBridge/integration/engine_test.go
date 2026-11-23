@@ -39,6 +39,13 @@ func TestEngineLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A failed check must not leave the runtime to the next test
+	// (already_running).
+	t.Cleanup(func() {
+		if e.IsRunning() {
+			_ = e.Stop(30_000)
+		}
+	})
 	if !e.IsRunning() {
 		t.Fatal("IsRunning false after Start")
 	}
@@ -199,17 +206,19 @@ func assertLoopbackOnly(t *testing.T, ep *psybridge.APIEndpoint) string {
 		if !ok || ipn.IP.IsLoopback() || ipn.IP.IsLinkLocalUnicast() {
 			continue
 		}
-		// Control: a port nobody listens on. If that "connects" too, the
-		// address belongs to a transparent proxy/TUN (e.g. 198.18.0.0/15)
-		// and says nothing about our socket.
-		if c, err := net.DialTimeout("tcp", net.JoinHostPort(ipn.IP.String(), strconv.Itoa(closedPort(t))), 300*time.Millisecond); err == nil {
-			c.Close()
-			t.Logf("skipping %s: accepts connections on any port (proxy/TUN)", ipn.IP)
-			continue
-		}
 		c, err := net.DialTimeout("tcp", net.JoinHostPort(ipn.IP.String(), port), 500*time.Millisecond)
 		if err == nil {
 			c.Close()
+			// Control: a port nobody listens on. If that "connects" too, the
+			// address belongs to a transparent proxy/TUN (e.g. 198.18.0.0/15)
+			// and says nothing about our socket. The control gets the longer
+			// timeout: a loaded machine slows the proxy's fake accept, and a
+			// control that times out must not turn into a false alarm.
+			if c, err := net.DialTimeout("tcp", net.JoinHostPort(ipn.IP.String(), strconv.Itoa(closedPort(t))), 3*time.Second); err == nil {
+				c.Close()
+				t.Logf("skipping %s: accepts connections on any port (proxy/TUN)", ipn.IP)
+				continue
+			}
 			t.Fatalf("REST reachable via non-loopback address %s", ipn.IP)
 		}
 		checked++
