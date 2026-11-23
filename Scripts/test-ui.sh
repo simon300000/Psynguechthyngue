@@ -53,6 +53,14 @@ iphone="$(xcrun simctl create "psy-ui-${run_id}-iphone" "${iphone_type}" "${runt
 ipad="$(xcrun simctl create "psy-ui-${run_id}-ipad" "${ipad_type}" "${runtime}")"; created+=("${ipad}")
 printf 'UI tests on %s and %s (%s, %s)\n' "${iphone_type}" "${ipad_type}" "${runtime##*.}" "${CONFIGURATION}"
 
+# Boot first and wait: a fresh CI image can take minutes for a first boot,
+# and this way that shows up here instead of as a silent test hang.
+for udid in "${iphone}" "${ipad}"; do
+    start=$(date +%s)
+    xcrun simctl bootstatus "${udid}" -b >/dev/null
+    printf 'Booted %s in %ss\n' "${udid}" "$(( $(date +%s) - start ))"
+done
+
 mkdir -p "$(dirname "${RESULTS}")"
 xcodebuild -quiet \
     -project "${ROOT_DIR}/Psynguechthyngue.xcodeproj" \
@@ -64,6 +72,8 @@ xcodebuild -quiet \
     -resultBundlePath "${RESULTS}" \
     -xcconfig "${ROOT_DIR}/Config/UITests.xcconfig" \
     -parallel-testing-enabled NO \
+    -test-timeouts-enabled YES \
+    -default-test-execution-time-allowance 300 \
     COMPILER_INDEX_STORE_ENABLE=NO \
     test
 
