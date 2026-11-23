@@ -33,12 +33,29 @@ import Testing
     let keep = "app.psynguechthyngue.action.keep-downloaded"
     let remove = "app.psynguechthyngue.action.remove-download"
 
-    func item(pinned: Bool, onDemand: Bool = true) -> [String: Any] {
-        ["userInfo": ["pinned": NSNumber(value: pinned), "isFile": NSNumber(value: true), "onDemand": NSNumber(value: onDemand)]]
+    /// `downloaded`: the system's `isDownloaded`, as the rule sees it (nil = key absent).
+    func item(pinned: Bool, onDemand: Bool = true, downloaded: Bool? = false) -> [String: Any] {
+        var item: [String: Any] = [
+            "userInfo": ["pinned": NSNumber(value: pinned), "isFile": NSNumber(value: true), "onDemand": NSNumber(value: onDemand)]]
+        if let downloaded { item["isDownloaded"] = NSNumber(value: downloaded) }
+        return item
     }
 
+    /// Not downloaded: the system adds "Download Now"; we add Keep only.
     @Test func unpinnedShowsKeepOnly() throws {
         #expect(try shown([item(pinned: false)]) == [keep])
+        #expect(try shown([item(pinned: false, downloaded: nil)]) == [keep])
+    }
+
+    /// User request (iCloud-like): downloaded but not kept can drop its
+    /// download too, and can still be kept.
+    @Test func downloadedUnpinnedShowsKeepAndRemove() throws {
+        #expect(try shown([item(pinned: false, downloaded: true)]) == [keep, remove])
+    }
+
+    @Test func pinnedShowsRemoveWhetherOrNotDownloaded() throws {
+        #expect(try shown([item(pinned: true, downloaded: true)]) == [remove])
+        #expect(try shown([item(pinned: true, downloaded: nil)]) == [remove])
     }
 
     @Test func pinnedShowsRemoveOnly() throws {
@@ -49,12 +66,14 @@ import Testing
     @Test func everythingFoldersShowNeither() throws {
         #expect(try shown([item(pinned: false, onDemand: false)]).isEmpty)
         #expect(try shown([item(pinned: true, onDemand: false)]).isEmpty)
+        #expect(try shown([item(pinned: false, onDemand: false, downloaded: true)]).isEmpty)
     }
 
     /// Items cached by an older build (no userInfo) show nothing until the
     /// capability revision re-announces them.
     @Test func missingUserInfoShowsNothing() throws {
         #expect(try shown([[:]]).isEmpty)
+        #expect(try shown([["isDownloaded": NSNumber(value: true)]]).isEmpty)
     }
 
     @Test func mixedSelectionShowsBoth() throws {

@@ -958,14 +958,17 @@ public actor LiveSyncEngine: SyncEngine {
             } else {
                 // A kept ancestor (`!/Photos`) would keep this path un-ignored
                 // after its rule is gone, so deleting the file would spread
-                // the deletion to every peer. Refuse instead of adding an
-                // explicit ignore line: the extension rewrites the managed
-                // file from `presentPaths` only and would drop such a line,
-                // which un-ignores the deleted file (upstream then marks it
-                // deleted and propagates that).
-                if let kept = Self.keptAncestor(of: p, in: current) {
-                    throw EngineError.invalidArgument(
-                        "\(p.rawValue) is inside \(kept.rawValue), which is kept on this device; remove the download of \(kept.rawValue) instead")
+                // the deletion to every peer. An explicit ignore line would
+                // not help: the extension rewrites the managed file from
+                // `presentPaths` only and would drop it, which un-ignores the
+                // deleted file (upstream then marks it deleted and
+                // propagates that). Instead the ancestor's rule is replaced
+                // by rules for what stays local below it (`splitKept`).
+                // The extension only asks this below a rule that is not a
+                // "Keep Downloaded" pin (the directory rules written at the
+                // switch to on-demand); a pinned directory drops as a whole.
+                if Self.keptAncestor(of: p, in: current) != nil {
+                    current = Self.splitKept(current, removing: p, local: Self.presentFiles(in: root))
                 }
                 current = current.filter { $0 != p && !$0.rawValue.hasPrefix(p.rawValue + "/") }
             }
@@ -1161,6 +1164,25 @@ public actor LiveSyncEngine: SyncEngine {
             components = components.dropLast()
         }
         return nil
+    }
+
+    /// `present` with every kept ancestor of `path` replaced by rules for the
+    /// files that stay local below it (`local` minus `path` and its subtree),
+    /// collapsed like at the switch to on-demand: one rule per directory
+    /// that does not contain `path`, else per file. Nothing outside the
+    /// ancestor changes.
+    static func splitKept(_ present: Set<RelativePath>, removing path: RelativePath, local: [RelativePath]) -> Set<RelativePath> {
+        var current = present
+        let nfc = { (p: RelativePath) in RelativePath(rawValue: p.rawValue.precomposedStringWithCanonicalMapping) }
+        let target = nfc(path)
+        while let kept = keptAncestor(of: path, in: current) {
+            current.remove(kept)
+            let below = local.map(nfc).filter {
+                $0.rawValue.hasPrefix(kept.rawValue + "/") && $0 != target && !$0.rawValue.hasPrefix(target.rawValue + "/")
+            }
+            current.formUnion(IgnoreRulesGenerator.collapsedPresent(local: below, remoteOnly: [target]))
+        }
+        return current
     }
 
     static func joinLines(_ lines: [String]) -> String {

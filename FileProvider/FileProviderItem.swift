@@ -92,7 +92,9 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
     /// Used by the custom actions' activation rules (Info.plist): both only
     /// when `onDemand == YES` (in "Download everything" every file is kept
     /// anyway); "Keep Downloaded" when `pinned != YES`, "Remove Download"
-    /// when `pinned == YES`. Pin state and content mode are folded into the
+    /// when `pinned == YES` or the system reports the item downloaded
+    /// (`isDownloaded`, maintained by the system for replicated
+    /// extensions). Pin state and content mode are folded into the
     /// metadata version, so the system re-reads them. Explicit NSNumber
     /// booleans.
     var userInfo: [AnyHashable: Any]? {

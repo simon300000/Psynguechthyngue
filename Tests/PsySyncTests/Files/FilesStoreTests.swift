@@ -416,3 +416,104 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(try od.updateMaterialized(f1, ids: []).evicted.isEmpty)   // looks like a reset
     }
 }
+
+/// "Remove Download" on items that are downloaded but not pinned (iCloud-like),
+/// and on pinned ones: what drops its engine copy and is evicted.
+@Suite struct RemoveDownloadPlanTests {
+    let f1 = FolderID(rawValue: "f1")
+
+    func id(_ store: FilesStore, _ p: String) throws -> ItemIdentifier {
+        try #require(try store.record(folder: f1, path: RelativePath(rawValue: p))).itemID
+    }
+
+    func paths(_ plan: RemoveDownloadPlan) -> [String] { plan.targets.map(\.path.rawValue) }
+    func skipped(_ plan: RemoveDownloadPlan) -> [String] { plan.skipped.map { "\($0.path.rawValue):\($0.reason.rawValue)" } }
+
+    func store() throws -> FilesStore {
+        let store = try FilesFixtures.store(FilesFixtures.tempDir(), mode: .onDemand)
+        _ = try store.applyIndexBatch(f1, entries: [
+            FilesFixtures.file("a.txt"), FilesFixtures.file("remote.txt", local: false),
+            FilesFixtures.dir("docs"), FilesFixtures.file("docs/b.txt"), FilesFixtures.file("docs/c.txt", local: false),
+            FilesFixtures.dir("docs/sub"), FilesFixtures.file("docs/sub/d.txt"),
+            FilesFixtures.dir("kept"), FilesFixtures.file("kept/e.txt"),
+        ])
+        return store
+    }
+
+    /// The user's case: downloaded on demand (per-file rule), never pinned.
+    @Test func unpinnedDownloadedFileIsRemoved() throws {
+        let s = try store()
+        let plan = try s.removeDownloadPlan(f1, item: try id(s, "a.txt"))
+        #expect(paths(plan) == ["a.txt"])
+        #expect(plan.skipped.isEmpty)
+        #expect(plan.removesItem(try id(s, "a.txt")))
+    }
+
+    /// A directory drops as one: its rule and every rule below go, the
+    /// system evicts the children recursively.
+    @Test func directoryIsRemovedAsAWhole() throws {
+        let s = try store()
+        let plan = try s.removeDownloadPlan(f1, item: try id(s, "docs"))
+        #expect(paths(plan) == ["docs"])
+        #expect(plan.targets.first?.isDirectory == true)
+    }
+
+    /// Pinned directory (its own `!/kept` rule): unchanged behaviour.
+    @Test func pinnedDirectoryIsRemovedAsAWhole() throws {
+        let s = try store()
+        _ = try s.setPinned(try id(s, "kept"), pinned: true)
+        let plan = try s.removeDownloadPlan(f1, item: try id(s, "kept"))
+        #expect(paths(plan) == ["kept"])
+    }
+
+    /// A local change the engine has not scanned yet must keep its copy.
+    @Test func pendingUploadsAreNeverDropped() throws {
+        let s = try store()
+        _ = try s.recordLocalWrite(f1, path: RelativePath(rawValue: "docs/new.txt"), isDirectory: false, size: 3, modified: Date())
+        _ = try s.recordLocalWrite(f1, path: RelativePath(rawValue: "a.txt"), isDirectory: false, size: 3, modified: Date())
+        let file = try s.removeDownloadPlan(f1, item: try id(s, "a.txt"))
+        #expect(file.targets.isEmpty)
+        #expect(skipped(file) == ["a.txt:pendingUpload"])
+        #expect(!file.removesItem(try id(s, "a.txt")))
+        // The directory goes file by file around the pending one.
+        let dir = try s.removeDownloadPlan(f1, item: try id(s, "docs"))
+        #expect(paths(dir) == ["docs/b.txt", "docs/sub/d.txt"])
+        #expect(skipped(dir) == ["docs/new.txt:pendingUpload"])
+        #expect(dir.targets.allSatisfy { !$0.isDirectory })
+    }
+
+    /// Below a pinned directory the pin wins: leave it (the engine copy is
+    /// kept and an evicted Files copy would be materialized again).
+    @Test func pathsBelowAPinnedDirectoryAreSkipped() throws {
+        let s = try store()
+        _ = try s.setPinned(try id(s, "docs"), pinned: true)
+        let plan = try s.removeDownloadPlan(f1, item: try id(s, "docs/b.txt"))
+        #expect(plan.targets.isEmpty)
+        #expect(skipped(plan) == ["docs/b.txt:pinnedAncestor"])
+        let sub = try s.removeDownloadPlan(f1, item: try id(s, "docs/sub"))
+        #expect(skipped(sub) == ["docs/sub:pinnedAncestor"])
+    }
+
+    /// Below a directory that is only kept as one rule (fully local at the
+    /// switch to on-demand) the path drops; the engine splits that rule.
+    @Test func pathsBelowAnUnpinnedDirectoryDrop() throws {
+        let s = try store()
+        #expect(paths(try s.removeDownloadPlan(f1, item: try id(s, "kept/e.txt"))) == ["kept/e.txt"])
+    }
+
+    /// The selection may include the folder root (no rule of its own).
+    @Test func rootGoesFileByFile() throws {
+        let s = try store()
+        _ = try s.setPinned(try id(s, "kept"), pinned: true)
+        let plan = try s.removeDownloadPlan(f1, item: FilesStore.rootItemID(f1))
+        #expect(paths(plan) == ["a.txt", "docs/b.txt", "docs/sub/d.txt"])
+        #expect(skipped(plan) == ["kept/e.txt:pinnedAncestor"])
+    }
+
+    @Test func unknownItemThrows() throws {
+        let s = try store()
+        #expect(throws: FilesStoreError.noSuchItem) {
+            try s.removeDownloadPlan(f1, item: ItemIdentifier(rawValue: "nope"))
+        }
+    }
+}

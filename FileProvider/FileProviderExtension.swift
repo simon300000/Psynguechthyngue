@@ -382,10 +382,7 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 // or a fully local directory at the switch to on-demand) cannot
                 // be dropped alone; the engine refuses, so leave it to the
                 // materializer.
-                let stignore = context.layout.managedFolder(context.folder).appending(path: ".stignore")
-                let kept = (try? String(contentsOf: stignore, encoding: .utf8)).map {
-                    IgnoreRulesGenerator.presentPaths(from: $0.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
-                } ?? []
+                let kept = context.keptPaths()
                 let evicted = systemEvicted.filter { r in
                     var a = r.path.parent
                     while !a.isRoot { if kept.contains(a) { return false }; a = a.parent }
@@ -428,14 +425,38 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
                 return Progress()
             }
             let keep = actionIdentifier == Self.keepDownloadedAction
+            // "Remove Download": pinned items, and items merely downloaded
+            // (Info.plist rule: `isDownloaded`). The plan skips what cannot
+            // drop without losing data or being brought back.
+            var evict: [NSFileProviderItemIdentifier] = []
             for identifier in itemIdentifiers {
                 let record = try context.record(identifier)
+                guard !keep else {
+                    #if DEBUG
+                    FootprintProbe.file?.append(
+                        "performAction folder=\(context.folder.rawValue) path=/\(record.path) dir=\(record.isDirectory) pinned=\(record.isPinned)->true")
+                    #endif
+                    _ = try context.store.setPinned(record.itemID, pinned: true)
+                    try context.store.requestPresence(context.folder, path: record.path, present: true)
+                    continue
+                }
+                let plan = try context.store.removeDownloadPlan(context.folder, item: record.itemID)
                 #if DEBUG
                 FootprintProbe.file?.append(
-                    "performAction folder=\(context.folder.rawValue) path=/\(record.path) dir=\(record.isDirectory) pinned=\(record.isPinned)->\(keep)")
+                    "performAction remove folder=\(context.folder.rawValue) path=/\(record.path) dir=\(record.isDirectory) pinned=\(record.isPinned) targets=\(plan.targets.count) skipped=\(plan.skipped.map { "\($0.path)(\($0.reason.rawValue))" })")
                 #endif
-                _ = try context.store.setPinned(record.itemID, pinned: keep)
-                try context.store.requestPresence(context.folder, path: record.path, present: keep)
+                if !plan.skipped.isEmpty {
+                    log.info("remove download skipped \(plan.skipped.count) item(s) folder=\(context.folder.rawValue, privacy: .public)")
+                }
+                if record.isPinned, plan.removesItem(record.itemID) {
+                    _ = try context.store.setPinned(record.itemID, pinned: false)
+                }
+                // Presence first: the materializer skips paths with a pending
+                // removal, so the evicted copy is not requested back.
+                for target in plan.targets {
+                    try context.store.requestPresence(context.folder, path: target.path, present: false)
+                    evict.append(FileProviderItem.identifier(target.itemID, rootID: context.rootID))
+                }
             }
             DarwinNotifier.post(DarwinNotification.filesRequestPosted)
             context.manager?.signalEnumerator(for: .workingSet) { _ in }
@@ -452,8 +473,10 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
             if !keep, let manager = context.manager {
                 // The App drops the engine copy; drop the Files copy too, or
                 // the item stays "downloaded" in Files (FilesMaterializer
-                // clones local files into the replica).
-                for identifier in itemIdentifiers {
+                // clones local files into the replica). A directory evicts
+                // its children recursively; the system refuses items with
+                // unsynced edits (UnsyncedEdits / NonEvictableChildren).
+                for identifier in evict {
                     manager.evictItem(identifier: identifier) { error in
                         #if DEBUG
                         if let error { FootprintProbe.file?.append("evict \(identifier.rawValue) failed: \(error)") }
