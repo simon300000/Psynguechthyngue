@@ -129,6 +129,7 @@ final class FakeSyncthing: @unchecked Sendable {
 
     /// Answer to GET /rest/config/folders is computed, then delayed this long.
     var configFoldersDelay: TimeInterval = 0
+    var dbStatus = #"{"state":"idle","globalBytes":0,"localBytes":0,"needBytes":0,"needTotalItems":0}"#
     /// Bodies served by GET /rest/events, one per poll ("[]" when empty).
     var eventBatches: [String] = []
 
@@ -203,7 +204,7 @@ final class FakeSyncthing: @unchecked Sendable {
             return .json("{}")
         case ("POST", "/rest/db/scan"), ("POST", "/rest/db/prio"): return .json("{}")
         case ("GET", "/rest/db/status"):
-            return .json(#"{"state":"idle","globalBytes":0,"localBytes":0,"needBytes":0,"needTotalItems":0}"#)
+            return .json(dbStatus)
         case ("GET", "/rest/folder/errors"): return .json(#"{"errors":null}"#)
         case ("GET", "/rest/db/completion"): return .json(#"{"completion":100,"needBytes":0,"needItems":0,"needDeletes":0,"remoteState":"unknown"}"#)
         default:
@@ -421,6 +422,12 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "docs/a.txt")], present: true)
         let reqs = StubURLProtocol.requests(authority: h.authority)
         #expect(reqs.contains { $0.path == "/rest/db/prio" && $0.query["file"] == "docs/a.txt" })
+        // Already kept (Files asks for a file the engine is pulling): only
+        // prioritized, no rule rewrite and no rescan.
+        let writes = { StubURLProtocol.requests(authority: h.authority).filter { ($0.method == "POST" && $0.path == "/rest/db/ignores") || $0.path == "/rest/db/scan" }.count }
+        let writesBefore = writes()
+        try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "docs/a.txt")], present: true)
+        #expect(writes() == writesBefore)
         try await h.engine.setLocalPresence(id, paths: [RelativePath(rawValue: "docs/a.txt")], present: false)
         #expect(!FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
         await #expect(throws: EngineError.self) {
@@ -558,6 +565,48 @@ final class FakeSyncthing: @unchecked Sendable {
         try await h.engine.stop(deadline: .seconds(1))
     }
 
+    /// Part 8 (real device): "On this device" stood still while an on-demand
+    /// folder downloaded, because upstream's counters move only when a file
+    /// completes. Between refreshes the engine re-maps its last status with
+    /// the bytes DownloadProgress reports, at most once per interval.
+    @Test func liveStatusFollowsDownloadProgress() async throws {
+        let h = try makeHarness { $0.liveProgressInterval = .milliseconds(300) }
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        h.fake.dbStatus = #"{"state":"syncing","globalBytes":1000,"localBytes":100,"needBytes":900,"needTotalItems":2}"#
+        let id = FolderID(rawValue: "f")
+        try await h.engine.start(context: .foreground)
+        try await h.engine.addFolder(Folder(id: id, label: "f"))
+        _ = try await h.engine.folderStatus(id)
+        let collected = StatusLog()
+        let events = h.engine.events()
+        let reader = Task {
+            for await e in events { if case .folderStatusChanged(let s) = e, s.folderID == id { collected.add(s) } }
+        }
+        defer { reader.cancel() }
+        func progress(_ p: String, _ done: Int64, _ total: Int64) -> EventAction {
+            .emit(.downloadProgress(folderID: id, path: RelativePath(rawValue: p), bytesDone: done, bytesTotal: total))
+        }
+        await h.engine.handle([progress("a", 50, 400)])
+        try await waitUntil { collected.last?.progress.inProgressBytes == 50 }
+        #expect(collected.last?.progress.bytesOnDevice == 150)
+        let before = collected.count
+        await h.engine.handle([progress("a", 150, 400)])
+        await h.engine.handle([progress("a", 250, 400)])
+        try await waitUntil { collected.last?.progress.inProgressBytes == 250 }
+        #expect(collected.count == before + 1, "throttled to one status per interval")
+        // The file completes; until the next REST read it counts as local.
+        await h.engine.handle([.emit(.itemFinished(folderID: id, path: RelativePath(rawValue: "a"), error: nil)), progress("b", 10, 100)])
+        try await waitUntil { collected.last?.progress.inProgressBytes == 10 }
+        #expect(collected.last?.progress.localBytes == 500)
+        #expect(collected.last?.progress.bytesOnDevice == 510)
+        try await h.engine.stop(deadline: .seconds(1))
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<300 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(condition())
+    }
+
     /// Simulator acceptance found that conflict copies never reached the UI with
     /// the live engine: the engine now lists them from the global index.
     @Test func folderStatusListsConflictCopiesFromGlobalIndex() async throws {
@@ -600,4 +649,12 @@ final class FakeSyncthing: @unchecked Sendable {
         #expect(pages == 3)
         try await h.engine.stop(deadline: .seconds(1))
     }
+}
+
+final class StatusLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var list: [FolderStatus] = []
+    func add(_ s: FolderStatus) { lock.withLock { list.append(s) } }
+    var last: FolderStatus? { lock.withLock { list.last } }
+    var count: Int { lock.withLock { list.count } }
 }

@@ -365,6 +365,67 @@ struct ContentHarness {
         #expect(engine.recordedCalls.contains("prio f1 d/remote.txt"))
     }
 
+    /// Part 8: Files showed no progress for a download the App engine did
+    /// for it (the Progress jumped from 0 to done). It now follows the bytes
+    /// DownloadProgress reports, and is not "done" before the file is there.
+    @Test func delegatedFetchProgressFollowsTheTransfer() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("big.bin", size: 12, local: false)])
+        let appLease = try #require(await h.lock.acquire(owner: .app, timeout: .seconds(1)))
+        defer { appLease.release() }
+        let engine = FilesFakeEngine()
+        let folderURL = h.layout.managedFolder(f1)
+        engine.onPrioritize = { [weak engine] folder, path in
+            Task {
+                try? await Task.sleep(for: .milliseconds(100))
+                engine?.emit(.downloadProgress(folderID: folder, path: path, bytesDone: 3, bytesTotal: 12))
+                try? await Task.sleep(for: .milliseconds(400))
+                engine?.emit(.downloadProgress(folderID: folder, path: path, bytesDone: 12, bytesTotal: 12))
+                try? await Task.sleep(for: .milliseconds(400))
+                try? Data("twelve bytes".utf8).write(to: folderURL.appending(path: path.rawValue))
+                engine?.emit(.itemFinished(folderID: folder, path: path, error: nil))
+            }
+        }
+        let server = ContentRequestServer(engine: engine, store: h.store, layout: h.layout, pollInterval: .milliseconds(200)) { _ in }
+        await server.start()
+        defer { Task { await server.stop() } }
+        let progress = Progress()
+        let samples = Samples()
+        let sampler = Task {
+            while !Task.isCancelled {
+                samples.add(progress.completedUnitCount, progress.totalUnitCount)
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        let result = try await h.provider(bridge: FakeFetchBridge()).provideContents(for: h.id("big.bin"), requestedVersion: nil, progress: progress)
+        sampler.cancel()
+        #expect(result.source == .delegatedToApp)
+        let seen = samples.values
+        #expect(seen.contains { $0.done == 3 && $0.total == 12 })
+        // Every byte reported, but the file not there yet: one short of done.
+        #expect(seen.contains { $0.done == 11 && $0.total == 12 })
+        #expect(progress.completedUnitCount == progress.totalUnitCount)
+        // Stored per request, cleared with the request.
+        let open = try h.store.open(limit: 10)
+        #expect(open.isEmpty)
+    }
+
+    @Test func requestProgressIsStoredWithTheRequest() throws {
+        let h = try ContentHarness()
+        let request = try h.store.post(f1, path: RelativePath(rawValue: "a"), version: Data([1]))
+        #expect(try h.store.get(request.id)?.bytesDone == 0)
+        try h.store.setProgress(request.id, done: 5, total: 9)
+        try h.store.setProgress(request.id, done: 7, total: 9)
+        let read = try #require(try h.store.get(request.id))
+        #expect(read.bytesDone == 7 && read.bytesTotal == 9)
+        #expect(try h.store.open(limit: 5).first?.bytesDone == 7)
+        // Progress for an unknown request is not kept.
+        try h.store.setProgress(UUID(), done: 1, total: 1)
+        try h.store.update(request.id, state: .completed, failureCode: nil)
+        try h.store.pruneRequests(olderThan: -1)
+        #expect(try h.store.get(request.id) == nil)
+    }
+
     /// User request: an open while no device is reachable must not leave
     /// Files spinning for the 10-minute delegation timeout, and must not be
     /// lost — the presence rule stays so the engine downloads it later.
@@ -386,6 +447,31 @@ struct ContentHarness {
         }
         #expect(ContinuousClock.now - started < .seconds(10))
         #expect(engine.recordedCalls.contains("presence true q.txt"))
+    }
+
+    /// Part 8 (simulator E2E): a download the App had taken over failed in
+    /// Files with "app_stopping" as soon as the user switched from the App
+    /// to Files. The extension now carries on with the restricted fetch.
+    @Test func appStoppingMidDownloadContinuesWithRestrictedFetch() async throws {
+        let h = try ContentHarness()
+        try h.project([FilesFixtures.file("m.bin", size: 7, local: false)])
+        let appLease = try #require(await h.lock.acquire(owner: .app, timeout: .seconds(1)))
+        let engine = FilesFakeEngine()
+        let server = ContentRequestServer(engine: engine, store: h.store, layout: h.layout, pollInterval: .milliseconds(100)) { _ in }
+        engine.onPrioritize = { folder, path in
+            Task {
+                engine.emit(.downloadProgress(folderID: folder, path: path, bytesDone: 3, bytesTotal: 7))
+                try? await Task.sleep(for: .milliseconds(300))
+                await server.stop()     // App left the foreground
+                appLease.release()
+            }
+        }
+        await server.start()
+        let bridge = FakeFetchBridge(payload: Data("7 bytes".utf8))
+        let result = try await h.provider(bridge: bridge)
+            .provideContents(for: h.id("m.bin"), requestedVersion: nil, progress: Progress())
+        #expect(result.source == .restrictedFetch)
+        #expect(bridge.calls == 1)
     }
 
     @Test func delegationNotAcceptedFallsBackToRestrictedFetchAfterAppReleasesLock() async throws {
@@ -588,4 +674,15 @@ final class LockedBox<T: Sendable>: @unchecked Sendable {
     init(_ value: T) { _value = value }
     var value: T { lock.withLock { _value } }
     func mutate(_ body: (inout T) -> Void) { lock.withLock { body(&_value) } }
+}
+
+/// Progress values seen by a sampling task.
+final class Samples: @unchecked Sendable {
+    struct Value: Equatable { var done: Int64; var total: Int64 }
+    private let lock = NSLock()
+    private var list: [Value] = []
+    func add(_ done: Int64, _ total: Int64) {
+        lock.withLock { if list.last != Value(done: done, total: total) { list.append(Value(done: done, total: total)) } }
+    }
+    var values: [Value] { lock.withLock { list } }
 }

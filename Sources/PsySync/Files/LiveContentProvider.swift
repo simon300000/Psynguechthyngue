@@ -44,7 +44,8 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         /// Delegation: request must reach `accepted` within this time, else
         /// we fall back to the restricted fetch (App is likely suspending).
         public var acceptTimeout: Duration = .seconds(2)
-        /// Delegation: overall wait for `completed`.
+        /// Delegation: longest wait for `completed` without the transfer
+        /// moving (a large file that keeps arriving is not cut off).
         public var delegationTimeout: Duration = .seconds(600)
         /// How long to wait for the engine lock before giving up.
         public var lockTimeout: Duration = .seconds(15)
@@ -132,6 +133,10 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
                 return (try cloneToTemporary(url), fresh, .delegatedToApp)
             case .notAccepted:
                 log.info("fetchContents: app did not accept within timeout; trying restricted fetch")
+            case .appStopped:
+                // The user left the App for Files mid-download: carry on here
+                // (the restricted fetch waits for the App to release the lock).
+                log.info("fetchContents: app stopped during the download; continuing with restricted fetch")
             }
         }
 
@@ -170,7 +175,7 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
             progress.completedUnitCount = progress.totalUnitCount
             log.info("fetchContents source=delegatedToApp (after yield) id=\(record.itemID.rawValue, privacy: .public)")
             return (try cloneToTemporary(url), fresh, .delegatedToApp)
-        case .notAccepted:
+        case .notAccepted, .appStopped:
             throw FilesContentError.openAppRequired(.appBusy)
         }
     }
@@ -210,6 +215,8 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
     enum DelegationOutcome {
         case completed(FileItemRecord)
         case notAccepted
+        /// Accepted, then the App engine stopped before the file arrived.
+        case appStopped
     }
 
     private func delegate(_ record: FileItemRecord, progress: Progress) async throws -> DelegationOutcome {
@@ -218,6 +225,8 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
         DarwinNotifier.post(DarwinNotification.filesRequestPosted)
         let clock = ContinuousClock()
         let start = clock.now
+        var lastMoved = start
+        var lastDone: Int64 = 0
         var accepted = false
         defer { _ = updates }
         while true {
@@ -230,9 +239,18 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
                 case .completed:
                     return .completed(try reader.item(record.itemID) ?? record)
                 case .failed:
+                    if current.failureCode == ContentRequest.appStoppingCode { return .appStopped }
                     throw Self.mapFailure(current.failureCode)
                 case .accepted:
                     accepted = true
+                    // Files shows this as the download's progress; never
+                    // "done" before the file is actually there.
+                    if current.bytesDone > lastDone {
+                        lastDone = current.bytesDone
+                        lastMoved = clock.now
+                        if current.bytesTotal > 0 { progress.totalUnitCount = current.bytesTotal }
+                        progress.completedUnitCount = min(current.bytesDone, max(progress.totalUnitCount - 1, 0))
+                    }
                 case .posted:
                     break
                 }
@@ -242,7 +260,7 @@ public final class LiveContentProvider: ContentProviding, @unchecked Sendable {
                 try? store.update(request.id, state: .failed, failureCode: "not_accepted")
                 return .notAccepted
             }
-            if elapsed >= configuration.delegationTimeout {
+            if lastMoved.duration(to: clock.now) >= configuration.delegationTimeout {
                 try? store.update(request.id, state: .failed, failureCode: "deadline")
                 throw FilesContentError.openAppRequired(.noPeer)
             }

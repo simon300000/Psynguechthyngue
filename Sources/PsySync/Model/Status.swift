@@ -76,6 +76,15 @@ public struct SyncProgress: Hashable, Codable, Sendable {
         self.remoteCompletion = remoteCompletion
     }
 
+    /// Space the folder takes on this device: completed files plus the bytes
+    /// of files being pulled right now (they already take space; upstream
+    /// counts a file only once it completes, so a large file showed the same
+    /// size for its whole transfer). Not above the folder size.
+    public var bytesOnDevice: Int64 {
+        let local = max(localBytes, 0) + max(inProgressBytes, 0)
+        return globalBytes > 0 ? min(local, max(globalBytes, localBytes)) : local
+    }
+
     /// 0...1 for the local download side.
     public var fractionCompleted: Double {
         guard globalBytes > 0 else { return 1 }

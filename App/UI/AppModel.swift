@@ -681,7 +681,9 @@ extension AppModel {
         }
         for folder in pendingFolders where folder.label.hasPrefix(prefix) && debugAccepted.insert(folder.id).inserted {
             LifecycleLog.shared.record("debug-auto-accept", "folder \(folder.folderID.rawValue)")
-            Task { _ = await accept(folder, label: folder.label, location: .managed, mode: .everything) }
+            // `-PsyDebugAutoAcceptMode onDemand` accepts as on-demand.
+            let mode: PsySync.ContentMode = UserDefaults.standard.string(forKey: "PsyDebugAutoAcceptMode") == "onDemand" ? .onDemand : .everything
+            Task { _ = await accept(folder, label: folder.label, location: .managed, mode: mode) }
         }
         #endif
     }

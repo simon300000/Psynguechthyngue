@@ -74,6 +74,10 @@ final class AcceptanceDriverUITests: PsyUITestCase {
                 app.terminate()
                 app.launch()
             }
+        case "switchTo":
+            // Bring an app to the front without relaunching it (`switchTo <bundle id>`; empty = this app).
+            app = rest.isEmpty ? XCUIApplication() : XCUIApplication(bundleIdentifier: rest)
+            app.activate()
         case "menu":
             // Context-menu item: `menu <cell text>|<item>`.
             let p = rest.components(separatedBy: "|")

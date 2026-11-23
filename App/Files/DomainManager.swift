@@ -122,6 +122,17 @@ enum DomainManager {
     /// never executed on iOS 26 and on device (iOS 27.3: 996 requests, ~121
     /// fetches in total), so it is only the fallback.
     static func materialize(_ folder: FolderID, item: ItemIdentifier) async throws {
+        try await materialize(folder, item: item, queue: coordinationQueue)
+    }
+
+    /// For FilesDownloadMirror: these reads last as long as the engine's
+    /// transfer, so they get their own queue and never hold up the
+    /// materializer's short requests.
+    static func materializeWhileDownloading(_ folder: FolderID, item: ItemIdentifier) async throws {
+        try await materialize(folder, item: item, queue: mirrorQueue)
+    }
+
+    private static func materialize(_ folder: FolderID, item: ItemIdentifier, queue: OperationQueue) async throws {
         let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier(folder.rawValue), displayName: "")
         guard let manager = NSFileProviderManager(for: domain) else { return }
         let identifier = NSFileProviderItemIdentifier(item.rawValue)
@@ -136,12 +147,19 @@ enum DomainManager {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             NSFileCoordinator(filePresenter: nil).coordinate(
-                with: [.readingIntent(with: url, options: [])], queue: coordinationQueue
+                with: [.readingIntent(with: url, options: [])], queue: queue
             ) { error in
                 if let error { continuation.resume(throwing: error) } else { continuation.resume() }
             }
         }
     }
+
+    private static let mirrorQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "psy.files.mirror"
+        queue.maxConcurrentOperationCount = 3
+        return queue
+    }()
 
     private static let coordinationQueue: OperationQueue = {
         let queue = OperationQueue()
