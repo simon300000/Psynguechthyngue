@@ -115,6 +115,24 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(changed.updated.contains { $0.itemID == a.itemID })
     }
 
+    /// User request: Keep/Remove Download only in on-demand folders. The
+    /// mode is in every item's exposed version and a switch re-announces
+    /// the folder's items, so the system re-reads userInfo.onDemand.
+    @Test func contentModeChangeReannouncesEveryItem() throws {
+        let (store, reader) = try setup(.everything)
+        let a = try #require(try reader.item(at: RelativePath(rawValue: "a")))
+        let everything = FilesItemPolicy.exposedMetadataVersion(for: a, contentMode: .everything)
+        #expect(FilesItemPolicy.exposedMetadataVersion(for: a, contentMode: .onDemand) != everything)
+        try store.upsertFolder(FilesFolderInfo(folderID: f1, label: "Folder", isReadOnly: false, contentMode: .onDemand))
+        let after = try #require(try reader.item(a.itemID))
+        #expect(after.changeAnchor > a.changeAnchor)
+        let changed = try reader.changes(since: a.changeAnchor, limit: 10, workingSetOnly: false)
+        #expect(changed.updated.contains { $0.itemID == a.itemID })
+        // Same mode again: nothing re-announced.
+        try store.upsertFolder(FilesFolderInfo(folderID: f1, label: "Folder", isReadOnly: false, contentMode: .onDemand))
+        #expect(try reader.item(a.itemID)?.changeAnchor == after.changeAnchor)
+    }
+
     @Test func contentModeChangeReannouncesRoot() throws {
         let (store, reader) = try setup(.onDemand)
         let root = try #require(try reader.item(reader.rootID))

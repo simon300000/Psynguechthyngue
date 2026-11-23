@@ -373,6 +373,7 @@ public final class FilesStore: @unchecked Sendable {
 
     public func upsertFolder(_ info: FilesFolderInfo) throws {
         try write { ctx in
+            let previousMode = try Self.folderContentMode(ctx.db, info.folderID)
             try ctx.db.run(
                 "INSERT OR REPLACE INTO folders(folder_id, label, read_only, content_mode) VALUES (?,?,?,?)",
                 [.text(info.folderID.rawValue), .text(info.label), .bool(info.isReadOnly), .text(info.contentMode.rawValue)])
@@ -404,7 +405,22 @@ public final class FilesStore: @unchecked Sendable {
                     "UPDATE items SET read_only=?, change_anchor=? WHERE folder_id=? AND read_only<>?",
                     [.bool(info.isReadOnly), .int(ctx.nextAnchor()), .text(info.folderID.rawValue), .bool(info.isReadOnly)])
             }
+            if let previousMode, previousMode != info.contentMode.rawValue {
+                // Every item's exposed version and userInfo carry the mode
+                // (Keep/Remove Download only in on-demand folders):
+                // re-announce them all so the menu follows the switch.
+                try ctx.db.run(
+                    "UPDATE items SET change_anchor=? WHERE folder_id=? AND item_id<>?",
+                    [.int(ctx.nextAnchor()), .text(info.folderID.rawValue), .text(rootID.rawValue)])
+            }
         }
+    }
+
+    private static func folderContentMode(_ db: SQLiteConnection, _ folder: FolderID) throws -> String? {
+        let s = try db.prepare("SELECT content_mode FROM folders WHERE folder_id=?")
+        defer { sqlite3_reset(s.handle) }
+        try s.bind([.text(folder.rawValue)])
+        return try s.step() == SQLITE_ROW ? s.text(at: 0) : nil
     }
 
     public func folderInfo(_ folder: FolderID) throws -> FilesFolderInfo? {

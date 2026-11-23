@@ -47,7 +47,7 @@
 				<key>NSExtensionFileProviderActionName</key>
 				<string>FILE_PROVIDER_KEEP_DOWNLOADED</string>
 				<key>NSExtensionFileProviderActionActivationRule</key>
-				<string>SUBQUERY ( fileproviderItems, $fileproviderItem, $fileproviderItem.userInfo.pinned != YES ).@count &gt; 0</string>
+				<string>SUBQUERY ( fileproviderItems, $fileproviderItem, $fileproviderItem.userInfo.pinned != YES AND $fileproviderItem.userInfo.onDemand == YES ).@count &gt; 0</string>
 			</dict>
 			<dict>
 				<key>NSExtensionFileProviderActionIdentifier</key>
@@ -55,7 +55,7 @@
 				<key>NSExtensionFileProviderActionName</key>
 				<string>FILE_PROVIDER_REMOVE_DOWNLOAD</string>
 				<key>NSExtensionFileProviderActionActivationRule</key>
-				<string>SUBQUERY ( fileproviderItems, $fileproviderItem, $fileproviderItem.userInfo.pinned == YES ).@count &gt; 0</string>
+				<string>SUBQUERY ( fileproviderItems, $fileproviderItem, $fileproviderItem.userInfo.pinned == YES AND $fileproviderItem.userInfo.onDemand == YES ).@count &gt; 0</string>
 			</dict>
 		</array>
 	</dict>

@@ -33,21 +33,31 @@ import Testing
     let keep = "app.psynguechthyngue.action.keep-downloaded"
     let remove = "app.psynguechthyngue.action.remove-download"
 
+    func item(pinned: Bool, onDemand: Bool = true) -> [String: Any] {
+        ["userInfo": ["pinned": NSNumber(value: pinned), "isFile": NSNumber(value: true), "onDemand": NSNumber(value: onDemand)]]
+    }
+
     @Test func unpinnedShowsKeepOnly() throws {
-        #expect(try shown([["userInfo": ["pinned": NSNumber(value: false), "isFile": NSNumber(value: false)]]]) == [keep])
+        #expect(try shown([item(pinned: false)]) == [keep])
     }
 
     @Test func pinnedShowsRemoveOnly() throws {
-        #expect(try shown([["userInfo": ["pinned": NSNumber(value: true), "isFile": NSNumber(value: true)]]]) == [remove])
+        #expect(try shown([item(pinned: true)]) == [remove])
     }
 
-    @Test func missingUserInfoStillShowsKeep() throws {
-        #expect(try shown([[:]]) == [keep])
-        #expect(try shown([["userInfo": [String: Any]()]]) == [keep])
+    /// User request: in "Download everything" folders both are meaningless.
+    @Test func everythingFoldersShowNeither() throws {
+        #expect(try shown([item(pinned: false, onDemand: false)]).isEmpty)
+        #expect(try shown([item(pinned: true, onDemand: false)]).isEmpty)
+    }
+
+    /// Items cached by an older build (no userInfo) show nothing until the
+    /// capability revision re-announces them.
+    @Test func missingUserInfoShowsNothing() throws {
+        #expect(try shown([[:]]).isEmpty)
     }
 
     @Test func mixedSelectionShowsBoth() throws {
-        #expect(try shown([["userInfo": ["pinned": NSNumber(value: true)]], ["userInfo": ["pinned": NSNumber(value: false)]]])
-            == [keep, remove])
+        #expect(try shown([item(pinned: true), item(pinned: false)]) == [keep, remove])
     }
 }
