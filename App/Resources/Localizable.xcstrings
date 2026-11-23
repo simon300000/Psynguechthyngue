@@ -1127,57 +1127,6 @@
         }
       }
     },
-    "FILES_ERROR_OPEN_APP" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No device is reachable. Open Psynguechthyngue to download this file."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有可连接的设备，请打开 Psynguechthyngue 下载此文件。"
-          }
-        }
-      }
-    },
-    "FILES_ERROR_STALE" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This file has changed on other devices. Open Psynguechthyngue to sync."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此文件已在其他设备上更改，请打开 Psynguechthyngue 同步。"
-          }
-        }
-      }
-    },
-    "FILES_ERROR_TOO_LARGE" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This file is too large to download here. Open Psynguechthyngue to download it."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文件太大，无法在此下载，请打开 Psynguechthyngue 下载。"
-          }
-        }
-      }
-    },
     "Find your files" : {
       "localizations" : {
         "zh-Hans" : {

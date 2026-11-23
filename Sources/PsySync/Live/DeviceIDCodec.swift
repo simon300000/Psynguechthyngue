@@ -7,14 +7,13 @@ import Foundation
 /// joined by '-'.
 ///
 /// Used to derive the ID for a stored identity without a running bridge and to
-/// validate IDs locally. User-input normalisation still goes through the
-/// bridge (`psybridge.ValidateDeviceID`).
+/// validate IDs locally. User input is parsed by the App's `DeviceIDParser`
+/// (Luhn-32 check, no bridge call).
 public enum DeviceIDCodec {
     static let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
 
     public enum CodecError: Error, Hashable, Sendable {
         case invalidPEM
-        case invalidDeviceID
     }
 
     public static func deviceID(certificateDER: Data) -> DeviceID {

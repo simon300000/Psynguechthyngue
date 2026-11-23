@@ -548,10 +548,6 @@ final class AppModel {
         await updateDevice(id: device.id) { $0.name = name }
     }
 
-    func setPaused(_ device: Device, _ paused: Bool) async {
-        await updateDevice(id: device.id) { $0.paused = paused }
-    }
-
     /// Applies `mutate` to the device's latest value (not a render-time copy),
     /// so quick consecutive edits do not revert each other.
     func updateDevice(id: DeviceID, _ mutate: @escaping (inout Device) -> Void) async {

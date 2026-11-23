@@ -84,7 +84,6 @@ public struct RESTEndpoint: Hashable, Sendable {
 /// must be called from a dedicated thread (see `SyncEngine` doc).
 public protocol SyncthingBridge: Sendable {
     func generateIdentity() throws -> DeviceIdentity
-    func validateDeviceID(_ input: String) throws -> DeviceID
     func applyMemoryProfile(_ profile: MemoryProfile)
     func syncthingVersion() -> String
 

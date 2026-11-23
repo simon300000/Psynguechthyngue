@@ -1,8 +1,8 @@
 import Foundation
 
 /// Full Syncthing device ID in canonical form ("XXXXXXX-XXXXXXX-...", 8 groups).
-/// Validation/normalisation of user input goes through the bridge
-/// (`psybridge.ValidateDeviceID`); this type only carries canonical values.
+/// User input is validated and normalised by the App's `DeviceIDParser`;
+/// this type only carries canonical values.
 public struct DeviceID: RawRepresentable, Hashable, Codable, Sendable, CustomStringConvertible {
     public let rawValue: String
     public init(rawValue: String) { self.rawValue = rawValue }
