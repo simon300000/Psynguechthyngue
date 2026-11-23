@@ -1,6 +1,6 @@
 import Foundation
 
-/// The production policy (DESIGN.md §4.4). Priority order:
+/// The production policy. Priority order:
 ///
 /// 1. no network → hold `.noNetwork`
 /// 2. cellular and cellular sync disabled → hold `.cellularDisallowed`
@@ -15,7 +15,7 @@ import Foundation
 ///    Never a hold: the system asks for less, not for nothing.
 ///
 /// Battery percentage and charging state are deliberately **not** inputs to
-/// the decision (fixes AUDIT P2). While held, limits are 0 (irrelevant: all
+/// the decision. While held, limits are 0 (irrelevant: all
 /// devices are paused).
 public struct DefaultSyncPolicy: SyncPolicy {
     /// Reduced-load caps (KiB/s). Upload is capped harder than download:

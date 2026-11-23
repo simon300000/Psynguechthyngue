@@ -3,7 +3,7 @@ import Testing
 @testable import PsySync
 
 @Suite struct DefaultSyncPolicyTests {
-    /// Independent oracle written straight from DESIGN.md §4.4's table.
+    /// Independent oracle written straight from the policy priority table.
     static func oracle(_ i: PolicyInputs, _ p: PolicyPreferences) -> PolicyDecision {
         let rows: [(Bool, PolicyDecision.HoldReason)] = [
             (i.network == .none, .noNetwork),
@@ -161,7 +161,7 @@ import Testing
     }
 
     @Test func offlinePeersNeverBlockUpToDate() {
-        // A online and complete, B offline and behind (AUDIT P0 scenario).
+        // A online and complete, B offline and behind.
         #expect(state {
             $0.remotes = [a: .init(completion: 100, remoteState: "valid", connected: true),
                           b: .init(completion: 10, remoteState: "valid", connected: false)]

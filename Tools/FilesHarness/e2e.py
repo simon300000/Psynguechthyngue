@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DEV/TEST ONLY: WP-C Files acceptance against the local official Syncthing.
+"""DEV/TEST ONLY: Files acceptance against the local official Syncthing.
 
 Topology:
   official Syncthing (127.0.0.1:8384, the user's instance)
@@ -8,7 +8,7 @@ Topology:
           simulator App Group  Folders/psy-test-wpc-files  (on-demand .stignore)
   Simulator: PsyFilesHarness (RESTDevEngine -> phone instance) + PsyFileProvider.
 
-Rules (CLAUDE.local.md): on the official instance only psy-test-wpc-* objects
+Rules: on the official instance only psy-test-wpc-* objects
 are created, nothing else is modified; the official API key is read from
 config.xml into memory only and never printed or written anywhere.
 

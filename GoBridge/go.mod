@@ -5,7 +5,7 @@ go 1.26.2
 // Upstream Syncthing is pinned to the official v2.1.6 release commit
 // (4461a1ce354d…, see SyncthingPin.json). Upstream's module path has no /v2
 // suffix, so the pin is a pseudo-version. No local replace of syncthing and
-// no patches are allowed (Docs/REWRITE/DESIGN.md §3.4).
+// no patches are allowed.
 
 require (
 	github.com/syncthing/syncthing v1.30.0-rc.1.0.20261005040355-4461a1ce354d

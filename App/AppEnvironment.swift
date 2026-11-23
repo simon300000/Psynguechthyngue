@@ -15,7 +15,7 @@ final class AppEnvironment {
     let settings: AppSettings
     let model: AppModel
     let isFixture: Bool
-    /// WP-C Files services (nil in fixtures or when the App Group is unavailable).
+    /// Files services (nil in fixtures or when the App Group is unavailable).
     let files: FilesIntegration?
     let bridge: PsyBridgeAdapter?
 
@@ -67,7 +67,7 @@ final class AppEnvironment {
         model.scheduler = scheduler
         scheduler.simulateContinuedProcessing = fixture && args.contains("-PsyUITestSimulateContinued")
         if let files {
-            // WP-C: FilesIntegration follows engine state itself (attach); the host
+            // : FilesIntegration follows engine state itself (attach); the host
             // additionally closes files.sqlite right before stop (I2).
             files.attach()
             model.filesStatus = FilesLocationStatusProvider(files: files)

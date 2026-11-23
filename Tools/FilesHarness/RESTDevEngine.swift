@@ -5,7 +5,7 @@ import os
 /// DEV/TEST ONLY. A tiny `SyncEngine` over the REST API of an *external*
 /// Syncthing process (the "phone-side" instance started by
 /// `Tools/FilesHarness/e2e.sh`), whose folder path is this simulator's App
-/// Group `Folders/<id>/`. It stands in for WP-B's `LiveSyncEngine` so the
+/// Group `Folders/<id>/`. It stands in for `LiveSyncEngine` so the
 /// Files integration (projector, request server, extension) can be exercised
 /// end to end before the bridge exists. Not shipped.
 ///
@@ -147,7 +147,7 @@ final class RESTDevEngine: SyncEngine, @unchecked Sendable {
         _ = try? await request("POST", "rest/db/prio", query: ["folder": folder.rawValue, "file": path.rawValue])
     }
 
-    /// Minimal version of WP-B's generated rules: `!/path` lines before the trailing `*`.
+    /// Minimal version of generated rules: `!/path` lines before the trailing `*`.
     func setLocalPresence(_ folder: FolderID, paths: [RelativePath], present: Bool) async throws {
         let current = try await json("GET", "rest/db/ignores", query: ["folder": folder.rawValue]) as? [String: Any]
         var lines = current?["ignore"] as? [String] ?? []

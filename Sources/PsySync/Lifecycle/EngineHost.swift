@@ -1,7 +1,7 @@
 import Foundation
 
 /// App lifecycle inputs the host reacts to. The App target translates
-/// UIKit/SwiftUI/BGTaskScheduler callbacks into these (WP-D).
+/// UIKit/SwiftUI/BGTaskScheduler callbacks into these.
 public enum LifecycleSignal: Hashable, Sendable {
     case didBecomeActive
     /// scenePhase → .background. Host calls `beginBackgroundTask`, stops the

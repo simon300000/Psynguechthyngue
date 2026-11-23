@@ -1,7 +1,7 @@
 import Foundation
 
 /// User-facing folder state, derived from upstream folder state + need counts
-/// + connection state. Mapping table lives in DESIGN.md §5.2.
+/// + connection state.
 public enum FolderSyncState: String, Codable, Sendable {
     /// Everything this device should have is present and peers are reachable.
     case upToDate

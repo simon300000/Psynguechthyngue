@@ -1,8 +1,8 @@
 # Psynguechthyngue
 
-原生 SwiftUI 的 iPhone / iPad Syncthing 客户端（iOS / iPadOS 17+，也能以 Designed for iPad 形态运行在 Apple 芯片 Mac 上）。App 在前台运行**未打补丁的上游 Syncthing v2.1.6**，并通过 File Provider 把同步文件夹接入"文件" App。
+原生 SwiftUI 的 iPhone / iPad Syncthing 客户端（iOS / iPadOS 26+，也能以 Designed for iPad 形态运行在 Apple 芯片 Mac 上）。App 在前台运行**未打补丁的上游 Syncthing v2.1.6**，并通过 File Provider 把同步文件夹接入"文件" App。
 
-> **状态：重写中，尚不可发布。** 2026-11 起按 [重写设计](Docs/REWRITE/DESIGN.md) 重做。旧版代码已删除，文档归档在 [Docs/Archive](Docs/Archive/README.md)。做不到或要打折扣的功能见 DESIGN §9。
+> 已知限制（iOS 后台、Files 行为、Mac 等）见 [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md#7-已知限制)。
 
 ## 架构一览
 
@@ -34,14 +34,14 @@ make verify      # 完整门禁
 
 | 步骤 | 单独运行 | 内容 |
 |---|---|---|
-| sanity | `make sanity` | 工程与生成器输出一致；没有残留的旧引擎（v1）引用 |
+| sanity | `make sanity` | 工程与生成器输出一致；没有已移除的旧引擎引用 |
 | swift | `make swift-test` | `swift test`（PsySyncTests） |
 | go | `make go-test` | `GoBridge/Scripts/test.sh`：vet、单元测试与集成测试、race |
 | licenses | `make licenses` | NOTICE、THIRD_PARTY_NOTICES、SBOM 与 GoBridge 实际链接的模块一致 |
 | ios | `make ios-build` | Simulator Debug 构建和无签名的 Release 真机构建，并校验产物 |
 | ui | `make ui-test` | 在临时创建的 iPhone 和 iPad 模拟器上跑 XCUITest（使用 FakeSyncEngine 夹具，en 与 zh-Hans） |
 
-另有 `make e2e-local`：连接本机官方 Syncthing（`127.0.0.1:8384`）做端到端测试（DESIGN §10.3）。它只创建 `psy-test-*` 资源，并在测试前后对比配置。
+另有 `make e2e-local`：连接本机官方 Syncthing（`127.0.0.1:8384`）做端到端测试。它只创建 `psy-test-*` 资源，并在测试前后对比配置。
 
 ## 目录
 
@@ -55,7 +55,7 @@ make verify      # 完整门禁
 | `Tests/PsynguechthyngueUITests/` | UI 测试 |
 | `Scripts/` | 构建、验证、工程生成、许可证 |
 | `Tools/FilesHarness/` | Files 集成的开发宿主（不在工程内） |
-| `Docs/REWRITE/` | 设计、审查记录与各工作包笔记 |
+| `Docs/` | 架构、隐私政策、许可证与来源说明、SBOM |
 
 ## 许可证
 

@@ -1,13 +1,13 @@
 # GoBridge (bridge v2)
 
 Thin gomobile boundary between the iOS app and an **unpatched** upstream
-Syncthing (Docs/REWRITE/DESIGN.md §3, §6.4). Upstream is pinned in
+Syncthing. Upstream is pinned in
 `SyncthingPin.json` and `go.mod` (v2.1.6, zero patches).
 
 | Path | What |
 |---|---|
 | `psybridge/` | Exported API: `Engine` (Start/Stop/IsRunning/OnMemoryWarning/OpenIndexStream), identity, runtime memory profiles, `FetchFile` (restricted core) |
-| `integration/` | §10.2 tests: in-process engine lifecycle; two-process A (engine) ↔ B (restricted `FetchFile`) on loopback |
+| `integration/` | tests: in-process engine lifecycle; two-process A (engine) ↔ B (restricted `FetchFile`) on loopback |
 | `Scripts/test.sh` | `go vet`, `go test`, `go test -race` (all with `-tags noassets`) |
 | `Scripts/build-xcframework.sh` | `Artifacts/PsyBridge.xcframework` (iOS + iOS Simulator) + provenance JSON |
 | `../Platform/PsyBridgeAdapter.swift` | Swift `SyncthingBridge` / `RestrictedFetchBridge` over the framework, plus `PsyBridgeThread` |
@@ -39,17 +39,16 @@ generated GUI assets). The scripts set it.
   the folder, with the lock still held) writes the global FileInfo as the
   local index entry, the same way the puller does. Without that entry, the
   App's next scan mints a new version in about 60% of runs, because the
-  scanner compares against the *local* entry. See
-  `Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md`.
+  scanner compares against the *local* entry.
+  
 - The App engine keeps `<HomeDir>/peer-addresses.json` (last outgoing
   connection plus discovery addresses per device); `FetchFile` dials those
   first, so the restricted core does not wait for discovery (local announce
-  every 30 s, global lookup, relays). Format and measurements:
-  `Docs/REWRITE/notes/wp-a-restricted-fetch-connect-and-memory.md`.
+  every 30 s, global lookup, relays). 
 - Memory: measure **phys_footprint** (what jetsam limits), not RSS.
   `PsyBridgeAdapter.setRestrictedLog(level: "trace")` logs it per fetch
   phase; `Scripts/sim-fetch-memory.sh` measures it in the iOS Simulator.
-- Upstream exposes no SQLite `cache_size` knob (DESIGN §3.5 asked): it runs
+- Upstream exposes no SQLite `cache_size` knob: it runs
   with SQLite's default page cache (2 MiB per connection) in C memory,
   outside GOMEMLIMIT.
 
@@ -61,4 +60,4 @@ pages). macOS host:
 
 `FetchFile` of a 100 MiB file from a local A engine, B at GOMEMLIMIT 40 MiB /
 GOGC 50: **peak RSS 29.2 MiB**, ~2 s. 1 KiB / 257 KiB fetches peak at
-~27–28 MiB. Device numbers (jetsam limit of the extension) are WP-C's job.
+~27–28 MiB. Device numbers (jetsam limit of the extension) are job.

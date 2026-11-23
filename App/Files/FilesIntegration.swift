@@ -2,12 +2,12 @@ import Foundation
 import PsySync
 import os
 
-/// App-side Files services bound to the engine lifecycle (DESIGN.md §6.2–6.6):
+/// App-side Files services bound to the engine lifecycle:
 /// `FilesProjector` (global index → files.sqlite → signalEnumerator),
 /// `ContentRequestServer` (delegatedToApp requests + local-mutation journal)
 /// and `DomainManager` (one domain per managed folder).
 ///
-/// Wiring (see Docs/REWRITE/notes/wp-c-integration.md):
+/// Wiring:
 /// - Create once with the *same* engine the host drives and call `attach()`;
 ///   it follows `.engineStateChanged` (running → start services, stopping /
 ///   stopped / failed → stop them and close files.sqlite, invariant I2).
@@ -158,10 +158,10 @@ final class FilesIntegration {
         log.info("files integration stopped")
     }
 
-    /// For the UI (WP-D): whether each managed folder's Files location is enabled.
+    /// For the UI: whether each managed folder's Files location is enabled.
     /// On Mac (Designed for iPad) new domains start disabled by the user; show
     /// a hint to enable "Psynguechthyngue" under System Settings → Login Items &
-    /// Extensions → File Providers (Docs/REWRITE/MAC_SPIKE.md).
+    /// Extensions → File Providers.
     private(set) var domainStatuses: [FolderID: FilesDomainStatus] = [:]
 
     func refreshDomainStatuses() async -> [FolderID: FilesDomainStatus] {

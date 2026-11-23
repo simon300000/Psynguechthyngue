@@ -79,7 +79,7 @@
         {
           "address": "127.0.0.1:28411",
           "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-          "name": "Mac"
+          "name": "peer-b"
         }
       ]
     }
@@ -92,7 +92,7 @@
     "data": {
       "address": "127.0.0.1:28411",
       "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-      "name": "Mac"
+      "name": "peer-b"
     }
   },
   {
@@ -105,7 +105,7 @@
         {
           "address": "127.0.0.1:28411",
           "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-          "name": "Mac"
+          "name": "peer-b"
         }
       ]
     }
@@ -118,7 +118,7 @@
     "data": {
       "address": "127.0.0.1:28411",
       "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-      "name": "Mac"
+      "name": "peer-b"
     }
   },
   {
@@ -131,7 +131,7 @@
         {
           "address": "127.0.0.1:28411",
           "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-          "name": "Mac"
+          "name": "peer-b"
         }
       ]
     }
@@ -144,7 +144,7 @@
     "data": {
       "address": "127.0.0.1:28411",
       "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-      "name": "Mac"
+      "name": "peer-b"
     }
   },
   {
@@ -157,7 +157,7 @@
         {
           "address": "127.0.0.1:28411",
           "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-          "name": "Mac"
+          "name": "peer-b"
         }
       ]
     }
@@ -170,7 +170,7 @@
     "data": {
       "address": "127.0.0.1:28411",
       "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-      "name": "Mac"
+      "name": "peer-b"
     }
   },
   {
@@ -183,7 +183,7 @@
         {
           "address": "127.0.0.1:28411",
           "deviceID": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-          "name": "Mac"
+          "name": "peer-b"
         }
       ]
     }
@@ -196,7 +196,7 @@
     "data": {
       "address": "127.0.0.1:28411",
       "device": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
-      "name": "Mac"
+      "name": "peer-b"
     }
   },
   {
@@ -221,7 +221,7 @@
       "addr": "127.0.0.1:28411",
       "clientName": "syncthing",
       "clientVersion": "v2.1.6",
-      "deviceName": "Mac",
+      "deviceName": "peer-b",
       "id": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
       "type": "tcp-client"
     }
@@ -264,7 +264,7 @@
       "addr": "127.0.0.1:28411",
       "clientName": "syncthing",
       "clientVersion": "v2.1.6",
-      "deviceName": "Mac",
+      "deviceName": "peer-b",
       "id": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
       "type": "tcp-client"
     }
@@ -544,7 +544,7 @@
       "addr": "127.0.0.1:64081",
       "clientName": "syncthing",
       "clientVersion": "v2.1.6",
-      "deviceName": "Mac",
+      "deviceName": "peer-b",
       "id": "XAWZI5G-MSFFZBK-AS3Z2WO-3JAY3K7-HH6C6MB-TJJSYT2-SYN76BW-4QXLUQ7",
       "type": "tcp-server"
     }

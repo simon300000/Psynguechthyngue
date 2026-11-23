@@ -1,13 +1,12 @@
 import Foundation
 
-/// Engine-wide settings shown in Settings ▸ Advanced (DESIGN §7, §12 Q1).
-/// Contract change approved per Docs/REWRITE/notes/contract-change-WP-D-engine-options.md.
+/// Engine-wide settings shown in Settings ▸ Advanced.
 public struct EngineOptions: Hashable, Codable, Sendable {
     /// This device's name as shown to peers.
     public var deviceName: String
-    /// Global discovery (`globalAnnounceEnabled`); default on (§12 Q1).
+    /// Global discovery (`globalAnnounceEnabled`); default on.
     public var globalDiscovery: Bool
-    /// Relays (`relaysEnabled`); default on (§12 Q1).
+    /// Relays (`relaysEnabled`); default on.
     public var relays: Bool
     /// Sync protocol listen addresses; upstream default is `["default"]`.
     public var listenAddresses: [String]

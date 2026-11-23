@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import PsySync
 
-/// DESIGN.md §10.3 — LiveSyncEngine against the official Syncthing on this Mac.
+/// E2E: LiveSyncEngine against the official Syncthing on this Mac.
 ///
 /// Only runs from `Scripts/e2e-local-syncthing.sh` (`make e2e-local`), which
 /// provides the official instance's API key in `PSY_E2E_OFFICIAL_APIKEY`

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""DEV/TEST ONLY (WP-C acceptance): upstream scan time vs number of generated
-on-demand rules (`!/path` lines before `*`, DESIGN.md §6.3). Runs on the private
+"""DEV/TEST ONLY (acceptance): upstream scan time vs number of generated
+on-demand rules (`!/path` lines before `*`). Runs on the private
 phone-side Syncthing (127.0.0.1:8484), never on the official instance.
 Usage: stignore-scale.py <dir-with-files>"""
 import json, os, statistics, sys, time

@@ -3,8 +3,8 @@ import PsySync
 import SwiftUI
 import os
 
-/// DEV/TEST ONLY host app for the Files acceptance run (WP-C). Plays the part
-/// of WP-D's EngineHost: holds the engine lock while "the engine runs"
+/// DEV/TEST ONLY host app for the Files acceptance run. Plays the part
+/// of EngineHost: holds the engine lock while "the engine runs"
 /// (foreground), wires `FilesIntegration`, and releases everything on
 /// background (invariant I2). Config comes from launch arguments once and is
 /// remembered: `-PsyHarnessREST http://127.0.0.1:8484 -PsyHarnessKey <key>`.
@@ -97,7 +97,7 @@ final class HarnessModel: ObservableObject {
         await files.engineDidStart()
     }
 
-    /// Real engine: WP-B LiveSyncEngine over WP-A PsyBridgeAdapter, wired the
+    /// Real engine: LiveSyncEngine over PsyBridgeAdapter, wired the
     /// way the App does it (FilesIntegration.attach()).
     /// `-PsyHarnessPeer <deviceID> -PsyHarnessPeerAddress tcp://127.0.0.1:22000
     ///  -PsyHarnessFolder <folderID>` adds the peer and an on-demand managed folder.

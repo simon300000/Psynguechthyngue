@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Chooses the sync protocol listen port (DESIGN §3, WP-D finding).
+/// Chooses the sync protocol listen port.
 ///
 /// Upstream's default `tcp://:22000` / `quic://:22000` uses SO_REUSEPORT, so an
 /// embedded engine silently *shares* 22000 with another Syncthing on the same

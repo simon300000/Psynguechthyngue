@@ -4,7 +4,7 @@ import Foundation
 @testable import PsySync
 
 /// Test-only `SyncthingBridge` that runs the official Syncthing binary as a
-/// child process (stand-in for psybridge until WP-A lands). Mirrors what the
+/// child process (stand-in for psybridge until lands). Mirrors what the
 /// real bridge promises: REST on 127.0.0.1 only, a fresh random API key per
 /// start, no upgrades/usage reporting/crash reporting. For isolation it also
 /// disables global/local discovery, relays and NAT and listens on loopback.

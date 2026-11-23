@@ -173,7 +173,7 @@ public protocol ContentRequestInbox: Sendable {
 // MARK: - Restricted fetch (extension-only, App not running)
 
 /// Budget for the extension's restricted core. Defaults mirror
-/// psybridge/fetch.go; memory must be validated on device (DESIGN.md §6.4).
+/// psybridge/fetch.go; memory must be validated on device.
 public struct RestrictedFetchBudget: Hashable, Sendable {
     public var deadline: Duration
     public var connectGrace: Duration
@@ -255,8 +255,7 @@ public protocol RestrictedFetchBridge: Sendable {
 
     /// Record a fetched file in the local index with the global `version`, so the
     /// App's next scan keeps the global version instead of minting a new one.
-    /// Call order while holding the engine lock (contract change 2026-11-21,
-    /// Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md):
+    /// Call order while holding the engine lock:
     /// fetch → rename into folder → recordFetchedFile → `.stignore` `!/path` → journal → unlock.
     /// Never call before the rename, or the next scan propagates a deletion.
     func recordFetchedFile(
@@ -268,7 +267,7 @@ public protocol RestrictedFetchBridge: Sendable {
     ) throws
 }
 
-/// How the extension satisfies `fetchContents` (decision tree in DESIGN.md §6.2).
+/// How the extension satisfies `fetchContents` (decision tree: local clone, delegate to the App, restricted fetch).
 public enum ContentSource: Hashable, Sendable {
     /// File is local at the requested version → APFS clone to a temp URL.
     case localClone
@@ -278,7 +277,7 @@ public enum ContentSource: Hashable, Sendable {
     case restrictedFetch
 }
 
-/// The extension-side orchestrator (WP-C implements `LiveContentProvider`).
+/// The extension-side orchestrator (implements `LiveContentProvider`).
 public protocol ContentProviding: Sendable {
     func provideContents(
         for item: ItemIdentifier,

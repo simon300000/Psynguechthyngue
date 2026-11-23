@@ -2,7 +2,7 @@ import Foundation
 
 /// Runs blocking bridge (gomobile) and Keychain calls on a dedicated serial
 /// GCD queue and resumes the caller via a continuation, so the Swift
-/// cooperative thread pool is never blocked (DESIGN.md §4.3, AUDIT P1).
+/// cooperative thread pool is never blocked.
 public final class BridgeExecutor: Sendable {
     private let queue: DispatchQueue
 

@@ -329,7 +329,7 @@ final class FakeSyncthing: @unchecked Sendable {
         #expect(await h.engine.state == .failed(code: "stop_timeout", detail: "bridge(code: \"stop_timeout\", detail: \"keeps stopping in the background\")"))
 
         // The bridge finishes the shutdown in the background and its next
-        // Start waits for it (WP-A): the engine must not stay unusable.
+        // Start waits for it: the engine must not stay unusable.
         h.bridge.stopError = nil
         try await h.engine.start(context: .foreground)
         guard case .running = await h.engine.state else { Issue.record("not running after restart"); return }

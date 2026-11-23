@@ -2,7 +2,7 @@ import Foundation
 
 /// Swift mirror of GoBridge/psybridge. The App and File Provider targets
 /// provide concrete adapters over `PsyBridge.xcframework`
-/// (`Platform/PsyBridgeAdapter.swift`, WP-A). SwiftPM code depends only on
+/// (`Platform/PsyBridgeAdapter.swift`, ). SwiftPM code depends only on
 /// these protocols so it builds and tests on macOS without the xcframework.
 public enum BridgeContract {
     /// Must equal `psybridge.APIVersion()`; checked at launch.

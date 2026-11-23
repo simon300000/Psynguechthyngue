@@ -3,7 +3,7 @@ import Observation
 import PsySync
 
 /// Owns the one `SyncEngine` of the App process and drives it from lifecycle
-/// signals and policy (DESIGN.md §4.1–4.4).
+/// signals and policy.
 ///
 ///   idle ─didBecomeActive→ foregroundRunning ─didEnterBackground→ draining → idle
 ///   idle ─backgroundTaskStarted→ backgroundRunning ─done/expired→ draining → idle
@@ -22,7 +22,7 @@ final class LiveEngineHost: EngineHosting {
     /// Set when the engine failed to start/stop; the UI surfaces it.
     private(set) var lastFailure: String?
     /// A user-initiated BGContinuedProcessingTask is running: the
-    /// engine keeps going when the app is backgrounded (DESIGN §4.1/§4.2).
+    /// engine keeps going when the app is backgrounded.
     private(set) var continuedProcessing = false
     var preferences = PolicyPreferences() {
         didSet { if preferences != oldValue { Task { await self.enqueue { await self.applyPolicy(force: false) } } } }
@@ -274,7 +274,7 @@ final class LiveEngineHost: EngineHosting {
         }
     }
 
-    /// Runs a BGTask to completion (§4.2): start → wait for idle grace /
+    /// Runs a BGTask to completion: start → wait for idle grace /
     /// max runtime / expiry → stop. Returns true if the engine reached a
     /// settled state (all folders upToDate/waitingForDevices) before stopping.
     func runBackgroundTask(kind: BackgroundTaskKind) async -> Bool {
@@ -335,7 +335,7 @@ final class LiveEngineHost: EngineHosting {
             engineMaybeLive = false
             log.record("lock-released", "engine stopped remaining=\(Int(min(tasks.remaining, 9999)))s")
         } catch {
-            // A stop_timeout no longer poisons the engine (WP-A/B round 2): it is
+            // A stop_timeout no longer poisons the engine: it is
             // simply started again on the next didBecomeActive. engineMaybeLive
             // stays true so the next background transition retries the stop.
             fail("stop", error)

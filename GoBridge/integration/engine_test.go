@@ -18,7 +18,7 @@ import (
 	"github.com/simon300000/Psynguechthyngue/GoBridge/psybridge"
 )
 
-// TestEngineLifecycle: §10.2 — REST only on 127.0.0.1, random key per start,
+// TestEngineLifecycle: REST only on 127.0.0.1, random key per start,
 // index stream, and everything released after Stop. Runs in-process.
 func TestEngineLifecycle(t *testing.T) {
 	root := t.TempDir()
@@ -58,7 +58,7 @@ func TestEngineLifecycle(t *testing.T) {
 		t.Fatalf("unauthenticated request got %d", c)
 	}
 
-	// config.xml holds this launch's loopback address and key (DESIGN I6).
+	// config.xml holds this launch's loopback address and key.
 	gui := readGUIConfig(t, n.home)
 	if gui.Address != "127.0.0.1:"+port || gui.APIKey != ep1.APIKey || gui.TLS {
 		t.Fatalf("persisted gui config = %+v", gui)

@@ -26,7 +26,7 @@ public struct AppGroupLayout: Hashable, Sendable {
 /// Cross-process exclusive ownership of the Syncthing home (DB + config).
 /// Exactly one of {App engine, extension restricted fetch} may hold it.
 ///
-/// Implementation (WP-C): `flock(LOCK_EX|LOCK_NB)` on `AppGroupLayout.engineLock`,
+/// Implementation: `flock(LOCK_EX|LOCK_NB)` on `AppGroupLayout.engineLock`,
 /// polled with backoff until `timeout`. iOS kills a *suspended* process that
 /// holds a lock in a shared container (0xdead10cc), so the App must release it
 /// before suspension (EngineHost stops the engine under beginBackgroundTask).

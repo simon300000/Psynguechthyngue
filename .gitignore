@@ -76,3 +76,8 @@ fastlane/test_output
 
 # Local Claude instructions
 CLAUDE.local.md
+
+# Agent hand-off material and superseded docs (kept locally, not versioned)
+/Docs/Archive/
+/Docs/REWRITE/
+/goal-objective.md

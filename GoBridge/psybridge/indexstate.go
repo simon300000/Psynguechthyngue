@@ -24,7 +24,7 @@ import (
 //
 // Upstream does not keep the max sequence a peer announces in its
 // ClusterConfig (it is used once to pick the delta start and dropped), and
-// patching upstream is not allowed (DESIGN.md §3.4). What the protocol does
+// patching upstream is not allowed. What the protocol does
 // guarantee is how the sender batches: upstream's index sender sends its
 // backlog in batches that are "full" — at least model.MaxBatchSizeFiles
 // entries or model.MaxBatchSizeBlocks blocks — until the backlog is drained,

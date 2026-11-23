@@ -3,7 +3,7 @@
 // Package psybridge is bridge v2: the thin, gomobile-safe boundary between
 // the iOS app and an *unpatched* upstream Syncthing.
 //
-// Design rules (Docs/REWRITE/DESIGN.md §3):
+// Design rules:
 //
 //   - Control plane = Syncthing's own REST + events API, bound to 127.0.0.1
 //     on a random port with a random per-launch API key. Swift talks to it

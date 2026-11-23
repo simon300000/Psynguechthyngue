@@ -218,7 +218,7 @@ private let f1 = FolderID(rawValue: "f1")
     }
 }
 
-/// DESIGN.md §11 WP-C acceptance: 100k-item pagination and changes.
+/// acceptance: 100k-item pagination and changes.
 @Suite(.serialized) struct FilesStoreScaleTests {
     static let total = 100_000
 
@@ -302,7 +302,7 @@ private let f1 = FolderID(rawValue: "f1")
         #expect(!delta.more)
 
         print("""
-            [WP-C scale] items=\(Self.total) insert=\(insertTime) changes(1000/page, \(pages) pages)=\(changesTime) \
+            [scale] items=\(Self.total) insert=\(insertTime) changes(1000/page, \(pages) pages)=\(changesTime) \
             childrenPaging(999 @100)=\(pageTime) fullReapplyNoop=\(reapplyTime)
             """)
     }
@@ -381,7 +381,7 @@ private let f1 = FolderID(rawValue: "f1")
 }
 
 /// Report risk #4: the system's eviction in an on-demand folder must drop the
-/// engine copy (DESIGN §6.3), except for kept files and update evictions.
+/// engine copy, except for kept files and update evictions.
 @Suite struct SystemEvictionTests {
     let f1 = FolderID(rawValue: "f1")
 

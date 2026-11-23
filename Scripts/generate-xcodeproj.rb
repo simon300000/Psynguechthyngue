@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 #
-# Generates Psynguechthyngue.xcodeproj (DESIGN.md §11 WP-E). Deterministic:
+# Generates Psynguechthyngue.xcodeproj. Deterministic:
 # object IDs are derived from the project structure, so regenerating without
 # source changes produces no diff.
 #
@@ -192,8 +192,8 @@ configure(provider, base_config, PSYBRIDGE_LINK_SETTINGS.merge(
   "SKIP_INSTALL" => "YES",
   "LD_RUNPATH_SEARCH_PATHS" => "$(inherited) @executable_path/../../Frameworks",
   # PSY_RESTRICTED_FETCH switches the extension from the "open the App"
-  # fallback to PsyBridgeAdapter's restricted fetch (DESIGN §6.4). Set it in
-  # PSY_FILE_PROVIDER_CONDITIONS (Config/Base.xcconfig) once WP-C wires it.
+  # fallback to PsyBridgeAdapter's restricted fetch. Set it in
+  # PSY_FILE_PROVIDER_CONDITIONS (Config/Base.xcconfig) once it is wired.
   "SWIFT_ACTIVE_COMPILATION_CONDITIONS" => "$(inherited) $(PSY_FILE_PROVIDER_CONDITIONS)",
 ))
 provider.build_configurations.each do |c|

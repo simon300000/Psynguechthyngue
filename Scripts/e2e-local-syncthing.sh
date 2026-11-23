@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E (DESIGN.md §10.3): LiveSyncEngine ↔ the official Syncthing running on this Mac.
+# E2E: LiveSyncEngine ↔ the official Syncthing running on this Mac.
 #
 # - The official instance's API key is read from its config.xml into a shell
 #   variable and passed to curl via stdin (`-H @-`) and to the test process via

@@ -4,10 +4,10 @@
 // Compiled into the App and File Provider targets; SwiftPM code depends only
 // on the `SyncthingBridge` / `RestrictedFetchBridge` protocols in PsySync.
 //
-// Threading (DESIGN.md §4.3): every gomobile call blocks the calling thread
+// Threading: every gomobile call blocks the calling thread
 // (Start waits for REST health, FetchFile can take 90 s). The protocol
 // methods below are synchronous and must not run on the Swift cooperative
-// pool. Use `PsyBridgeThread.run { … }` (or your own serial queue, as WP-B's
+// pool. Use `PsyBridgeThread.run { … }` (or your own serial queue, as 
 // LiveSyncEngine does) to get an async API whose blocking part runs on one
 // dedicated, long-lived thread.
 
@@ -346,8 +346,7 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
     /// `psybridge.RecordFetchedFile`: after `fetch` and after the staged file
     /// was renamed to `<folder>/<path>` (engine lock still held), record it in
     /// the local index with the global version so the App's next scan does
-    /// not mint a new version. Part of `RestrictedFetchBridge` (contract change
-    /// accepted 2026-11-21, Docs/REWRITE/notes/contract-change-WP-A-record-fetched-file.md).
+    /// not mint a new version. Part of `RestrictedFetchBridge` (see GoBridge/README.md).
     public func recordFetchedFile(
         homeDirectory: URL,
         identity: DeviceIdentity,

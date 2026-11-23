@@ -15,7 +15,7 @@ enum ExternalDirectoryError: Error {
 
 /// Turns a folder the user picked (`.fileImporter`, security-scoped URL) into
 /// a bookmark, rejecting File Provider backed locations such as iCloud Drive
-/// (DESIGN.md §6.7). (WP-B's `ExternalLocation` resolves the bookmark.)
+/// (`ExternalLocation` resolves the bookmark).
 enum ExternalDirectorySelection {
     static func make(from url: URL) -> Result<ExternalSelection, ExternalDirectoryError> {
         let scoped = url.startAccessingSecurityScopedResource()

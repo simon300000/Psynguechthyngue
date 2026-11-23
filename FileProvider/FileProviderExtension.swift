@@ -3,7 +3,7 @@ import PsySync
 import UniformTypeIdentifiers
 import os
 
-/// Replicated File Provider extension for one managed folder (DESIGN.md §6).
+/// Replicated File Provider extension for one managed folder.
 ///
 /// - Metadata: read-only from `files.sqlite` (projected by the App).
 /// - Contents: `LiveContentProvider` (localClone / delegatedToApp / restrictedFetch).
@@ -198,7 +198,7 @@ final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension, 
     /// Only contents, filename and parent are acted on. Every other field
     /// (tags, favorite rank, lastUsedDate, xattrs, flags, dates without new
     /// contents) is accepted and ignored — never returned as still pending,
-    /// which made the system call modifyItem in a loop (AUDIT §二 P0).
+    /// which made the system call modifyItem in a loop.
     func modifyItem(
         _ item: NSFileProviderItem, baseVersion version: NSFileProviderItemVersion, changedFields: NSFileProviderItemFields,
         contents newContents: URL?, options: NSFileProviderModifyItemOptions = [], request: NSFileProviderRequest,

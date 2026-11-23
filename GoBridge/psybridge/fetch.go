@@ -22,7 +22,7 @@ import (
 	"github.com/syncthing/syncthing/lib/syncthing"
 )
 
-// Restricted single-file fetch ("受限小内核", DESIGN.md §6.4).
+// Restricted single-file fetch ("restricted core").
 //
 // Used ONLY by the File Provider extension when the App is not running and
 // the user opens a placeholder. It starts a minimal upstream `syncthing.App`
@@ -253,7 +253,7 @@ func FetchFile(req *FetchRequest, progress FetchProgress) (result *FetchResult, 
 }
 
 // restrictConfig turns the persisted config into the restricted-core variant
-// (DESIGN.md §6.4) and returns the target folder's configuration.
+// and returns the target folder's configuration.
 func restrictConfig(c *config.Configuration, myID protocol.DeviceID, folderID string) (config.FolderConfiguration, bool) {
 	var target config.FolderConfiguration
 	found := false

@@ -8,7 +8,7 @@ import XCTest
 /// `xcrun devicectl device copy to --domain-type appDataContainer`; the driver
 /// executes it and writes `res-<seq>.json` (+ optional PNG / tree text), which
 /// the Mac copies back. No network is involved, so no Local Network prompt for
-/// the runner. See `Docs/REWRITE/notes/accept-ipad/README.md`.
+/// the runner.
 @MainActor
 final class DeviceDriverUITests: XCTestCase {
     private let appBundleID = "moe.simon3k.Psynguechthyngue"

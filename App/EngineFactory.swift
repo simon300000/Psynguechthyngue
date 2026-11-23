@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import PsySync
 
-/// Production engine: WP-B's `LiveSyncEngine` (REST + event pump) over WP-A's
+/// Production engine: `LiveSyncEngine` (REST + event pump) over 
 /// `PsyBridgeAdapter` (gomobile `PsyBridge.xcframework`), with the App Group
 /// layout, the cross-process `FlockEngineLock` and the Keychain identity.
 struct LiveEngineComponents {
