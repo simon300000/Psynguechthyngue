@@ -93,11 +93,19 @@ final class FilesIntegration {
             self.projector = projector
             self.server = server
             self.materializer = materializer
+            // Subscribe before the first reconcile: a folder accepted while it
+            // and the drain run (seconds after engine start) changed the
+            // configuration unseen, and it got no domain and no projection
+            // until the next change (perf measurement, master 0384f15).
+            let events = engine.events()
             await foldersChanged()
             await projector.start()
             await server.start()
             await server.drain()
-            let events = engine.events()
+            // The stream keeps only the newest events; a busy start (index
+            // batches, downloads) could push an early configuration change
+            // out of it. One more reconcile is idempotent.
+            await foldersChanged()
             configTask = Task { [weak self] in
                 for await event in events {
                     switch event {
