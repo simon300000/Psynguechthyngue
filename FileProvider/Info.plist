@@ -58,7 +58,48 @@
 				<string>SUBQUERY ( fileproviderItems, $fileproviderItem, $fileproviderItem.userInfo.pinned == YES AND $fileproviderItem.userInfo.onDemand == YES ).@count &gt; 0</string>
 			</dict>
 		</array>
+		<!-- Part 9: badge on files kept on this device (on-demand folders). -->
+		<key>NSFileProviderDecorations</key>
+		<array>
+			<dict>
+				<key>Identifier</key>
+				<string>$(PRODUCT_BUNDLE_IDENTIFIER).keepDownloaded</string>
+				<key>BadgeImageType</key>
+				<string>$(PRODUCT_BUNDLE_IDENTIFIER).decoration.keep-downloaded</string>
+				<key>Category</key>
+				<string>Badge</string>
+				<key>LocalizedTitle</key>
+				<dict>
+					<key>NSStringFormat</key>
+					<string>FILE_PROVIDER_KEPT_ON_DEVICE</string>
+				</dict>
+			</dict>
+		</array>
 	</dict>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).decoration.keep-downloaded</string>
+			<key>UTTypeDescription</key>
+			<string>Kept on this device</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.icon-decoration.badge</string>
+			</array>
+			<key>UTTypeIconFiles</key>
+			<array>
+				<string>KeepDownloadedBadge</string>
+			</array>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconName</key>
+				<string>KeepDownloadedBadge</string>
+				<key>UTTypeIconBadgeName</key>
+				<string>KeepDownloadedBadge</string>
+			</dict>
+		</dict>
+	</array>
     <key>NSExtensionFileProviderDownloadPipelineDepth</key>
     <integer>1</integer>
     <key>NSExtensionFileProviderUploadPipelineDepth</key>

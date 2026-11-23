@@ -3,7 +3,7 @@ import PsySync
 import UniformTypeIdentifiers
 
 /// NSFileProviderItem over one `files.sqlite` row.
-final class FileProviderItem: NSObject, NSFileProviderItem {
+final class FileProviderItem: NSObject, NSFileProviderItem, NSFileProviderItemDecorating {
     let record: FileItemRecord
     private let rootID: ItemIdentifier
     private let folderLabel: String
@@ -95,6 +95,21 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
     /// when `pinned == YES`. Pin state and content mode are folded into the
     /// metadata version, so the system re-reads them. Explicit NSNumber
     /// booleans.
+    /// Badge category, declared in Info.plist (NSFileProviderDecorations);
+    /// its icon is the exported UTI `<bundle id>.decoration.keep-downloaded`.
+    /// The pin flag is in the item version, so the system re-reads this
+    /// after Keep / Remove Download.
+    var decorations: [NSFileProviderItemDecorationIdentifier]? {
+        guard FilesItemPolicy.showsKeptBadge(record, contentMode: contentMode) else { return [] }
+        #if DEBUG
+        FootprintProbe.file?.append("decorations path=/\(record.path) -> \(Self.keptBadge.rawValue)")
+        #endif
+        return [Self.keptBadge]
+    }
+
+    static let keptBadge = NSFileProviderItemDecorationIdentifier(
+        (Bundle.main.bundleIdentifier ?? "app.psynguechthyngue.fileprovider") + ".keepDownloaded")
+
     var userInfo: [AnyHashable: Any]? {
         ["pinned": NSNumber(value: record.isPinned), "isFile": NSNumber(value: !record.isDirectory),
          "onDemand": NSNumber(value: contentMode == .onDemand)]

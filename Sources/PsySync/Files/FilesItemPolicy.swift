@@ -34,7 +34,15 @@ public enum FilesItemPolicy {
     /// re-reads items it cached under the old set (1: `.allowsEvicting`).
     /// Existing rows are re-announced once (`FilesStore.reannounceForCapabilitiesIfNeeded`).
     /// 3: userInfo.onDemand (Keep/Remove Download only in on-demand folders).
-    public static let capabilityRevision: Int64 = 3
+    /// 4: decorations (kept-on-device badge).
+    public static let capabilityRevision: Int64 = 4
+
+    /// "Kept on this device" badge: only where Keep Downloaded exists (an
+    /// on-demand folder) and the item is kept. In "Download everything"
+    /// every file is kept, so a badge there would say nothing.
+    public static func showsKeptBadge(_ record: FileItemRecord, contentMode: ContentMode?) -> Bool {
+        contentMode == .onDemand && record.isPinned
+    }
 
     /// The folder's content mode is folded in for every item: the custom
     /// actions' activation rules read it from userInfo, which the system

@@ -6,3 +6,4 @@
 "FILES_ERROR_LOW_MEMORY" = "当前内存不足，无法在此下载。请打开 Psynguechthyngue 下载此文件。";
 "FILES_ERROR_QUEUED" = "暂时没有可连接的设备。设备可用时 Psynguechthyngue 会自动下载此文件。";
 "FILES_ERROR_IGNORED" = "此文件被本机该文件夹的忽略规则排除，不会在这里下载。";
+"FILE_PROVIDER_KEPT_ON_DEVICE" = "已保留在本设备";
