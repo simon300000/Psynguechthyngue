@@ -14,5 +14,10 @@ KEYCHAIN_ACCESS_GROUP = $(AppIdentifierPrefix)$(APP_BUNDLE_IDENTIFIER)
 // Extra Swift conditions for the File Provider extension (e.g. PSY_RESTRICTED_FETCH).
 PSY_FILE_PROVIDER_CONDITIONS = PSY_RESTRICTED_FETCH
 
+// App and File Provider must share both values. Scripts/bump-build.sh rewrites
+// CURRENT_PROJECT_VERSION before archiving for upload.
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1
+
 // Actual Team, bundle and App Group values live only in the ignored file.
 #include? "Local.xcconfig"
