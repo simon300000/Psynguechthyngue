@@ -91,6 +91,9 @@ final class AppModel {
                 }
             }
             scheduler?.folderLabel = { [weak self] id in self?.folders.first { $0.id == id }?.label }
+            scheduler?.appActivity = { [weak self] in
+                self?.listings.values.reduce(Int64(0)) { $0 + Int64($1.processed) } ?? 0
+            }
         }
     }
     private(set) var filesLocation: FilesLocationState = .unknown

@@ -60,6 +60,9 @@ final class BackgroundScheduler {
     /// and folder labels for the task's title.
     var composeStatuses: (@MainActor ([FolderStatus]) -> [FolderStatus])?
     var folderLabel: (@MainActor (FolderID) -> String?)?
+    /// App-side work the statuses do not show (Files list rows processed):
+    /// its changes keep the task's progress moving.
+    var appActivity: (@MainActor () -> Int64)?
 
     var isEnabled: Bool { defaults.object(forKey: Self.enabledKey) == nil ? true : defaults.bool(forKey: Self.enabledKey) }
 
@@ -154,7 +157,9 @@ final class BackgroundScheduler {
     /// Shared by the real task and the UI-test simulation: report progress
     /// through every phase of the work (file list, Files list, scan, sync),
     /// named in the title, and end once nothing has been left to do for a
-    /// while (ContinuedWorkTracker).
+    /// while (ContinuedWorkTracker). The system shows "failed" for
+    /// `success: false`, so only an end that cut transfers short reports it
+    /// (ContinuedEnd).
     private func runContinued(progress: Progress, isExpired: @escaping () -> Bool,
                               retitle: @escaping (String, String) -> Void, finish: @escaping (Bool) -> Void) async {
         continuedRunning = true
@@ -162,16 +167,32 @@ final class BackgroundScheduler {
         host.beginContinuedProcessing()
         let started = ContinuousClock.now
         var tracker = ContinuedWorkTracker()
-        var reason = "done"
+        var failures = SnapshotFailureWindow()
+        var end = ContinuedEnd.done
         var shownTitle = ""
         var lastPhase: ContinuedWorkTracker.Phase?
+        var lastNeed: Int64 = 0
+        progress.totalUnitCount = ContinuedWorkTracker.unitScale
         while true {
-            if isExpired() { reason = "expired"; break }
-            guard let status = try? await host.engine.snapshot() else { reason = "engine-unavailable"; break }
+            if isExpired() {
+                end = .expired(lastPhase: lastPhase, needBytes: lastNeed)
+                break
+            }
+            let status: EngineStatus
+            do {
+                status = try await host.engine.snapshot()
+                if failures.isFailing { log.record("continued-snapshot-recovered", "after=\(Self.seconds(since: started))s") }
+                failures.succeeded()
+            } catch {
+                if !failures.isFailing { log.record("continued-snapshot-failed", "\(error)") }
+                if failures.failed() { end = .engineUnavailable; break }
+                try? await Task.sleep(for: .seconds(1))
+                continue
+            }
             let folders = composeStatuses?(status.folders) ?? status.folders
-            let step = tracker.step(folders)
-            progress.totalUnitCount = max(step.total, 1)
-            progress.completedUnitCount = step.completed
+            let step = tracker.step(folders, appActivity: appActivity?() ?? 0, inBackground: !host.isAppActive)
+            lastNeed = folders.reduce(Int64(0)) { $0 + max($1.progress.needBytes, 0) }
+            progress.completedUnitCount = step.units
             if step.phase != lastPhase {
                 log.record("continued-phase", "\(step.phase.rawValue) folder=\(step.folder?.rawValue ?? "-") "
                            + "after=\(Self.seconds(since: started))s")
@@ -182,19 +203,21 @@ final class BackgroundScheduler {
                 shownTitle = title + subtitle
                 retitle(title, subtitle)
             }
-            if step.finished, expectWorkUntil.map({ ContinuousClock.now >= $0 }) ?? true {
-                reason = step.stalled ? "stalled" : "done"
+            if step.finished, step.stuck || expectWorkUntil.map({ ContinuousClock.now >= $0 }) ?? true {
+                end = step.stuck ? .stuck : (step.stalled ? .stalled : .done)
                 break
             }
             try? await Task.sleep(for: .seconds(1))
         }
-        log.record("continued-finished", "reason=\(reason) ran=\(Self.seconds(since: started))s")
+        if end == .done { progress.completedUnitCount = progress.totalUnitCount }
+        log.record("continued-finished", "reason=\(end.rawValue) success=\(end.success) "
+                   + "ran=\(Self.seconds(since: started))s phase=\(lastPhase?.rawValue ?? "-") need=\(lastNeed)")
         continuedRunning = false
         // Drain first, then complete the task: setTaskCompleted ends the
         // task's background time, and a suspension while the engine still
         // holds the App Group lock is killed with 0xdead10cc.
-        await host.endContinuedProcessing(reason: reason)
-        finish(reason == "done")
+        await host.endContinuedProcessing(reason: end.rawValue)
+        finish(end.success)
     }
 
     private static func seconds(since start: ContinuousClock.Instant) -> Int64 {

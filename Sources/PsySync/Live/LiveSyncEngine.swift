@@ -37,7 +37,7 @@ public struct LiveSyncEngineConfiguration: Sendable {
 /// async. Lifecycle transitions (start/stop) are serialised.
 public actor LiveSyncEngine: SyncEngine {
     private let bridge: any SyncthingBridge
-    private let lock: any EngineLock
+    private nonisolated let lock: any EngineLock
     private let identityStore: any IdentityStoring
     private let config: LiveSyncEngineConfiguration
     private let executor = BridgeExecutor()
@@ -1415,5 +1415,24 @@ private final class CursorBox: @unchecked Sendable {
     init(_ cursor: any GlobalIndexCursor) { self.cursor = cursor }
     func close(on executor: BridgeExecutor) {
         Task { _ = try? await executor.run { self.cursor.close() } }
+    }
+}
+
+/// Diagnostics for a failed start: who holds the engine lock.
+public protocol EngineLockDiagnosing {
+    /// "fileProviderExtension pid=123 (other process)", "free", …
+    var lockHolderDescription: String { get }
+}
+
+extension LiveSyncEngine: EngineLockDiagnosing {
+    public nonisolated var lockHolderDescription: String {
+        if let flock = lock as? FlockEngineLock {
+            guard let info = flock.holderInfo() else {
+                return "free or unlabelled"
+            }
+            let whose = info.pid == getpid() ? "this process" : "other process"
+            return "\(info.owner.rawValue) pid=\(info.pid) (\(whose))"
+        }
+        return lock.currentHolder()?.rawValue ?? "free"
     }
 }

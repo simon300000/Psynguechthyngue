@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -92,6 +93,9 @@ func markDraining(owner string) {
 // polite close for live peers and lets Stop meet a 5-10 s background budget.
 const connectionCloseTimeout = 2 * time.Second
 
+// slowStopThreshold: stops at least this long are logged with a breakdown.
+const slowStopThreshold = 2 * time.Second
+
 // tuneUpstream applies process-wide upstream knobs. Called while holding the
 // process slot and before any connection exists, so no goroutine reads them
 // concurrently.
@@ -164,20 +168,35 @@ func (r *upstreamRuntime) stopAsync() <-chan struct{} {
 		r.stopped = make(chan struct{})
 		go func() {
 			defer close(r.stopped)
+			start := time.Now()
+			var appTook, dbTook, earlyTook time.Duration
 			if r.extraCancel != nil {
 				r.extraCancel()
 			}
 			if r.app != nil {
+				t := time.Now()
 				r.app.Stop(svcutil.ExitSuccess) // waits for services and DB close
+				appTook = time.Since(t)
 			}
 			if r.db != nil {
 				// The App closes the DB itself once started; this covers error
 				// paths before that point (Close is idempotent upstream).
+				t := time.Now()
 				_ = r.db.Close()
+				dbTook = time.Since(t)
 			}
 			if r.earlyCancel != nil {
+				t := time.Now()
 				r.earlyCancel()
 				<-r.earlyDone
+				earlyTook = time.Since(t)
+			}
+			// Device: stops missed 5-10 s background deadlines; say which
+			// part took the time (the log sink outlives the Engine object).
+			if total := time.Since(start); total >= slowStopThreshold {
+				slog.Warn("psybridge stop slow", "total", total.Round(time.Millisecond),
+					"app", appTook.Round(time.Millisecond), "db", dbTook.Round(time.Millisecond),
+					"early", earlyTook.Round(time.Millisecond))
 			}
 		}()
 	})

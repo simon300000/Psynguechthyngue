@@ -87,6 +87,7 @@ File Provider 扩展 (PsyFileProvider.appex)
 **后台与实时性**
 
 - 没有真正的后台常驻同步。iOS 会挂起后台 App；后台只有 BGTask（时机由系统决定，refresh 约 30 秒）。`BGContinuedProcessingTask` 必须由用户发起，且要用具体标识符注册（通配符会被真机拒绝，见 `App/Lifecycle/BackgroundScheduler.swift`）。
+- 系统会收回进度看起来停住的"后台继续同步"任务，App 离开前台后几秒内就会发生。所以任务汇报的进度只增不减，只要状态或 Files 列表有任何变化就往前推一点；在后台持续 20 秒毫无变化时，任务自己结束，交给常规 BGTask 以后接着同步。只有还有传输可做却被系统中断，或引擎持续不可用时，才报告失败；对端离线或暂停导致的"没法继续"按正常结束处理（见 `Sources/PsySync/Lifecycle/ContinuedWork.swift`）。
 - 因此 App 不在前台时收不到远端变更：Files 里的元数据停在 App 最后一次运行（或最近一次 BGTask）时的状态。
 - 在 Files 中编辑或新建的内容，App 没运行时不会上传，要等下次打开 App 或 BGTask。
 - iOS 没有 FSEvents：本机变更靠扩展写入的变更日志加定向扫描，另有进前台时的扫描。别的 App 直接改写外部目录时，要等下次扫描才会发现。

@@ -78,11 +78,11 @@ final class LiveEngineHost: EngineHosting {
             backgroundExpired = true
             // Start the stop now, under its own background-time assertion:
             // waiting for runBackgroundTask's poll loop (a snapshot can take
-            // 2 s) plus a 5 s stop could overrun the expiration grace period.
+            // 2 s) plus the stop could overrun the expiration grace period.
             Task { @MainActor in
                 await self.enqueue {
                     guard self.isBackgroundRunning, !self.continuedProcessing else { return }
-                    await self.drain(reason: "bg-expired", requireTask: true, deadline: .seconds(5))
+                    await self.drain(reason: "bg-expired", requireTask: true)
                 }
             }
             return
@@ -142,6 +142,9 @@ final class LiveEngineHost: EngineHosting {
             if phase == .foregroundRunning || isBackgroundRunning { await drain(reason: "willTerminate", requireTask: true) }
         }
     }
+
+    /// The app is in the foreground (signals are queued; `phase` lags).
+    var isAppActive: Bool { appActive }
 
     private var isBackgroundRunning: Bool {
         if case .backgroundRunning = phase { return true }
@@ -306,7 +309,7 @@ final class LiveEngineHost: EngineHosting {
             if self.isBackgroundRunning {
                 // requireTask: the BG task's own time may be nearly gone
                 // (expiry); an assertion covers the stop (0xdead10cc).
-                await self.drain(reason: "bg-\(reason)", requireTask: true, deadline: .seconds(5))
+                await self.drain(reason: "bg-\(reason)", requireTask: true)
             }
         }
         return settled
@@ -314,7 +317,9 @@ final class LiveEngineHost: EngineHosting {
 
     // MARK: Drain (stop under beginBackgroundTask)
 
-    private func drain(reason: String, requireTask: Bool, deadline: Duration = LifecycleBudget.backgroundStopDeadline) async {
+    /// `deadline` nil: from the background time left once the assertion is
+    /// held (`LifecycleBudget.stopDeadline`).
+    private func drain(reason: String, requireTask: Bool, deadline: Duration? = nil) async {
         let clock = ContinuousClock()
         let t0 = clock.now
         phase = .draining
@@ -329,6 +334,7 @@ final class LiveEngineHost: EngineHosting {
             }
         }
         await onEngineWillStop?()
+        let deadline = deadline ?? LifecycleBudget.stopDeadline(remaining: tasks.remaining)
         log.record("engine-stop", "deadline=\(deadline) remaining=\(Int(min(tasks.remaining, 9999)))s")
         do {
             try await engine.stop(deadline: deadline)
@@ -397,7 +403,12 @@ final class LiveEngineHost: EngineHosting {
     }
 
     private func fail(_ operation: String, _ error: Error) {
-        let message = "\(operation): \(error)"
+        var message = "\(operation): \(error)"
+        if case EngineError.lockUnavailable = error, let holder = (engine as? any EngineLockDiagnosing)?.lockHolderDescription {
+            // Who holds the engine lock (device: repeated lockUnavailable
+            // after a clean stop, holder unknown).
+            message += " holder=\(holder)"
+        }
         log.record("failure", message)
         lastFailure = message
         onFailure?(error)
