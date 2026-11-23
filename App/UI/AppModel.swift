@@ -42,10 +42,20 @@ final class AppModel {
     private(set) var listings: [FolderID: FilesListingProgress] = [:]
     /// When each folder's status last came from an event; `refreshAll` does
     /// not overwrite a newer one with its older snapshot.
+    @ObservationIgnored private var pendingListings: [FolderID: FilesListingProgress?] = [:]
+    @ObservationIgnored private var listingPublish: Task<Void, Never>?
     @ObservationIgnored private var statusEventAt: [FolderID: Date] = [:]
     private(set) var pendingDevices: [PendingDevice] = []
     private(set) var pendingFolders: [PendingFolder] = []
+    /// Per-file progress as shown; follows `liveTransfers` at most twice a
+    /// second (upstream sends ~100 progress/start/finish events a second
+    /// during a big sync, and each write re-rendered Home).
     private(set) var transfers: [String: ActiveTransfer] = [:]
+    /// `!transfers.isEmpty`, as its own property so views that only need
+    /// "anything in progress?" are not invalidated by every progress tick.
+    private(set) var hasFileTransfers = false
+    @ObservationIgnored private var liveTransfers: [String: ActiveTransfer] = [:]
+    @ObservationIgnored private var transferPublish: Task<Void, Never>?
     private(set) var banner: Banner?
     /// Counts of engine start/stop transitions (fixture diagnostics for UI tests).
     private(set) var engineStarts = 0
@@ -66,7 +76,7 @@ final class AppModel {
     /// Menu / keyboard command waiting to be handled by the UI.
     var pendingCommand: AppCommand?
     /// Transfers in progress (Mac closure confirmation, accessory).
-    var hasActiveTransfers: Bool { !syncingFolders.isEmpty || !transfers.isEmpty }
+    var hasActiveTransfers: Bool { !syncingFolders.isEmpty || hasFileTransfers }
     /// Engine-owned settings (Settings ▸ Advanced); nil while the engine is not running.
     private(set) var engineOptions: EngineOptions?
     private(set) var syncthingVersion = ""
@@ -94,6 +104,8 @@ final class AppModel {
         guard let filesStatus else { return }
         filesLocation = await filesStatus.currentState()
     }
+    /// Rates and statistics, polled only while a screen shows them.
+    let metrics: MetricsMonitor
     /// Set while the onboarding cover is visible so adding the first device does not close it.
     var onboardingInProgress = false
 
@@ -117,6 +129,8 @@ final class AppModel {
         self.settings = settings
         self.notifier = notifier
         self.isFixture = isFixture
+        self.metrics = MetricsMonitor(engine: engine)
+        metrics.isLive = { [weak self] in self.map { $0.isActive && $0.isRunning } ?? false }
         host.onFailure = { [weak self] error in self?.report(error) }
     }
 
@@ -124,6 +138,7 @@ final class AppModel {
 
     func startObserving() {
         guard eventTask == nil else { return }
+        PerfLog.startIfRequested()
         let stream = engine.events()
         eventTask = Task { [weak self] in
             for await event in stream {
@@ -135,29 +150,32 @@ final class AppModel {
     }
 
     private func apply(_ event: EngineEvent) {
+        PerfCounters.hit("event \(Self.perfName(event))")
         notifier.handle(event, isActive: isActive, enabled: settings.notificationsEnabled)
         switch event {
         case let .engineStateChanged(state):
             engineState = state
             if case .running = state { engineStarts += 1; scheduleRefresh() }
-            if case .stopped = state { engineStops += 1; transfers.removeAll() }
+            if case .stopped = state { engineStops += 1; liveTransfers.removeAll(); publishTransfers(now: true) }
             if !isRunning {
                 // Nothing the engine said is current any more.
                 connections.removeAll()
                 listings.removeAll()
+                pendingListings.removeAll()
+                metrics.engineStopped()
             }
         case let .deviceConnectionChanged(c):
-            connections[c.deviceID] = c
+            if connections[c.deviceID] != c { connections[c.deviceID] = c }
             // DeviceConnected events carry no LAN flag: pull it from REST.
             if c.state == .connected && c.isLocalNetwork == nil { scheduleRefresh() }
         case let .pendingDevicesChanged(list):
-            pendingDevices = list
+            set(\.pendingDevices, list)
             debugAutoAccept()
         case let .pendingFoldersChanged(list):
-            pendingFolders = list
+            set(\.pendingFolders, list)
             debugAutoAccept()
         case let .folderStatusChanged(status):
-            statuses[status.folderID] = status
+            if statuses[status.folderID] != status { statuses[status.folderID] = status }
             statusEventAt[status.folderID] = Date()
             if status.state == .syncing { debugContinueIfRequested() }
         case .configurationChanged:
@@ -165,13 +183,47 @@ final class AppModel {
             Task { await refreshFilesLocation() }
         case let .downloadProgress(folder, path, done, total):
             let t = ActiveTransfer(folderID: folder, path: path, bytesDone: done, bytesTotal: total)
-            transfers[t.id] = t
+            liveTransfers[t.id] = t
+            publishTransfers()
         case let .itemFinished(folder, path, _):
-            transfers["\(folder.rawValue)/\(path.rawValue)"] = nil
+            if liveTransfers.removeValue(forKey: "\(folder.rawValue)/\(path.rawValue)") != nil { publishTransfers() }
         case .itemStarted, .indexChanged:
             break
         }
         autoContinueIfNeeded()
+    }
+
+    private func publishTransfers(now: Bool = false) {
+        if now {
+            transferPublish?.cancel()
+            transferPublish = nil
+            set(\.transfers, liveTransfers)
+            set(\.hasFileTransfers, !liveTransfers.isEmpty)
+            return
+        }
+        guard transferPublish == nil else { return }
+        transferPublish = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self, !Task.isCancelled else { return }
+            self.transferPublish = nil
+            self.set(\.transfers, self.liveTransfers)
+            self.set(\.hasFileTransfers, !self.liveTransfers.isEmpty)
+        }
+    }
+
+    private static func perfName(_ e: EngineEvent) -> String {
+        switch e {
+        case .engineStateChanged: "engineState"
+        case .deviceConnectionChanged: "connection"
+        case .pendingDevicesChanged: "pendingDevices"
+        case .pendingFoldersChanged: "pendingFolders"
+        case .folderStatusChanged: "folderStatus"
+        case .configurationChanged: "config"
+        case .indexChanged: "index"
+        case .itemStarted: "itemStarted"
+        case .itemFinished: "itemFinished"
+        case .downloadProgress: "downloadProgress"
+        }
     }
 
     private func scheduleRefresh() {
@@ -186,16 +238,16 @@ final class AppModel {
     /// Pulls a consistent snapshot. Failures while the engine is stopped
     /// (app in background) are silent: the last known state stays visible.
     func refreshAll() async {
-        engineState = await engine.state
-        localID = await engine.localDeviceID
+        set(\.engineState, await engine.state)
+        set(\.localID, await engine.localDeviceID)
         guard case .running = engineState else { return }
         let started = Date()
         do {
-            devices = try await engine.devices()
-            connections = Dictionary(uniqueKeysWithValues: try await engine.connections().map { ($0.deviceID, $0) })
-            folders = try await engine.folders()
-            pendingDevices = try await engine.pendingDevices()
-            pendingFolders = try await engine.pendingFolders()
+            set(\.devices, try await engine.devices())
+            set(\.connections, Dictionary(uniqueKeysWithValues: try await engine.connections().map { ($0.deviceID, $0) }))
+            set(\.folders, try await engine.folders())
+            set(\.pendingDevices, try await engine.pendingDevices())
+            set(\.pendingFolders, try await engine.pendingFolders())
             debugAutoAccept()
             debugRemoveIfRequested()
             debugAddDeviceIfRequested()
@@ -205,11 +257,11 @@ final class AppModel {
             for (id, at) in statusEventAt where at > started {
                 if let newer = statuses[id], merged[id] != nil { merged[id] = newer }
             }
-            statuses = merged
-            localID = snap.localDeviceID ?? localID
-            engineOptions = try? await engine.options()
+            set(\.statuses, merged)
+            set(\.localID, snap.localDeviceID ?? localID)
+            set(\.engineOptions, try? await engine.options())
             let version = await engine.syncthingVersion
-            if !version.isEmpty { syncthingVersion = version }
+            if !version.isEmpty { set(\.syncthingVersion, version) }
             // Existing configuration (e.g. reinstall with kept identity): no first-run guide.
             if !settings.onboardingDone && !onboardingInProgress && (!devices.isEmpty || !folders.isEmpty) {
                 settings.onboardingDone = true
@@ -223,6 +275,13 @@ final class AppModel {
             guard case .running = engineState else { return }
             report(error)
         }
+    }
+
+    /// Writes only real changes: an @Observable property invalidates every view
+    /// that reads it on each assignment, equal value or not, and events and
+    /// refreshes mostly repeat what is already shown.
+    private func set<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<AppModel, T>, _ value: T) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 
     // MARK: Derived state
@@ -246,8 +305,27 @@ final class AppModel {
 
     func listing(of folder: Folder) -> FilesListingProgress? { listings[folder.id] }
 
+    /// The projector reports every 1,000-entry page (10 a second on a large
+    /// folder); each write re-rendered Home and the folder list. A pass
+    /// starting or ending shows at once, progress in between at most twice a
+    /// second.
     func setListing(_ folder: FolderID, _ progress: FilesListingProgress?) {
-        listings[folder] = progress
+        let startOrEnd = (progress == nil) != (listings[folder] == nil)
+        pendingListings[folder] = .some(progress)
+        if startOrEnd {
+            listings[folder] = progress
+            pendingListings[folder] = nil
+            return
+        }
+        guard listingPublish == nil else { return }
+        listingPublish = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self, !Task.isCancelled else { return }
+            self.listingPublish = nil
+            let pending = self.pendingListings
+            self.pendingListings = [:]
+            for (id, value) in pending where self.listings[id] != value { self.listings[id] = value }
+        }
     }
 
     func deviceName(_ id: DeviceID) -> String {
@@ -468,10 +546,6 @@ final class AppModel {
 
     func rename(_ device: Device, to name: String) async {
         await updateDevice(id: device.id) { $0.name = name }
-    }
-
-    func setPaused(_ device: Device, _ paused: Bool) async {
-        await updateDevice(id: device.id) { $0.paused = paused }
     }
 
     /// Applies `mutate` to the device's latest value (not a render-time copy),

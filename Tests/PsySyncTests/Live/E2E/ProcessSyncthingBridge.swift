@@ -36,11 +36,6 @@ final class ProcessSyncthingBridge: SyncthingBridge, @unchecked Sendable {
         return DeviceIdentity(certificatePEM: cert, privateKeyPEM: key, deviceID: id)
     }
 
-    func validateDeviceID(_ input: String) throws -> DeviceID {
-        guard DeviceIDCodec.isValid(input) else { throw TestBridgeError(message: "psy:invalid_argument: \(input)") }
-        return DeviceID(rawValue: input)
-    }
-
     func applyMemoryProfile(_ profile: MemoryProfile) {}
     func syncthingVersion() -> String { (try? Self.run(["--version"])) ?? "" }
     func onMemoryWarning() {}

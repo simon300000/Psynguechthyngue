@@ -87,6 +87,8 @@ struct SettingsView: View {
                     LabeledContent("Version") { Text("\(AppInfo.version) (\(AppInfo.build))") }
                     LabeledContent("Syncthing") { Text(model.syncthingVersion.isEmpty ? "—" : model.syncthingVersion) }
                         .accessibilityIdentifier("settings.syncthingversion")
+                    NavigationLink("Diagnostics") { DiagnosticsView() }
+                        .accessibilityIdentifier("settings.diagnostics")
                     NavigationLink("Licenses") { LicensesView() }
                 }
 

@@ -186,13 +186,6 @@ public final class PsyBridgeAdapter: SyncthingBridge, RestrictedFetchBridge, @un
         return DeviceID(rawValue: id)
     }
 
-    public func validateDeviceID(_ input: String) throws -> DeviceID {
-        var error: NSError?
-        let id = PsybridgeValidateDeviceID(input, &error)
-        if let error { throw PsyBridgeError(error) }
-        return DeviceID(rawValue: id)
-    }
-
     public func applyMemoryProfile(_ profile: MemoryProfile) {
         _ = PsybridgeApplyMemoryProfile(profile.limitMiB, profile.gcPercent)
     }

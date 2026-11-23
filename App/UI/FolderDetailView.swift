@@ -11,6 +11,7 @@ struct FolderDetailView: View {
     @State private var notYetInFiles = 0
 
     var body: some View {
+        let _ = perfProbe("FolderDetailView")
         if let folder = model.folders.first(where: { $0.id == folderID }) {
             let status = model.status(of: folder)
             Form {
@@ -42,6 +43,8 @@ struct FolderDetailView: View {
                         LabeledContent("Last scan") { Text(Format.relative(scan)) }
                     }
                 }
+
+                FolderStatisticsSection(folder: folder, status: status)
 
                 let errors = status.issues.filter { $0.kind != .conflict }
                 if !errors.isEmpty {
@@ -113,6 +116,8 @@ struct FolderDetailView: View {
                         ))
                     }
                 }
+
+                FolderCompletionSection(folder: folder, status: status)
 
                 Section {
                     DisclosureGroup("Advanced") {

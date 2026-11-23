@@ -5,11 +5,9 @@ import Foundation
 /// cooperative thread pool is never blocked (DESIGN.md §4.3, AUDIT P1).
 public final class BridgeExecutor: Sendable {
     private let queue: DispatchQueue
-    private let key = DispatchSpecificKey<UInt8>()
 
     public init(label: String = "app.psynguechthyngue.bridge") {
         queue = DispatchQueue(label: label, qos: .userInitiated)
-        queue.setSpecific(key: key, value: 1)
     }
 
     public func run<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
@@ -18,11 +16,6 @@ public final class BridgeExecutor: Sendable {
                 continuation.resume(with: Result { try body() })
             }
         }
-    }
-
-    /// True when called on this executor's queue (used by assertions in tests).
-    public func isCurrent() -> Bool {
-        DispatchQueue.getSpecific(key: key) == 1
     }
 }
 

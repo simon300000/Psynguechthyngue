@@ -148,7 +148,6 @@ final class FakeBridge: SyncthingBridge, @unchecked Sendable {
         return DeviceIdentity(certificatePEM: pem, privateKeyPEM: DeviceIDCodec.pem(der: Data([1, 2, 3]), type: "PRIVATE KEY"),
                               deviceID: try DeviceIDCodec.deviceID(certificatePEM: pem))
     }
-    func validateDeviceID(_ input: String) throws -> DeviceID { DeviceID(rawValue: input) }
     func applyMemoryProfile(_ profile: MemoryProfile) { record("applyMemoryProfile:\(profile.limitMiB)") }
     func syncthingVersion() -> String { "v2.1.6" }
     func start(homeDirectory: URL, identity: DeviceIdentity, deviceName: String, timeout: Duration) throws -> RESTEndpoint {

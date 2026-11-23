@@ -99,6 +99,15 @@ public protocol SyncEngine: AnyObject, Sendable {
     func setUserIgnoreRules(_ folder: FolderID, _ lines: [String]) async throws
     /// Embedded Syncthing version, e.g. "v2.1.6".
     var syncthingVersion: String { get async }
+
+    // MARK: Statistics (read-only; polled only while a screen shows them)
+
+    /// Cumulative traffic counters, total and per connected device (one REST call).
+    func traffic() async throws -> TrafficSample
+    /// Item counts and sizes of a folder.
+    func folderDetails(_ id: FolderID) async throws -> FolderDetails
+    /// Version, uptime, memory, listeners, discovery and relays.
+    func systemInfo() async throws -> EngineSystemInfo
 }
 
 /// Defaults for conformers that predate the settings API (App placeholders,
@@ -120,4 +129,13 @@ public extension SyncEngine {
         throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "setUserIgnoreRules")
     }
     var syncthingVersion: String { get async { "" } }
+    func traffic() async throws -> TrafficSample {
+        throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "traffic")
+    }
+    func folderDetails(_ id: FolderID) async throws -> FolderDetails {
+        throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "folderDetails")
+    }
+    func systemInfo() async throws -> EngineSystemInfo {
+        throw EngineError.bridge(code: BridgeContract.Code.notImplemented.rawValue, detail: "systemInfo")
+    }
 }
