@@ -66,6 +66,19 @@ public struct BackgroundCompletionCriteria: Hashable, Sendable {
 public enum LifecycleBudget {
     public static let backgroundStopDeadline: Duration = .seconds(10)
     public static let foregroundStartTimeout: Duration = .seconds(20)
+
+    /// Stop deadline from the background time left (`backgroundTimeRemaining`;
+    /// huge while still in the foreground, where ~30 s will be granted).
+    /// A stop that misses its deadline keeps running in the bridge with the
+    /// engine's database open, and a process suspended like that risks
+    /// 0xdead10cc; device stops took more than 10 s, so the stop uses the
+    /// time there is, keeping `margin` to release the lock and end the task.
+    public static func stopDeadline(remaining: TimeInterval, margin: TimeInterval = 5,
+                                    cap: Duration = .seconds(20)) -> Duration {
+        let capSeconds = Double(cap.components.seconds)
+        guard remaining.isFinite, remaining < 600 else { return cap }
+        return .seconds(min(max(remaining - margin, 2), capSeconds))
+    }
 }
 
 /// Decides when "Keep syncing in background automatically" submits the
