@@ -309,6 +309,11 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 		tracker = newIndexTracker(idb, e.cfg.HomeDir, running)
 		tracker.subscribe(peerCtx, evLogger)
 	}
+	// Subscribe before app.Start: the first outgoing connection can be up
+	// before waitHealthy returns, and a missed DeviceConnected would leave
+	// that address out of the cache until the next reconnect.
+	baseURL := "http://" + addr
+	startPeerCacheWriter(peerCtx, e.cfg.HomeDir, baseURL, apiKey, myID, evLogger)
 	app, err := syncthing.New(cfg, sdb, evLogger, cert, syncthing.Options{
 		NoUpgrade:             true,
 		DBMaintenanceInterval: dbMaintenanceInterval,
@@ -320,12 +325,9 @@ func (e *Engine) Start(timeoutMillis int64) (endpoint *APIEndpoint, err error) {
 	if err := app.Start(); err != nil {
 		return nil, wrapUpstream(CodeDatabase, "start", err)
 	}
-	baseURL := "http://" + addr
 	if err := waitHealthy(baseURL, deadline, app); err != nil {
 		return nil, err
 	}
-
-	startPeerCacheWriter(peerCtx, e.cfg.HomeDir, baseURL, apiKey, myID, evLogger)
 
 	e.rt = rt
 	e.sdb = queries
