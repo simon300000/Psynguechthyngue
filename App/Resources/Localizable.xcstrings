@@ -11,6 +11,26 @@
         }
       }
     },
+    "%lld file conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件冲突"
+          }
+        }
+      }
+    },
+    "%lld file conflicts need your attention." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有 %lld 个文件冲突需要处理。"
+          }
+        }
+      }
+    },
     "%lld files in progress" : {
       "localizations" : {
         "en" : {
@@ -131,6 +151,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在获取文件列表…"
+          }
+        }
+      }
+    },
+    "Ignore All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部忽略"
+          }
+        }
+      }
+    },
+    "Ignoring only hides a conflict here. The conflict copy stays in the folder until you delete it in Files." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略只是不再在这里显示该冲突。冲突副本会留在文件夹中，直到你在“文件”中删除它。"
           }
         }
       }

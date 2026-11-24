@@ -129,6 +129,10 @@ public struct FolderStatus: Hashable, Codable, Sendable {
     public var issues: [SyncIssue]
     public var lastScan: Date?
     public var lastSyncedFile: RelativePath?
+    /// The conflict issues are the folder's complete list (its index has
+    /// been walked for conflict copies). False right after the engine starts,
+    /// when "no conflicts" only means "not looked yet".
+    public var conflictsChecked: Bool
 
     public init(
         folderID: FolderID,
@@ -136,7 +140,8 @@ public struct FolderStatus: Hashable, Codable, Sendable {
         progress: SyncProgress = .init(),
         issues: [SyncIssue] = [],
         lastScan: Date? = nil,
-        lastSyncedFile: RelativePath? = nil
+        lastSyncedFile: RelativePath? = nil,
+        conflictsChecked: Bool = false
     ) {
         self.folderID = folderID
         self.state = state
@@ -144,5 +149,6 @@ public struct FolderStatus: Hashable, Codable, Sendable {
         self.issues = issues
         self.lastScan = lastScan
         self.lastSyncedFile = lastSyncedFile
+        self.conflictsChecked = conflictsChecked
     }
 }

@@ -27,6 +27,9 @@ final class AppModel {
     let host: LiveEngineHost
     let settings: AppSettings
     let notifier: AppNotifier
+    /// Ignored and already-announced conflict copies (persisted).
+    private(set) var conflictAttention: ConflictAttention
+    @ObservationIgnored private let conflictStore: ConflictAttentionStore?
     /// True under `-PsyUITestFixture` (FakeSyncEngine).
     let isFixture: Bool
     /// Designed for iPad on Mac: no QR scanning, engine keeps running in background.
@@ -125,8 +128,11 @@ final class AppModel {
     @ObservationIgnored var debugAccepted: Set<String> = []
 
     init(engine: any SyncEngine, host: LiveEngineHost, settings: AppSettings, notifier: AppNotifier, isFixture: Bool,
+         conflictStore: ConflictAttentionStore? = nil,
          isOnMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac) {
         self.isOnMac = isOnMac
+        self.conflictStore = conflictStore
+        self.conflictAttention = conflictStore?.load() ?? ConflictAttention()
         self.engine = engine
         self.host = host
         self.settings = settings
@@ -178,6 +184,7 @@ final class AppModel {
             set(\.pendingFolders, list)
             debugAutoAccept()
         case let .folderStatusChanged(status):
+            noteConflicts(in: status)
             if statuses[status.folderID] != status { statuses[status.folderID] = status }
             statusEventAt[status.folderID] = Date()
             if status.state == .syncing { debugContinueIfRequested() }
@@ -260,6 +267,7 @@ final class AppModel {
             for (id, at) in statusEventAt where at > started {
                 if let newer = statuses[id], merged[id] != nil { merged[id] = newer }
             }
+            for status in snap.folders { noteConflicts(in: status) }
             set(\.statuses, merged)
             set(\.localID, snap.localDeviceID ?? localID)
             set(\.engineOptions, try? await engine.options())
@@ -291,8 +299,39 @@ final class AppModel {
 
     var policyHold: PolicyDecision.HoldReason? { host.decision.hold }
     var connectedCount: Int { connections.values.filter { $0.state == .connected }.count }
+    /// Everything Home lists under "Recent problems", ignored conflicts left out.
     var allIssues: [SyncIssue] {
-        statuses.values.flatMap(\.issues).sorted { $0.occurredAt > $1.occurredAt }
+        conflictAttention.visible(statuses.values.flatMap(\.issues)).sorted { $0.occurredAt > $1.occurredAt }
+    }
+
+    /// The folder's issues as shown (ignored conflicts left out).
+    func visibleIssues(_ status: FolderStatus) -> [SyncIssue] {
+        conflictAttention.visible(status.issues)
+    }
+
+    /// Conflict copies in a folder that are not ignored, by path.
+    func conflicts(in folder: FolderID) -> [SyncIssue] {
+        conflictAttention.visible(statuses[folder]?.issues ?? [])
+            .filter { $0.kind == .conflict }
+            .sorted { ($0.path?.rawValue ?? "") < ($1.path?.rawValue ?? "") }
+    }
+
+    /// Stops showing (and notifying about) these conflicts. The conflict
+    /// copies stay in the folder.
+    func ignoreConflicts(_ issues: [SyncIssue]) {
+        guard conflictAttention.ignore(issues) else { return }
+        conflictStore?.save(conflictAttention)
+    }
+
+    /// Records the folder's conflicts; the first sighting of a copy is the
+    /// only one that may notify, also across launches.
+    private func noteConflicts(in status: FolderStatus) {
+        var attention = conflictAttention
+        let (fresh, changed) = attention.observe(status)
+        guard changed else { return }
+        conflictAttention = attention
+        conflictStore?.save(attention)
+        notifier.conflictsAppeared(fresh, isActive: isActive, enabled: settings.notificationsEnabled)
     }
     var pendingCount: Int { pendingDevices.count + pendingFolders.count }
     var syncingFolders: [Folder] { folders.filter { status(of: $0).state == .syncing } }

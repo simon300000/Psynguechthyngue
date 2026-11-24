@@ -69,7 +69,7 @@ extension FoldersView {
     func tint(for folder: Folder) -> Color? {
         let status = model.status(of: folder)
         if status.state == .error { return .red }
-        return status.issues.isEmpty ? nil : .orange
+        return model.visibleIssues(status).isEmpty ? nil : .orange
     }
 }
 
@@ -97,10 +97,11 @@ struct FolderRow: View {
                 ProgressView(value: status.progress.fractionCompleted)
             }
             FolderWorkProgress(status: status, listing: model.listing(of: folder), compact: true)
-            if let issue = status.issues.first {
+            let issues = model.visibleIssues(status)
+            if let issue = issues.first {
                 Label {
-                    if status.issues.count > 1 {
-                        Text("\(Text(issue.kind.title)) (+\(status.issues.count - 1))")
+                    if issues.count > 1 {
+                        Text("\(Text(issue.kind.title)) (+\(issues.count - 1))")
                     } else {
                         Text(issue.kind.title)
                     }

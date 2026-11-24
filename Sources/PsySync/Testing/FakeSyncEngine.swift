@@ -51,7 +51,7 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
             s.pendingFolders = [PendingFolder(folderID: FolderID(rawValue: "abcde-fghij"), label: "Photos", offeredBy: sampleIDs[0], receivedAt: now)]
             s.devices = [Device(id: sampleIDs[0], name: "Home Server")]
             s.connections = [DeviceConnection(deviceID: sampleIDs[0], state: .connected, transport: "tcp-lan", address: "192.168.1.5:22000", lastSeen: now)]
-        default: // "populated", "errors"
+        default: // "populated", "errors", "conflicts"
             s.devices = [Device(id: sampleIDs[0], name: "Home Server"), Device(id: sampleIDs[1], name: "Work Laptop")]
             s.connections = [
                 DeviceConnection(deviceID: sampleIDs[0], state: .connected, transport: "tcp-client", isLocalNetwork: true, address: "192.168.1.5:22000",
@@ -70,8 +70,29 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
                              issues: name == "errors" ? [SyncIssue(id: "e1", kind: .outOfSpace, folderID: s.folders[2].id, path: nil, technicalDetail: "write /x: no space left on device", occurredAt: now),
                                                          SyncIssue(id: "c1", kind: .conflict, folderID: s.folders[2].id, path: RelativePath(rawValue: "todo.sync-conflict-20261120-120000-ABCDEFG.txt"), technicalDetail: "conflict", occurredAt: now)] : []),
             ]
+            if name == "conflicts" {
+                // Several conflict copies in one folder, one in another (Home
+                // ▸ Recent problems groups them per folder).
+                s.statuses[2].state = .upToDate
+                s.statuses[2].issues = Self.conflictIssues(s.folders[2].id, [
+                    "todo.sync-conflict-20261120-120000-ABCDEFG.txt",
+                    "plans/week.sync-conflict-20261121-090000-ABCDEFG.md",
+                    "plans/week.sync-conflict-20261122-180000-HIJKLMN.md",
+                ], now: now)
+                s.statuses[0].issues = Self.conflictIssues(s.folders[0].id, [
+                    "report.sync-conflict-20261123-100000-ABCDEFG.pdf",
+                ], now: now)
+            }
         }
+        for i in s.statuses.indices { s.statuses[i].conflictsChecked = true }
         return s
+    }
+
+    private static func conflictIssues(_ folder: FolderID, _ paths: [String], now: Date) -> [SyncIssue] {
+        paths.enumerated().map { n, path in
+            SyncIssue(id: "\(folder.rawValue):conflict:\(path)", kind: .conflict, folderID: folder,
+                      path: RelativePath(rawValue: path), technicalDetail: path, occurredAt: now.addingTimeInterval(-Double(n) * 60))
+        }
     }
 
     // MARK: Scripting
@@ -215,13 +236,13 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
 
     public func folders() async throws -> [Folder] { sync { $0.scenario.folders } }
     public func folderStatus(_ id: FolderID) async throws -> FolderStatus {
-        sync { m in m.scenario.statuses.first { $0.folderID == id } ?? FolderStatus(folderID: id, state: .upToDate) }
+        sync { m in m.scenario.statuses.first { $0.folderID == id } ?? FolderStatus(folderID: id, state: .upToDate, conflictsChecked: true) }
     }
 
     public func addFolder(_ folder: Folder) async throws {
         try failIfScripted()
         record("addFolder:\(folder.label):\(folder.contentMode.rawValue)")
-        let status = FolderStatus(folderID: folder.id, state: .upToDate)
+        let status = FolderStatus(folderID: folder.id, state: .upToDate, conflictsChecked: true)
         sync { m in m.scenario.folders.append(folder); m.scenario.statuses.append(status) }
         emit(.configurationChanged); emit(.folderStatusChanged(status))
     }

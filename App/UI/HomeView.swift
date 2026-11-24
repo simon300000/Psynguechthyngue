@@ -115,21 +115,55 @@ struct HomeView: View {
 
     // MARK: Problems
 
+    /// One row per problem, except conflicts: one row per folder (its sheet
+    /// lists them with Ignore / Ignore All). Newest first.
+    private struct ProblemRow: Identifiable {
+        let id: String
+        let issue: SyncIssue
+        let count: Int
+    }
+
+    private var problemRows: [ProblemRow] {
+        let issues = model.allIssues
+        var conflictCounts: [FolderID: Int] = [:]
+        for issue in issues where issue.kind == .conflict {
+            if let f = issue.folderID { conflictCounts[f, default: 0] += 1 }
+        }
+        var rows: [ProblemRow] = []
+        var listed = Set<FolderID>()
+        for issue in issues {
+            if issue.kind == .conflict, let f = issue.folderID {
+                guard listed.insert(f).inserted else { continue }
+                rows.append(ProblemRow(id: "issue.conflicts.\(f.rawValue)", issue: issue, count: conflictCounts[f] ?? 1))
+            } else {
+                rows.append(ProblemRow(id: "issue.\(issue.id)", issue: issue, count: 1))
+            }
+        }
+        return rows
+    }
+
     private var problems: some View {
         VStack(spacing: 10) {
             CardHeader(title: "Recent problems", systemImage: "exclamationmark.triangle")
             VStack(spacing: 0) {
-                ForEach(Array(model.allIssues.enumerated()), id: \.element.id) { index, issue in
+                ForEach(Array(problemRows.enumerated()), id: \.element.id) { index, row in
                     if index > 0 { Divider().padding(.leading, 52) }
-                    Button { detailIssue = issue } label: {
+                    Button { detailIssue = row.issue } label: {
                         HStack(spacing: 14) {
-                            Image(systemName: issue.kind == .conflict ? "doc.on.doc.fill" : "exclamationmark.triangle.fill")
+                            Image(systemName: row.issue.kind == .conflict ? "doc.on.doc.fill" : "exclamationmark.triangle.fill")
                                 .font(.title3)
-                                .foregroundStyle(issue.kind == .conflict ? .orange : .red)
+                                .foregroundStyle(row.issue.kind == .conflict ? .orange : .red)
                                 .frame(width: 26)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(issue.kind.title).foregroundStyle(.primary)
-                                if let folder = issue.folderID, let f = model.folders.first(where: { $0.id == folder }) {
+                                Group {
+                                    if row.count > 1 {
+                                        Text("\(row.count) file conflicts")
+                                    } else {
+                                        Text(row.issue.kind.title)
+                                    }
+                                }
+                                .foregroundStyle(.primary)
+                                if let folder = row.issue.folderID, let f = model.folders.first(where: { $0.id == folder }) {
                                     Text(f.label).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
@@ -140,7 +174,7 @@ struct HomeView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityIdentifier("issue.\(issue.id)")
+                    .accessibilityIdentifier(row.id)
                 }
             }
             .padding(.horizontal, 18)
@@ -425,10 +459,19 @@ struct LocalIDCard: View {
 }
 
 struct IssueDetailView: View {
+    @Environment(AppModel.self) private var model
     let issue: SyncIssue
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        if issue.kind == .conflict, let folder = issue.folderID {
+            ConflictsView(folderID: folder, count: model.conflicts(in: folder).count)
+        } else {
+            details
+        }
+    }
+
+    private var details: some View {
         NavigationStack {
             List {
                 Section {

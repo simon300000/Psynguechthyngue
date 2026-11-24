@@ -46,7 +46,7 @@ struct FolderDetailView: View {
 
                 FolderStatisticsSection(folder: folder, status: status)
 
-                let errors = status.issues.filter { $0.kind != .conflict }
+                let errors = model.visibleIssues(status).filter { $0.kind != .conflict }
                 if !errors.isEmpty {
                     Section("Problems") {
                         ForEach(errors) { i in
@@ -54,13 +54,20 @@ struct FolderDetailView: View {
                         }
                     }
                 }
-                let conflicts = status.issues.filter { $0.kind == .conflict }
+                let conflicts = model.conflicts(in: folder.id)
                 if !conflicts.isEmpty {
                     Section {
                         ForEach(conflicts) { i in
                             Button { issue = i } label: {
                                 Label(i.path?.lastComponent ?? String(localized: "File conflict"), systemImage: "doc.on.doc")
                             }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button("Ignore") { withAnimation(.smooth) { model.ignoreConflicts([i]) } }.tint(.gray)
+                            }
+                        }
+                        if conflicts.count > 1 {
+                            Button("Ignore All") { withAnimation(.smooth) { model.ignoreConflicts(conflicts) } }
+                                .accessibilityIdentifier("folder.conflicts.ignoreAll")
                         }
                     } header: { Text("Conflicts") } footer: { Text(SyncIssue.Kind.conflict.advice) }
                 }

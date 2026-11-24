@@ -630,6 +630,29 @@ final class FakeSyncthing: @unchecked Sendable {
         }
         #expect(issues.map(\.kind) == [.conflict])
         #expect(issues.first?.path == RelativePath(rawValue: "notes.sync-conflict-20261122-001844-ABCDEFG.txt"))
+        #expect(try await h.engine.folderStatus(FolderID(rawValue: "f")).conflictsChecked)
+        try await h.engine.stop(deadline: .seconds(1))
+    }
+
+    /// A folder without conflict copies says so once its index was walked
+    /// (the App drops records of deleted copies only from such a status).
+    @Test func folderStatusMarksConflictsCheckedWithoutConflicts() async throws {
+        let h = try makeHarness()
+        defer { try? FileManager.default.removeItem(at: h.root) }
+        h.bridge.indexEntries = [GlobalIndexEntry(name: RelativePath(rawValue: "notes.txt"), type: .file, size: 1,
+                                                  modified: Date(timeIntervalSince1970: 7), deleted: false, invalid: false,
+                                                  sequence: 1, version: "v", blocksHash: "h", localPresent: true)]
+        try await h.engine.start(context: .foreground)
+        try await h.engine.addFolder(Folder(id: FolderID(rawValue: "f"), label: "f"))
+        try await h.engine.stop(deadline: .seconds(1))
+        try await h.engine.start(context: .foreground)
+        var status = try await h.engine.folderStatus(FolderID(rawValue: "f"))
+        for _ in 0..<100 where !status.conflictsChecked {
+            try await Task.sleep(for: .milliseconds(20))
+            status = try await h.engine.folderStatus(FolderID(rawValue: "f"))
+        }
+        #expect(status.conflictsChecked)
+        #expect(status.issues.isEmpty)
         try await h.engine.stop(deadline: .seconds(1))
     }
 
