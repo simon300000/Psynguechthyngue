@@ -75,6 +75,8 @@ public struct FolderStatusInputs: Hashable, Sendable {
     }
 
     public var conflicts: [Conflict]
+    /// `conflicts` is complete (the global index was walked at least once).
+    public var conflictsChecked: Bool
     public var stateChanged: Date?
     public var now: Date
 
@@ -96,6 +98,7 @@ public struct FolderStatusInputs: Hashable, Sendable {
         remotes: [DeviceID: RemoteCompletion] = [:],
         folderErrors: [FileError] = [],
         conflicts: [Conflict] = [],
+        conflictsChecked: Bool = true,
         stateChanged: Date? = nil,
         now: Date = Date()
     ) {
@@ -116,6 +119,7 @@ public struct FolderStatusInputs: Hashable, Sendable {
         self.remotes = remotes
         self.folderErrors = folderErrors
         self.conflicts = conflicts
+        self.conflictsChecked = conflictsChecked
         self.stateChanged = stateChanged
         self.now = now
     }
@@ -154,7 +158,8 @@ public enum StatusMapper {
             progress: progress,
             issues: issues,
             lastScan: nil,
-            lastSyncedFile: nil
+            lastSyncedFile: nil,
+            conflictsChecked: i.conflictsChecked
         )
     }
 

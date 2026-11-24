@@ -37,16 +37,27 @@ final class AppNotifier {
                  title: String(localized: "Folder invitation"),
                  body: String(localized: "A device wants to share “\(first.label)” with you."))
         case let .folderStatusChanged(status):
-            let fresh = status.issues.filter { seenIssues.insert($0.id).inserted }
+            // Conflicts go through `conflictsAppeared` (persisted, so a new
+            // process — every background run may be one — does not announce
+            // the same conflict copy again).
+            let fresh = status.issues.filter { $0.kind != .conflict && seenIssues.insert($0.id).inserted }
             guard enabled, !isActive, let first = fresh.first else { return }
             post(id: "issue-\(first.id)",
                  title: String(localized: "Sync problem"),
-                 body: first.kind == .conflict
-                    ? String(localized: "A file conflict needs your attention.")
-                    : String(localized: "A folder could not be synced. Open the app for details."))
+                 body: String(localized: "A folder could not be synced. Open the app for details."))
         default:
             break
         }
+    }
+
+    /// Conflict copies seen for the first time (`ConflictAttention.observe`).
+    func conflictsAppeared(_ fresh: [SyncIssue], isActive: Bool, enabled: Bool) {
+        guard enabled, !isActive, let first = fresh.first else { return }
+        post(id: "issue-\(first.id)",
+             title: String(localized: "Sync problem"),
+             body: fresh.count == 1
+                ? String(localized: "A file conflict needs your attention.")
+                : String(localized: "\(fresh.count) file conflicts need your attention."))
     }
 
     private func post(id: String, title: String, body: String) {

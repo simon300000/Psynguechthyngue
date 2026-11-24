@@ -476,7 +476,8 @@ public actor LiveSyncEngine: SyncEngine {
 
     private func setConflicts(_ id: FolderID, _ list: [FolderStatusInputs.Conflict]) {
         conflictScans[id] = nil
-        guard conflicts[id, default: []] != list else { return }
+        // nil → [] matters too: the folder's conflict list is now known.
+        guard conflicts[id] != list else { return }
         conflicts[id] = list
         scheduleRefresh([id])
     }
@@ -726,6 +727,7 @@ public actor LiveSyncEngine: SyncEngine {
             remotes: remotes,
             folderErrors: errors.map { .init(path: $0.path, error: $0.error) },
             conflicts: conflicts[id] ?? [],
+            conflictsChecked: conflicts[id] != nil,
             stateChanged: SyncthingDate.parseNonZero(status.stateChanged)
         )
         let s = stats[id.rawValue]

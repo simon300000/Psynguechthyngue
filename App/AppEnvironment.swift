@@ -62,7 +62,8 @@ final class AppEnvironment {
         scheduler = BackgroundScheduler(host: host, defaults: defaults, isOnMac: onMac)
         policyMonitor = PolicyMonitor(host: host)
         model = AppModel(engine: engine, host: host, settings: settings,
-                         notifier: AppNotifier(enabled: !fixture), isFixture: fixture, isOnMac: onMac)
+                         notifier: AppNotifier(enabled: !fixture), isFixture: fixture,
+                         conflictStore: ConflictAttentionStore(defaults: defaults), isOnMac: onMac)
         let filesDisabled = fixture && args.contains("-PsyUITestFilesDisabled")
         model.scheduler = scheduler
         scheduler.simulateContinuedProcessing = fixture && args.contains("-PsyUITestSimulateContinued")
