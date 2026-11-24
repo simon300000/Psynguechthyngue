@@ -12,6 +12,9 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
         public var statuses: [FolderStatus] = []
         public var pendingDevices: [PendingDevice] = []
         public var pendingFolders: [PendingFolder] = []
+        /// Names devices report when they connect (upstream Hello): a device
+        /// added with an empty name takes it, as upstream fills it in.
+        public var reportedNames: [DeviceID: String] = [:]
         public var localDeviceID: DeviceID
         public init(localDeviceID: DeviceID) { self.localDeviceID = localDeviceID }
     }
@@ -51,6 +54,24 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
             s.pendingFolders = [PendingFolder(folderID: FolderID(rawValue: "abcde-fghij"), label: "Photos", offeredBy: sampleIDs[0], receivedAt: now)]
             s.devices = [Device(id: sampleIDs[0], name: "Home Server")]
             s.connections = [DeviceConnection(deviceID: sampleIDs[0], state: .connected, transport: "tcp-lan", address: "192.168.1.5:22000", lastSeen: now)]
+            // A device added by ID without a name (UI tests' new peer).
+            s.reportedNames = [DeviceID(rawValue: "ZYMLOPI-FQYF7MF-2NXYNJ5-LVFF6U5-ZCRA3NX-F5M5DWO-INK4LLC-HBK62F5"): "Desk Mac"]
+        case "pending-existing":
+            // A second device offers a folder this device already shares with
+            // another one (same folder ID), plus a repeated offer from a device
+            // the folder is already shared with (not actionable).
+            let shared = FolderID(rawValue: "shared-00001")
+            s.devices = [Device(id: sampleIDs[0], name: "Home Server"), Device(id: sampleIDs[1], name: "Work Laptop")]
+            s.connections = [
+                DeviceConnection(deviceID: sampleIDs[0], state: .connected, transport: "tcp-client", address: "192.168.1.5:22000", lastSeen: now),
+                DeviceConnection(deviceID: sampleIDs[1], state: .connected, transport: "tcp-client", address: "192.168.1.6:22000", lastSeen: now),
+            ]
+            s.folders = [Folder(id: shared, label: "Shared Notes", contentMode: .onDemand, devices: [sampleIDs[0]])]
+            s.statuses = [FolderStatus(folderID: shared, state: .upToDate, progress: SyncProgress(globalBytes: 1000, localBytes: 1000, globalItems: 3), lastScan: now)]
+            s.pendingFolders = [
+                PendingFolder(folderID: shared, label: "Team Notes", offeredBy: sampleIDs[1], receivedAt: now),
+                PendingFolder(folderID: shared, label: "Shared Notes", offeredBy: sampleIDs[0], receivedAt: now),
+            ]
         default: // "populated", "errors", "conflicts"
             s.devices = [Device(id: sampleIDs[0], name: "Home Server"), Device(id: sampleIDs[1], name: "Work Laptop")]
             s.connections = [
@@ -195,6 +216,20 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
             return m.scenario.pendingDevices
         }
         emit(.pendingDevicesChanged(pend)); emit(.configurationChanged)
+        if device.name.isEmpty, let reported = sync({ $0.scenario.reportedNames[device.id] }) {
+            // The device "connects" and upstream stores the name it reports.
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard let self else { return }
+                self.sync { m in
+                    if let i = m.scenario.devices.firstIndex(where: { $0.id == device.id }), m.scenario.devices[i].name.isEmpty {
+                        m.scenario.devices[i].name = reported
+                        if let c = m.scenario.connections.firstIndex(where: { $0.deviceID == device.id }) { m.scenario.connections[c].state = .connected }
+                    }
+                }
+                self.emit(.configurationChanged)
+            }
+        }
     }
 
     public func updateDevice(_ device: Device) async throws {
@@ -270,8 +305,15 @@ public final class FakeSyncEngine: SyncEngine, @unchecked Sendable {
     public func pendingFolders() async throws -> [PendingFolder] { sync { $0.scenario.pendingFolders } }
 
     public func acceptPendingFolder(_ pending: PendingFolder, as folder: Folder) async throws {
-        record("acceptPendingFolder:\(pending.label):\(folder.contentMode.rawValue)")
-        try await addFolder(folder)
+        let existing = sync { m in m.scenario.folders.first { $0.id == pending.folderID } }
+        if let existing {
+            // Like LiveSyncEngine: an existing folder only gains the device.
+            record("joinPendingFolder:\(pending.label)")
+            try await updateFolder(existing.sharing(with: pending.offeredBy))
+        } else {
+            record("acceptPendingFolder:\(pending.label):\(folder.contentMode.rawValue)")
+            try await addFolder(folder.sharing(with: pending.offeredBy))
+        }
         let p = sync { m -> [PendingFolder] in m.scenario.pendingFolders.removeAll { $0.id == pending.id }; return m.scenario.pendingFolders }
         emit(.pendingFoldersChanged(p))
     }

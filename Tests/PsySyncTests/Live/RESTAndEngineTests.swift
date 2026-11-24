@@ -143,6 +143,8 @@ final class FakeSyncthing: @unchecked Sendable {
     }
 
     func addFolderConfig(_ f: FolderConfigDTO) { lock.withLock { folders.append(f) } }
+    func folder(_ id: String) -> FolderConfigDTO? { lock.withLock { folders.first { $0.id == id } } }
+    func addDeviceConfig(_ d: DeviceConfigDTO) { lock.withLock { devices.append(d) } }
     func pushEvents(_ json: String) { lock.withLock { eventBatches.append(json) } }
     func ignoreLines(_ folder: String) -> [String]? { lock.withLock { ignores[folder] } }
     func setIgnoreLines(_ folder: String, _ lines: [String]) { lock.withLock { ignores[folder] = lines } }
@@ -222,6 +224,9 @@ final class FakeSyncthing: @unchecked Sendable {
                     if let v = patch["label"] as? String { folders[i].label = v }
                     if let v = patch["type"] as? String { folders[i].type = v }
                     if let v = patch["paused"] as? Bool { folders[i].paused = v }
+                    if let v = patch["devices"] as? [[String: Any]] {
+                        folders[i].devices = v.compactMap { ($0["deviceID"] as? String).map(FolderDeviceDTO.init(deviceID:)) }
+                    }
                 }
                 return .json("")
             }

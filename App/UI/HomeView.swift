@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var acceptingFolder: PendingFolder?
+    @State private var joiningFolder: PendingFolder?
     @State private var detailIssue: SyncIssue?
     @Namespace private var glass
 
@@ -46,6 +47,14 @@ struct HomeView: View {
             }
             .sheet(item: $acceptingFolder) { AcceptFolderSheet(pending: $0).bannerOverlay().environment(model) }
             .sheet(item: $detailIssue) { IssueDetailView(issue: $0) }
+            .alert(joinAlertTitle, isPresented: Binding(get: { joiningFolder != nil }, set: { if !$0 { joiningFolder = nil } }),
+                   presenting: joiningFolder) { pending in
+                Button("Add Device") { Task { _ = await model.join(pending) } }
+                    .accessibilityIdentifier("pending.folder.join.confirm")
+                Button("Cancel", role: .cancel) {}
+            } message: { pending in
+                Text("“\(existingLabel(pending))” stays where it is, with the same download setting and files; it is now also shared with \(model.deviceName(pending.offeredBy)).")
+            }
         }
     }
 
@@ -99,18 +108,41 @@ struct HomeView: View {
                 .glassEffectID("device-\(device.id.rawValue)", in: glass)
                 .glassEffectTransition(.matchedGeometry)
             }
-            ForEach(model.pendingFolders) { pending in
-                InboxCard(
-                    symbol: "folder.badge.plus",
-                    title: "“\(pending.label)” was shared with you",
-                    subtitle: Text("From \(model.deviceName(pending.offeredBy))"),
-                    accept: ("Accept…", "pending.folder.accept", { acceptingFolder = pending }),
-                    ignore: ("pending.folder.ignore", { Task { await model.dismissPending(pending) } })
-                )
+            ForEach(model.folderOffers) { pending in
+                Group {
+                    if case let .joinExisting(existing) = model.offer(pending) {
+                        // Same folder ID as a folder here: upstream shares the
+                        // existing folder with the device, it adds no folder.
+                        InboxCard(
+                            symbol: "person.2.badge.plus",
+                            title: "Add \(model.deviceName(pending.offeredBy)) to “\(existing.label)”",
+                            subtitle: Text("\(model.deviceName(pending.offeredBy)) also has this folder. It will be shared with that device too; nothing is downloaded again."),
+                            accept: ("Add to Folder…", "pending.folder.join", { joiningFolder = pending }),
+                            ignore: ("pending.folder.ignore", { Task { await model.dismissPending(pending) } })
+                        )
+                    } else {
+                        InboxCard(
+                            symbol: "folder.badge.plus",
+                            title: "“\(pending.label)” was shared with you",
+                            subtitle: Text("From \(model.deviceName(pending.offeredBy))"),
+                            accept: ("Accept…", "pending.folder.accept", { acceptingFolder = pending }),
+                            ignore: ("pending.folder.ignore", { Task { await model.dismissPending(pending) } })
+                        )
+                    }
+                }
                 .glassEffectID("folder-\(pending.id)", in: glass)
                 .glassEffectTransition(.matchedGeometry)
             }
         }
+    }
+
+    private func existingLabel(_ pending: PendingFolder) -> String {
+        if case let .joinExisting(f) = model.offer(pending) { f.label } else { pending.label }
+    }
+
+    private var joinAlertTitle: Text {
+        guard let pending = joiningFolder else { return Text(verbatim: "") }
+        return Text("Add \(model.deviceName(pending.offeredBy)) to “\(existingLabel(pending))”?")
     }
 
     // MARK: Problems

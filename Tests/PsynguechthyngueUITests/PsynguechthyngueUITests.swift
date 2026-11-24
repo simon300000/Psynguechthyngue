@@ -137,6 +137,32 @@ final class HomeUITests: PsyUITestCase {
         XCTAssertTrue(text("Anna's Laptop").waitForExistence(timeout: 5))
     }
 
+    func testPendingFolderWithKnownIDJoinsExistingFolder() {
+        launch("pending-existing")
+        // Same folder ID as "Shared Notes": offered as joining it, not as a new
+        // folder; the repeated offer from Home Server (already shared) is hidden.
+        let join = el("pending.folder.join")
+        XCTAssertTrue(join.waitForExistence(timeout: 5))
+        XCTAssertTrue(text("Add Work Laptop to “Shared Notes”").exists)
+        XCTAssertFalse(el("pending.folder.accept").exists)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "pending.folder.ignore").count, 1)
+        join.tap()
+        let confirm = app.alerts.buttons["Add Device"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alerts.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "same download setting")).firstMatch.exists)
+        confirm.tap()
+        XCTAssertTrue(waitGone(join))
+        XCTAssertFalse(el("acceptfolder.name").exists, "no new-folder sheet")
+        tab("Folders")
+        XCTAssertTrue(el("folder.row.Shared Notes").waitForExistence(timeout: 5))
+        XCTAssertFalse(el("folder.row.Team Notes").exists, "no second folder")
+        el("folder.row.Shared Notes").tap()
+        let shared = app.switches["Work Laptop"]
+        XCTAssertTrue(scrollTo(shared))
+        XCTAssertEqual(shared.value as? String, "1")
+        XCTAssertEqual(app.switches["Home Server"].value as? String, "1")
+    }
+
     func testPendingDeviceIgnore() {
         launch("pending")
         let ignore = el("pending.device.ignore")
@@ -176,6 +202,19 @@ final class DeviceUITests: PsyUITestCase {
         name.tap(); name.typeText("Studio Mac")
         el("adddevice.add").tap()
         XCTAssertTrue(text("Studio Mac").waitForExistence(timeout: 5))
+    }
+
+    func testDeviceAddedWithoutNameTakesTheNameItReports() {
+        launch("pending")
+        tab("Devices")
+        el("devices.add").tap()
+        typeDeviceID(newPeerID)
+        XCTAssertTrue(el("adddevice.valid").waitForExistence(timeout: 3))
+        el("adddevice.add").tap()
+        // Empty name: the ID prefix is only shown until the device connects and
+        // reports its own name (upstream stores it because the name is empty).
+        XCTAssertTrue(text("Desk Mac").waitForExistence(timeout: 8))
+        XCTAssertFalse(text("ZYMLOPI").exists)
     }
 
     func testAddDeviceRejectsInvalidID() {
@@ -579,5 +618,14 @@ final class ZhHansUITests: PsyUITestCase {
         el("pending.folder.accept").tap()
         XCTAssertTrue(app.navigationBars["接受文件夹"].waitForExistence(timeout: 5))
         XCTAssertTrue(anyLabel("按需下载").waitForExistence(timeout: 3))
+    }
+
+    func testJoinExistingFolderInChinese() {
+        launch("pending-existing")
+        XCTAssertTrue(text("将 Work Laptop 加入“Shared Notes”").waitForExistence(timeout: 5))
+        el("pending.folder.join").tap()
+        let confirm = app.alerts.buttons["添加设备"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alerts.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "下载方式和文件都保持不变")).firstMatch.exists)
     }
 }

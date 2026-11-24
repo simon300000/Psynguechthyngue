@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ also has this folder. It will be shared with that device too; nothing is downloaded again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 也有这个文件夹。它会同时与该设备共享，无需重新下载。"
+          }
+        }
+      }
+    },
     "%@ of %@ downloaded (%@)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -121,6 +131,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已为“文件”列出 %1$lld / %2$lld 项"
+          }
+        }
+      }
+    },
+    "Add %@ to “%@”" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 %1$@ 加入“%2$@”"
+          }
+        }
+      }
+    },
+    "Add %@ to “%@”?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 %1$@ 加入“%2$@”？"
+          }
+        }
+      }
+    },
+    "Add to Folder…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入现有文件夹…"
           }
         }
       }
@@ -279,6 +319,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "—"
+          }
+        }
+      }
+    },
+    "“%@” stays where it is, with the same download setting and files; it is now also shared with %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%1$@”的位置、下载方式和文件都保持不变，只是同时与 %2$@ 共享。"
           }
         }
       }

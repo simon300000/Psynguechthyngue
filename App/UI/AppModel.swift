@@ -333,7 +333,14 @@ final class AppModel {
         conflictStore?.save(attention)
         notifier.conflictsAppeared(fresh, isActive: isActive, enabled: settings.notificationsEnabled)
     }
-    var pendingCount: Int { pendingDevices.count + pendingFolders.count }
+    var pendingCount: Int { pendingDevices.count + folderOffers.count }
+
+    /// Pending folders that still need the user: an offer for a folder that is
+    /// already shared with the offering device (repeated or late
+    /// notification) is not one. See `PendingFolder.offer(in:)`.
+    var folderOffers: [PendingFolder] { pendingFolders.actionable(given: folders) }
+
+    func offer(_ pending: PendingFolder) -> PendingFolderOffer { pending.offer(in: folders) }
     var syncingFolders: [Folder] { folders.filter { status(of: $0).state == .syncing } }
     var isRunning: Bool { if case .running = engineState { true } else { false } }
 
@@ -371,7 +378,7 @@ final class AppModel {
     }
 
     func deviceName(_ id: DeviceID) -> String {
-        devices.first { $0.id == id }?.name.nilIfEmpty ?? pendingDevices.first { $0.id == id }?.name.nilIfEmpty ?? id.short
+        devices.first { $0.id == id }.map(\.displayName) ?? pendingDevices.first { $0.id == id }?.name.nilIfEmpty ?? id.short
     }
 
     var displayName: String {
@@ -570,8 +577,11 @@ final class AppModel {
             show(error: String(localized: "This is the ID of this device. Enter the ID of the other device."))
             return false
         }
-        let finalName = name.trimmingCharacters(in: .whitespaces)
-        let ok = await perform { try await engine.addDevice(Device(id: id, name: finalName.isEmpty ? id.short : finalName)) }
+        // Like upstream: no typed name → the name the device reported while
+        // pending, else empty so the engine fills it in from the device's
+        // Hello once it connects. The ID prefix is only shown, never stored.
+        let finalName = DeviceNaming.nameForNewDevice(entered: name, reported: pendingDevices.first { $0.id == id }?.name)
+        let ok = await perform { try await engine.addDevice(Device(id: id, name: finalName)) }
         if ok { await refreshAll() }
         return ok
     }
@@ -642,6 +652,20 @@ final class AppModel {
                             contentMode: location == .managed ? mode : .everything, devices: [pending.offeredBy])
         continueForUserAction("accept-folder", label: label)
         let ok = await perform { try await engine.acceptPendingFolder(pending, as: folder) }
+        if ok { await refreshAll() }
+        return ok
+    }
+
+    /// Shares the existing folder with the offering device (upstream GUI
+    /// "Share" for a known folder ID): only the folder's device list changes;
+    /// its location, download setting and files stay as they are.
+    func join(_ pending: PendingFolder) async -> Bool {
+        guard case let .joinExisting(existing) = offer(pending) else {
+            await refreshAll()
+            return false
+        }
+        continueForUserAction("join-folder", label: existing.label)
+        let ok = await perform { try await engine.acceptPendingFolder(pending, as: existing.sharing(with: pending.offeredBy)) }
         if ok { await refreshAll() }
         return ok
     }
@@ -721,8 +745,12 @@ extension AppModel {
             LifecycleLog.shared.record("debug-auto-accept", "device \(device.id.short) \(device.name)")
             Task { await acceptPending(device) }
         }
-        for folder in pendingFolders where folder.label.hasPrefix(prefix) && debugAccepted.insert(folder.id).inserted {
+        for folder in folderOffers where folder.label.hasPrefix(prefix) && debugAccepted.insert(folder.id).inserted {
             LifecycleLog.shared.record("debug-auto-accept", "folder \(folder.folderID.rawValue)")
+            if case .joinExisting = offer(folder) {
+                Task { _ = await join(folder) }
+                continue
+            }
             // `-PsyDebugAutoAcceptMode onDemand` accepts as on-demand.
             let mode: PsySync.ContentMode = UserDefaults.standard.string(forKey: "PsyDebugAutoAcceptMode") == "onDemand" ? .onDemand : .everything
             Task { _ = await accept(folder, label: folder.label, location: .managed, mode: mode) }

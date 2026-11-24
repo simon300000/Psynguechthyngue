@@ -342,10 +342,22 @@ public actor LiveSyncEngine: SyncEngine {
                 scheduleRefresh([id])
             case .refreshAllFolders:
                 scheduleRefresh(nil)
+            case let .adoptRemoteName(id, remote):
+                await adoptRemoteName(id, remote)
             case .resync:
                 await resync()
             }
         }
+    }
+
+    /// Replaces a placeholder name (empty, or the ID prefix older versions
+    /// stored) with the name the device reported. Only the name changes.
+    private func adoptRemoteName(_ id: DeviceID, _ remote: String) async {
+        guard let client,
+              let current = try? await client.configDevices().first(where: { $0.deviceID == id.rawValue }),
+              let name = DeviceNaming.adoptedName(current: current.name, remote: remote, for: id) else { return }
+        struct Patch: Encodable { var name: String }
+        _ = try? await client.send("PATCH", "rest/config/devices/\(Self.pathEscape(id.rawValue))", json: Patch(name: name))
     }
 
     /// Missed events: the per-file progress may be stale (an ItemFinished
@@ -902,9 +914,38 @@ public actor LiveSyncEngine: SyncEngine {
         guard folder.id == pending.folderID else {
             throw EngineError.invalidArgument("folder ID must match the offered folder")
         }
-        var folder = folder
-        if !folder.devices.contains(pending.offeredBy) { folder.devices.append(pending.offeredBy) }
-        try await addFolder(folder)
+        let client = try requireClient()
+        let path = "rest/config/folders/\(Self.pathEscape(pending.folderID.rawValue))"
+        let existing: Data?
+        do {
+            existing = try await client.request("GET", path, query: [], body: nil, timeout: nil)
+        } catch EngineError.rest(status: 404, _) {
+            existing = nil
+        }
+        if let existing {
+            // Upstream GUI "Share" for a folder that already exists: only its
+            // device list gains the offering device. Path, type, ignores and
+            // content mode stay; `folder` (a new-folder description) is unused.
+            if let patch = try Self.joinedDevicesPatch(folderConfig: existing, device: pending.offeredBy) {
+                _ = try await client.request("PATCH", path, query: [], body: patch, timeout: nil)
+            }
+            return
+        }
+        try await addFolder(folder.sharing(with: pending.offeredBy))
+    }
+
+    /// PATCH body for a folder config (upstream JSON) that also shares it with
+    /// `device`, or nil when it already does. The other devices' entries are
+    /// passed back as read, so their fields (introducedBy, encryption
+    /// password) survive: a PATCH replaces the whole `devices` array.
+    static func joinedDevicesPatch(folderConfig: Data, device: DeviceID) throws -> Data? {
+        guard let object = try JSONSerialization.jsonObject(with: folderConfig) as? [String: Any] else {
+            throw EngineError.rest(status: -1, body: "decode folder config")
+        }
+        var devices = object["devices"] as? [[String: Any]] ?? []
+        if devices.contains(where: { ($0["deviceID"] as? String) == device.rawValue }) { return nil }
+        devices.append(["deviceID": device.rawValue])
+        return try JSONSerialization.data(withJSONObject: ["devices": devices], options: [.sortedKeys])
     }
 
     public func dismissPendingFolder(_ pending: PendingFolder) async throws {
