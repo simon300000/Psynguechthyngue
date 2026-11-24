@@ -74,3 +74,41 @@ public struct PendingFolder: Hashable, Codable, Sendable, Identifiable {
         self.receivedAt = receivedAt
     }
 }
+
+/// What accepting a pending folder means. Upstream offers a folder as pending
+/// whenever the folder ID is unknown *or* known but not shared with the
+/// offering device; for the latter its GUI offers to share the existing
+/// folder with that device (only its device list changes), not to add one.
+public enum PendingFolderOffer: Hashable, Sendable {
+    /// No folder with this ID here: add a new one.
+    case newFolder
+    /// A folder with this ID exists and is not shared with the device.
+    case joinExisting(Folder)
+    /// Already shared with the device (stale or repeated offer): nothing to do.
+    case alreadyShared(Folder)
+}
+
+extension PendingFolder {
+    public func offer(in folders: [Folder]) -> PendingFolderOffer {
+        guard let existing = folders.first(where: { $0.id == folderID }) else { return .newFolder }
+        return existing.devices.contains(offeredBy) ? .alreadyShared(existing) : .joinExisting(existing)
+    }
+}
+
+extension Folder {
+    /// This folder also shared with `device`; nothing else changes.
+    public func sharing(with device: DeviceID) -> Folder {
+        var f = self
+        if !f.devices.contains(device) { f.devices.append(device) }
+        return f
+    }
+}
+
+extension Array where Element == PendingFolder {
+    /// Offers that still need the user: drops those already shared with the
+    /// offering device (upstream clears them once the config is saved, but a
+    /// repeated or late notification must not show again).
+    public func actionable(given folders: [Folder]) -> [PendingFolder] {
+        filter { if case .alreadyShared = $0.offer(in: folders) { false } else { true } }
+    }
+}

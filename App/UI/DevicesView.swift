@@ -135,7 +135,9 @@ struct DeviceDetailView: View {
         if let device = model.devices.first(where: { $0.id == deviceID }) {
             Form {
                 Section("Name") {
-                    TextField("Device name", text: $name)
+                    // Empty until the device first connects (upstream then
+                    // stores the name it reports); the ID prefix is a hint.
+                    TextField("Device name", text: $name, prompt: Text(verbatim: device.id.short))
                         .plainNameInput()
                         .focused($nameFocused)
                         .submitLabel(.done)

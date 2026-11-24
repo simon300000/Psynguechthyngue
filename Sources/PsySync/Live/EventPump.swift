@@ -34,6 +34,10 @@ enum EventAction: Hashable, Sendable {
     case refreshPendingFolders
     case refreshFolder(FolderID)
     case refreshAllFolders
+    /// A configured device connected and reported this name (Hello). Upstream
+    /// fills an empty configured name itself; the engine also replaces the
+    /// ID-prefix placeholder earlier versions stored (see `DeviceNaming`).
+    case adoptRemoteName(DeviceID, String)
     /// Events were lost (upstream's buffered subscription overflowed or
     /// dropped some): refresh everything derived from events.
     case resync
@@ -72,7 +76,11 @@ enum EventTranslator {
                 clientVersion: d?["clientVersion"]?.string,
                 lastSeen: e.time.flatMap(SyncthingDate.parse)
             )
-            return [.emit(.deviceConnectionChanged(conn)), .refreshAllFolders]
+            var actions: [EventAction] = [.emit(.deviceConnectionChanged(conn)), .refreshAllFolders]
+            if let name = d?["deviceName"]?.string, !name.isEmpty {
+                actions.append(.adoptRemoteName(DeviceID(rawValue: id), name))
+            }
+            return actions
         case "DeviceDisconnected":
             guard let id = d?["id"]?.string else { return [] }
             let conn = DeviceConnection(deviceID: DeviceID(rawValue: id), state: .disconnected, lastSeen: e.time.flatMap(SyncthingDate.parse))
