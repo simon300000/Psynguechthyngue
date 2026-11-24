@@ -48,21 +48,26 @@ func testFetcher(t *testing.T, peer *fakePeer, deadline time.Duration, data []by
 
 func TestFetcherOutcomes(t *testing.T) {
 	data := []byte("hello restricted core")
+	// Cases that end on the deadline get a short one; the others a long one,
+	// so a loaded machine (make verify runs lanes in parallel) cannot turn
+	// their outcome into "deadline".
+	const short, long = 300 * time.Millisecond, 10 * time.Second
 	cases := []struct {
-		name string
-		peer *fakePeer
-		want string
+		name     string
+		peer     *fakePeer
+		deadline time.Duration
+		want     string
 	}{
-		{"ok", &fakePeer{connected: true, data: data}, ""},
-		{"never connected", &fakePeer{connected: false}, CodeNoPeer},
-		{"slow peer hits deadline", &fakePeer{connected: true, delay: time.Hour, data: data}, CodeDeadline},
-		{"peer lacks content", &fakePeer{connected: true, err: protocol.ErrNoSuchFile}, CodeHashMismatch},
-		{"wrong bytes", &fakePeer{connected: true, data: []byte("HELLO restricted core")}, CodeHashMismatch},
-		{"transport error", &fakePeer{connected: true, err: errors.New("reset")}, CodeNoPeer},
+		{"ok", &fakePeer{connected: true, data: data}, long, ""},
+		{"never connected", &fakePeer{connected: false}, short, CodeNoPeer},
+		{"slow peer hits deadline", &fakePeer{connected: true, delay: time.Hour, data: data}, short, CodeDeadline},
+		{"peer lacks content", &fakePeer{connected: true, err: protocol.ErrNoSuchFile}, long, CodeHashMismatch},
+		{"wrong bytes", &fakePeer{connected: true, data: []byte("HELLO restricted core")}, long, CodeHashMismatch},
+		{"transport error", &fakePeer{connected: true, err: errors.New("reset")}, long, CodeNoPeer},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f, dest := testFetcher(t, c.peer, 300*time.Millisecond, data)
+			f, dest := testFetcher(t, c.peer, c.deadline, data)
 			err := f.run(dest)
 			if got := codeOf(err); got != c.want {
 				t.Fatalf("code = %q (%v), want %q", got, err, c.want)
